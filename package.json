@@ -7,15 +7,18 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "deploy": "npm run build && gh-pages -d dist"
+    "deploy": "npm run build && gh-pages -d dist",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "devDependencies": {
+    "gh-pages": "^6.1.1",
+    "jsdom": "^30.0.1",
     "typescript": "^5.2.2",
     "vite": "^5.2.0",
-    "gh-pages": "^6.1.1"
+    "vitest": "^2.1.9"
   },
   "dependencies": {
-    "@klinecharts/pro": "^0.1.1",
-    "klinecharts": "^9.8.6"
+    "klinecharts": "^10.0.3"
   }
 }

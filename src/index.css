@@ -1,46 +1,722 @@
-:root {
+/* 所有选择器以 #app 为前缀平铺书写，避免与宿主页面样式互相污染，且兼容不支持 CSS 嵌套的老浏览器；
+   深色主题由应用根节点上的 dark 类驱动（app.ts 切换 #app.dark）；
+   @keyframes 为全局命名空间，统一加 klinecharts- 前缀防冲突 */
+
+body {
+  margin: 0;
+}
+
+/* 主题变量（浅色）+ 应用根布局 */
+#app {
+  --bg: #ffffff;
+  --tb-bg: #ffffff;
+  --tb-text: #293252;
+  --tb-text-sub: #76808f;
+  --tb-border: #ebedf1;
+  --tb-hover: #f2f3f5;
+  --tb-active: #1677ff;
+  --tb-active-bg: rgba(22, 119, 255, 0.1);
+  --dropdown-bg: #ffffff;
+  /* 与 klinecharts 浅色主题网格线一致（#EDEDED dashed） */
+  --chart-grid: #ededed;
+
   font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
   font-weight: 400;
-
-  color: rgba(255, 255, 255, 0.87);
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   -webkit-text-size-adjust: 100%;
-}
 
-body {
-  margin: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
   min-height: 100vh;
+  background-color: var(--bg);
 }
 
-.announcement-bar {
+/* 主题变量（深色） */
+#app.dark {
+  --bg: #121212;
+  --tb-bg: #1e2126;
+  --tb-text: #d1d4dc;
+  --tb-text-sub: #86898f;
+  --tb-border: #2a2e35;
+  --tb-hover: #2a2e35;
+  --tb-active: #3c82f7;
+  --tb-active-bg: rgba(22, 119, 255, 0.2);
+  --dropdown-bg: #1e2126;
+  /* 与 klinecharts 深色主题网格线一致（#292929 dashed） */
+  --chart-grid: #292929;
+}
+
+/* ---------------- 工具栏 ---------------- */
+
+#app .toolbar {
+  flex: none;
+  position: relative;
+  z-index: 10;
   display: flex;
   flex-direction: row;
   align-items: center;
-  justify-content: center;
-  margin: 0;
-  height: 30px;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 6px 10px;
+  background-color: var(--tb-bg);
+  color: var(--tb-text);
+}
+
+#app .toolbar-item {
+  position: relative;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+
+#app .tb-divider {
+  flex: none;
+  width: 1px;
+  height: 16px;
+  margin: 0 8px;
+  background-color: var(--tb-border);
+}
+
+#app .tb-btn {
+  border: none;
+  background: transparent;
+  color: var(--tb-text);
   font-size: 12px;
-  background-color: rgba(22, 119, 255, 0.08);
-  color: #051441;
-  font-weight: bold;
-  border: solid 1px #ebedf1;
+  line-height: 18px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
-.announcement-bar svg {
+#app .tb-btn:hover {
+  background-color: var(--tb-hover);
+}
+
+#app .tb-btn.active {
+  color: var(--tb-active);
+  background-color: var(--tb-active-bg);
+  font-weight: 600;
+}
+
+/* 标的选择：主操作，强调色胶囊 + 下拉箭头（箭头用伪元素，textContent 更新后仍在） */
+#app .tb-symbol {
+  font-weight: 600;
+  color: var(--tb-active);
+  background-color: var(--tb-active-bg);
+}
+
+#app .tb-symbol:hover {
+  background-color: var(--tb-active-bg);
+  filter: brightness(0.97);
+}
+
+#app .tb-symbol::after {
+  content: '▾';
+  margin-left: 5px;
+  font-size: 10px;
+  opacity: 0.7;
+}
+
+/* 带下拉面板的按钮：尾部小箭头提示 */
+#app .tb-btn.tb-dd::after {
+  content: '▾';
+  margin-left: 5px;
+  font-size: 10px;
+  color: var(--tb-text-sub);
+}
+
+#app .tb-btn.tb-dd.active::after {
+  color: var(--tb-active);
+}
+
+/* 周期组：分段控件样式 */
+#app .period-group {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  background-color: var(--tb-hover);
+  border-radius: 6px;
+}
+
+#app .period-group .tb-btn {
+  padding: 2px 10px;
+  border-radius: 4px;
+}
+
+/* 分段选中：实底强调色，与浅色容器形成对比 */
+#app .period-group .tb-btn.active {
+  color: #ffffff;
+  background-color: var(--tb-active);
+}
+
+/* 清除绘图：弱化的幽灵按钮 */
+#app .tb-btn.tb-clear {
+  color: var(--tb-text-sub);
+}
+
+#app .tb-btn.tb-clear:hover {
+  color: var(--tb-text);
+}
+
+/* 主题切换开关推到工具栏最右 */
+#app .toolbar-item:last-child {
+  margin-left: auto;
+}
+
+/* 主题切换：太阳/月亮图标滑动开关，滑块位置由根节点 dark 类驱动 */
+#app .tb-btn.tb-theme {
+  padding: 3px 6px;
+  line-height: 1;
+}
+
+#app .tb-btn.tb-theme:hover {
+  background-color: transparent;
+}
+
+#app .theme-switch {
+  position: relative;
+  display: inline-block;
+  box-sizing: border-box;
+  width: 42px;
+  height: 22px;
+  border-radius: 999px;
+  background-color: var(--tb-hover);
+  border: 1px solid var(--tb-border);
+  transition: border-color 0.2s ease;
+}
+
+#app .tb-btn.tb-theme:hover .theme-switch {
+  border-color: var(--tb-active);
+}
+
+#app .sw-icon {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 12px;
+  height: 12px;
+  fill: var(--tb-text-sub);
+  transition: fill 0.2s ease;
+}
+
+#app .sw-sun {
+  left: 5px;
+}
+
+#app .sw-moon {
+  right: 5px;
+}
+
+/* 未选中一侧为目标主题，高亮提示 */
+#app:not(.dark) .sw-moon {
+  fill: var(--tb-active);
+}
+
+#app.dark .sw-sun {
+  fill: var(--tb-active);
+}
+
+#app .theme-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background-color: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  transition: transform 0.2s ease;
+}
+
+#app.dark .theme-knob {
+  transform: translateX(20px);
+}
+
+/* ---------------- 移动端适配 ---------------- */
+
+@media (max-width: 768px) {
+  /* 工具栏:按行分区,加大触控目标 */
+  #app .toolbar {
+    gap: 6px;
+    padding: 6px 8px;
+  }
+
+  /* 换行后行首/行尾的分隔线显得突兀,移动端隐藏 */
+  #app .tb-divider {
+    display: none;
+  }
+
+  /* 标的按钮撑满首行,主题开关同行靠右 */
+  #app .toolbar > .toolbar-item:first-child {
+    flex: 1 1 auto;
+  }
+
+  #app .toolbar > .toolbar-item:first-child > .tb-btn {
+    width: 100%;
+    text-align: center;
+  }
+
+  /* 周期分段:独占一行,各分段平分宽度 */
+  #app .toolbar > .period-group {
+    flex: 1 1 100%;
+  }
+
+  #app .period-group > .tb-btn,
+  #app .period-group > .toolbar-item {
+    flex: 1 1 auto;
+  }
+
+  #app .period-group > .tb-btn,
+  #app .period-group > .toolbar-item > .tb-btn {
+    text-align: center;
+    padding: 4px 6px;
+  }
+
+  #app .period-group > .toolbar-item > .tb-btn {
+    width: 100%;
+  }
+
+  /* 功能按钮(指标/绘图/清除)同行等宽分布 */
+  #app .toolbar > .toolbar-item:not(:first-child):not(.period-group):not(:last-child) {
+    flex: 1 1 auto;
+  }
+
+  #app .toolbar > .toolbar-item:not(:first-child):not(.period-group):not(:last-child) > .tb-btn {
+    width: 100%;
+    text-align: center;
+    padding: 6px 8px;
+  }
+
+  /* 主题开关不拉伸 */
+  #app .toolbar > .toolbar-item:last-child {
+    flex: 0 0 auto;
+  }
+
+  /* 靠右按钮的下拉面板右对齐,避免溢出屏幕 */
+  #app .toolbar-item:nth-last-child(-n+3) .dropdown {
+    left: auto;
+    right: 0;
+  }
+
+  /* 下拉面板不超出屏幕 */
+  #app .dropdown {
+    max-width: calc(100vw - 16px);
+  }
+
+  #app .symbol-dropdown {
+    width: calc(100vw - 32px);
+  }
+}
+
+#app .tb-select {
+  border: 1px solid var(--tb-border);
+  background-color: transparent;
+  color: var(--tb-text);
+  font-size: 12px;
+  line-height: 18px;
+  padding: 3px 4px;
+  border-radius: 4px;
+  cursor: pointer;
+  max-width: 140px;
+}
+
+/* 下拉面板 */
+
+#app .dropdown {
+  display: none;
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 100;
+  background-color: var(--dropdown-bg);
+  border: 1px solid var(--tb-border);
+  border-radius: 6px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.14);
+  padding: 6px;
+}
+
+#app .dropdown.open {
+  display: block;
+}
+
+#app .indicator-dropdown {
+  min-width: 110px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+#app .drawing-dropdown {
+  min-width: 150px;
+}
+
+#app .tool-btn {
+  display: block;
+  width: 100%;
+  text-align: left;
+}
+
+#app .check-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  padding: 5px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+#app .check-row:hover {
+  background-color: var(--tb-hover);
+}
+
+#app .check-row input {
+  accent-color: var(--tb-active);
+}
+
+/* 标的搜索 */
+
+#app .symbol-dropdown {
+  width: 260px;
+  padding: 8px;
+}
+
+#app .symbol-search-input {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--tb-border);
+  background-color: transparent;
+  color: var(--tb-text);
+  font-size: 12px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  outline: none;
+}
+
+#app .symbol-search-input:focus {
+  border-color: var(--tb-active);
+}
+
+/* 搜索框容器 */
+#app .search-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+/* 清空按钮 */
+#app .search-clear-btn {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: none; /* 默认隐藏，有内容时显示 */
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  margin: 0;
+  border: none;
+  background-color: transparent;
+  color: var(--tb-text-sub);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 50%;
+  transition: all 0.2s ease;
+}
+
+#app .search-clear-btn:hover {
+  background-color: var(--tb-hover);
+  color: var(--tb-text);
+}
+
+#app .search-clear-btn.visible {
+  display: flex;
+}
+
+#app .symbol-list {
+  margin-top: 6px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+#app .symbol-empty {
+  font-size: 12px;
+  color: var(--tb-text-sub);
+  text-align: center;
+  padding: 12px 0;
+}
+
+#app .symbol-row {
+  display: flex;
+  flex-direction: column;
+  padding: 6px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+#app .symbol-row:hover {
+  background-color: var(--tb-hover);
+}
+
+#app .symbol-ticker {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--tb-text);
+}
+
+#app .symbol-name {
+  font-size: 11px;
+  color: var(--tb-text-sub);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------------- 指标参数设置弹窗 ---------------- */
+
+#app .modal-mask {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(0, 0, 0, 0.45);
+}
+
+#app .modal-mask.open {
+  display: flex;
+}
+
+#app .modal {
+  width: 320px;
+  max-width: calc(100vw - 32px);
+  background-color: var(--dropdown-bg);
+  border: 1px solid var(--tb-border);
+  border-radius: 8px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
+  color: var(--tb-text);
+}
+
+#app .modal-header {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--tb-border);
+}
+
+#app .modal-title {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+#app .modal-close {
+  border: none;
+  background: transparent;
+  color: var(--tb-text-sub);
+  font-size: 18px;
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+#app .modal-close:hover {
+  background-color: var(--tb-hover);
+  color: var(--tb-text);
+}
+
+#app .modal-body {
+  padding: 12px 16px;
+}
+
+#app .modal-select {
+  width: 100%;
+  max-width: none;
+  margin-bottom: 10px;
+}
+
+#app .param-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+#app .param-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+#app .param-label {
+  flex: none;
+  font-size: 12px;
+  color: var(--tb-text-sub);
+}
+
+#app .param-input {
+  width: 130px;
+  box-sizing: border-box;
+  border: 1px solid var(--tb-border);
+  background-color: transparent;
+  color: var(--tb-text);
+  font-size: 12px;
+  padding: 5px 8px;
+  border-radius: 4px;
+  outline: none;
+}
+
+#app .param-input:focus {
+  border-color: var(--tb-active);
+}
+
+#app .modal-footer {
+  display: flex;
+  flex-direction: row;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--tb-border);
+}
+
+#app .modal-btn {
+  border: 1px solid var(--tb-border);
+  padding: 4px 14px;
+}
+
+#app .modal-btn.primary {
+  border-color: var(--tb-active);
+  background-color: var(--tb-active);
+  color: #ffffff;
+}
+
+#app .modal-btn.primary:hover {
+  opacity: 0.88;
+  background-color: var(--tb-active);
+}
+
+/* ---------------- 图表 ---------------- */
+
+#app #container {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+
+#app .watermark {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 1;
+}
+
+#app .watermark svg {
+  width: 140px;
+  height: 140px;
   fill: #1677ff;
-  margin-right: 4px;
+  opacity: 0.08;
 }
 
-.announcement-bar a {
-  color: #1677ff
+/* ---------------- 信息表格：K线行情 + 基本面混排成一张表 ---------------- */
+
+/* PC 端 8 列 2 行；单元格不带边框，整表仅保留上下外边框 */
+#app .info-table {
+  flex: none;
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  background-color: var(--tb-bg);
+  font-size: 11px;
+  color: var(--tb-text);
+  border-top: 1px solid var(--tb-border);
+  /* 下边框与图表网格线一致（同色虚线），视觉上延续图内网格 */
+  border-bottom: 1px dashed var(--chart-grid);
 }
 
-#container {
-  height: calc(100vh - 30px - 6px);
+/* 表格单元格：上标签、下数值 */
+#app .info-cell {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 4px 6px;
+  line-height: 1.3;
+  white-space: nowrap;
 }
 
+#app .info-label {
+  font-size: 10px;
+  color: var(--tb-text-sub);
+}
+
+#app .info-value {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--tb-text);
+}
+
+/* 移动端 4 列 4 行；时间值允许在日期与时分之间折行 */
+@media (max-width: 768px) {
+  #app .info-table {
+    grid-template-columns: repeat(4, 1fr);
+    font-size: 10px;
+  }
+
+  #app .info-cell {
+    padding: 3px 2px;
+    gap: 1px;
+  }
+
+  #app .info-cell.cell-time .info-value {
+    white-space: normal;
+  }
+}
+
+#app .fundamental-loading {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 11px;
+  color: var(--tb-text-sub);
+}
+
+#app .fundamental-loading::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--tb-active);
+  animation: klinecharts-fundamental-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes klinecharts-fundamental-pulse {
+  0%, 100% { opacity: 0.25; }
+  50% { opacity: 1; }
+}
