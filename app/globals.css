@@ -1,5 +1,5 @@
 /* 所有选择器以 #app 为前缀平铺书写，避免与宿主页面样式互相污染，且兼容不支持 CSS 嵌套的老浏览器；
-   深色主题由应用根节点上的 dark 类驱动（app.ts 切换 #app.dark）；
+   深色主题由应用根节点上的 dark 类驱动（客户端切换 #app.dark）；
    @keyframes 为全局命名空间，统一加 klinecharts- 前缀防冲突 */
 
 body {
@@ -93,7 +93,9 @@ body {
   border-radius: 4px;
   cursor: pointer;
   white-space: nowrap;
-  transition: background-color 0.15s ease, color 0.15s ease;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
 }
 
 #app .tb-btn:hover {
@@ -303,7 +305,7 @@ body {
   }
 
   /* 靠右按钮的下拉面板右对齐,避免溢出屏幕 */
-  #app .toolbar-item:nth-last-child(-n+3) .dropdown {
+  #app .toolbar-item:nth-last-child(-n + 3) .dropdown {
     left: auto;
     right: 0;
   }
@@ -717,6 +719,41 @@ body {
 }
 
 @keyframes klinecharts-fundamental-pulse {
-  0%, 100% { opacity: 0.25; }
-  50% { opacity: 1; }
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* ---------------- SSR 骨架屏（路由级 loading） ---------------- */
+
+#app .ssr-skeleton-toolbar {
+  flex: none;
+  height: 38px;
+  background-color: var(--tb-bg);
+  border-bottom: 1px solid var(--tb-border);
+}
+
+#app .ssr-skeleton-chart {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--tb-text-sub);
+  font-size: 13px;
+  gap: 8px;
+}
+
+#app .ssr-skeleton-chart::before {
+  content: '';
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid var(--tb-border);
+  border-top-color: var(--tb-active);
+  animation: klinecharts-fundamental-pulse 1.2s ease-in-out infinite;
 }
