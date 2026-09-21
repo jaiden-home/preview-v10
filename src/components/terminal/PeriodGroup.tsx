@@ -12,9 +12,11 @@ interface PeriodGroupProps {
   activeKey: PeriodKey
   t: Translate
   onChange: (key: PeriodKey) => void
+  /** 精简模式：仅主栏日/周/月，省略「周期」更多菜单（交易页图表用） */
+  simple?: boolean
 }
 
-export default function PeriodGroup({ activeKey, t, onChange }: PeriodGroupProps) {
+export default function PeriodGroup({ activeKey, t, onChange, simple = false }: PeriodGroupProps) {
   const [moreOpen, setMoreOpen] = useState(false)
   const wrapRef = useDismiss(moreOpen, () => setMoreOpen(false))
 
@@ -41,35 +43,37 @@ export default function PeriodGroup({ activeKey, t, onChange }: PeriodGroupProps
           {t(option.text)}
         </button>
       ))}
-      <div className="toolbar-item" ref={wrapRef}>
-        <button
-          className={`tb-btn tb-dd${activeMenuText != null ? ' active' : ''}`}
-          id="period-more-btn"
-          type="button"
-          onClick={() => setMoreOpen((prev) => !prev)}
-        >
-          {activeMenuText ?? t('周期|Period')}
-        </button>
-        <div className={`dropdown indicator-dropdown${moreOpen ? ' open' : ''}`} id="period-dropdown">
+      {!simple && (
+        <div className="toolbar-item" ref={wrapRef}>
           <button
-            className={`tb-btn tool-btn period-btn${activeKey === 'time' ? ' active' : ''}`}
+            className={`tb-btn tb-dd${activeMenuText != null ? ' active' : ''}`}
+            id="period-more-btn"
             type="button"
-            onClick={() => onChange('time')}
+            onClick={() => setMoreOpen((prev) => !prev)}
           >
-            {t('分时|Time')}
+            {activeMenuText ?? t('周期|Period')}
           </button>
-          {menuOptions.map((option) => (
+          <div className={`dropdown indicator-dropdown${moreOpen ? ' open' : ''}`} id="period-dropdown">
             <button
-              key={option.key}
-              className={`tb-btn tool-btn period-btn${activeKey === option.key ? ' active' : ''}`}
+              className={`tb-btn tool-btn period-btn${activeKey === 'time' ? ' active' : ''}`}
               type="button"
-              onClick={() => onChange(option.key)}
+              onClick={() => onChange('time')}
             >
-              {t(option.text)}
+              {t('分时|Time')}
             </button>
-          ))}
+            {menuOptions.map((option) => (
+              <button
+                key={option.key}
+                className={`tb-btn tool-btn period-btn${activeKey === option.key ? ' active' : ''}`}
+                type="button"
+                onClick={() => onChange(option.key)}
+              >
+                {t(option.text)}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }

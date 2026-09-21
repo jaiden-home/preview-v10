@@ -42,12 +42,15 @@ Next.js App Router 的应用根目录，包含全部页面路由与 BFF 接口�
 React UI 组件，当前仅有 `terminal/` 一个子目录，存放交易终端的全部展示层组件：
 
 - `TradingTerminal.tsx`：终端主组件，负责组装工具栏、信息表格与图表挂载点。
-- `SymbolPicker.tsx` / `PeriodGroup.tsx`：标的搜索切换与周期（分时/分钟/日/周/月）切换。
+- `SymbolPicker.tsx` / `PeriodGroup.tsx`：标的搜索切换与周期（分时/分钟/日/周/月）切换；`PeriodGroup` 支持 `simple` 精简模式（仅日/周/月，交易页图表用）。
+- `ChartTools.tsx`：图表工具组（主/副图指标 + 绘图 + 清除绘图），行情页与交易页工具栏共用段，元素 id 可加前缀。
 - `IndicatorMenu.tsx` / `IndicatorModal.tsx`：指标选择菜单与指标参数设置弹窗（含 `IndicatorModal.test.tsx` 组件测试）。
 - `DrawingMenu.tsx`：绘图工具菜单（11 种画线工具）。
 - `InfoTable.tsx`：行情 + 基本面混排信息表格（SSR 直出同源）。
 - `ThemeToggle.tsx`：明暗主题切换。
 - `useDismiss.ts`：弹窗外点击关闭的通用 Hook。
+- `useLocale.ts`：语言钩子（SSR 首帧 zh-CN，挂载后按 `#en-US` hash 校正）。
+- `useChartTerminal.ts`：图表终端交互钩子（行情页与交易页共用）：ChartTerminal 生命周期（创建/销毁/换标的/主题）与周期、指标、绘图控件状态。
 
 组件层不直接触碰 klinecharts 实例，图表命令经 `lib/chart/terminal.ts` 的 `ChartTerminal` 控制器下发。
 

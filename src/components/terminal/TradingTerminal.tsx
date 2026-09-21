@@ -1,18 +1,17 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import type { KLineData } from 'klinecharts'
-import { ChartTerminal, type InfoSnapshot } from '@/lib/chart/terminal'
-import { DEFAULT_PERIOD_KEY, MAIN_INDICATORS, SUB_INDICATORS, type PeriodKey } from '@/lib/chart/constants'
+import type { InfoSnapshot } from '@/lib/chart/terminal'
 import type { QuoteSnapshot, SymbolSearchItem } from '@/lib/chart/types'
-import { createT, readLocaleFromHash, type Locale } from '@/lib/i18n'
 import InfoTable from './InfoTable'
 import SymbolPicker from './SymbolPicker'
 import PeriodGroup from './PeriodGroup'
-import IndicatorMenu from './IndicatorMenu'
-import DrawingMenu from './DrawingMenu'
+import ChartTools from './ChartTools'
 import ThemeToggle from './ThemeToggle'
 import IndicatorModal, { type ModalIndicator } from './IndicatorModal'
+import { useLocale } from './useLocale'
+import { useChartTerminal } from './useChartTerminal'
 
 export interface TradingTerminalProps {
   market: string
@@ -23,29 +22,21 @@ export interface TradingTerminalProps {
 }
 
 const WATERMARK_PATH =
-  'M502.415025 61.691107C471.599553 66.145413 454.38748 69.75649 432.000151 76.738336 403.231621 85.524669 383.129313 93.83034 351.592999 109.598497 266.491296 152.088199 190.418359 219.134514 141.667783 294.486523 102.428653 355.151766 80.399578 416.540083 71.372957 490.688399 68.605108 512.595238 68.242498 576.028266 70.649862 599.020724 77.030956 659.565812 92.316305 706.870284 117.9565 745.388443 129.027897 761.999829 152.140466 785.47076 167.908666 796.063683 188.371438 809.907219 211.60206 820.980761 231.944678 826.63876 239.769752 828.805835 241.694372 829.767073 241.213753 831.211075 237.845131 842.046453 234.111753 888.267386 235.195291 906.565228 236.879602 934.728629 238.686214 941.109701 247.832989 950.256477 254.093907 956.517394 262.279445 959.645707 277.084219 961.209864 311.750992 965.063396 356.768233 960.488936 390.231313 949.775858 431.637391 936.294931 463.416246 915.832159 494.95256 882.128769 498.803947 878.034927 502.174715 874.666305 502.29487 874.666305 502.535179 874.666305 508.073109 880.081848 514.57219 886.823384 554.416257 927.506474 603.405039 951.822779 661.302434 959.645707 682.368125 962.535857 724.978024 962.535857 737.37537 959.765862 752.903218 956.397239 762.172294 948.452011 766.023681 935.692012 770.958605 919.080627 771.319069 875.026769 766.746754 848.905998 765.300607 840.962915 764.339369 834.461688 764.459524 834.341533 764.699834 834.221379 769.154139 833.139986 774.449528 831.934148 821.153226 821.703835 864.966775 793.055524 895.541851 752.610598 913.114474 729.259822 928.402013 698.204127 938.874781 664.260428 943.809706 648.372116 950.310933 615.389654 952.716172 593.60518 955.363866 570.973272 955.726476 517.289789 953.439246 495.503169 944.650788 412.808851 913.595093 347.689302 855.096925 289.068834 827.051534 261.023442 796.478603 238.874213 745.921458 210.228048 725.338445 198.671763 711.256745 187.958664 703.431671 178.086669 700.423513 174.237428 694.28275 164.848154 689.950701 157.265578 675.14597 131.74556 664.913597 118.024345 650.228892 104.182954 633.978056 88.895437 617.006121 78.542802 595.942575 71.320647 573.553036 63.617873 563.442878 62.051571 533.110256 61.570952 518.183182 61.330664 504.461881 61.450798 502.415025 61.691107ZM758.559071 301.828832C761.329065 303.272834 764.940143 305.560064 766.384145 307.004066 771.07876 311.215917 775.052447 320.244684 775.052447 326.743765 775.052447 334.208375 757.717988 430.141165 755.312749 435.799249 750.255524 447.836088 739.902953 454.817848 727.385366 454.817848 715.228287 454.817848 706.562044 448.799471 702.107824 436.880555 700.060903 431.707467 700.060903 430.864238 702.708597 413.772234 704.274985 404.14278 705.718901 395.474456 705.959211 394.513154 706.922594 391.262455 691.034282 406.550122 566.813646 527.880566 535.99826 557.972878 505.663492 587.584572 499.406866 593.723189 481.711943 610.815193 475.69348 611.295812 459.202249 597.456567 433.562097 575.787871 384.212851 534.381793 382.526394 533.057946 380.842083 531.85421 378.434698 533.658719 365.073926 546.296418 347.981921 562.427184 296.585754 611.898688 270.102373 637.538883 227.009753 679.425601 213.286371 692.065553 208.473747 694.592985 199.927788 698.927243 187.287901 695.796742 181.149283 687.731358 176.937411 682.315901 175.250976 673.649658 176.937411 667.268586 178.26128 661.973111 180.428355 659.686053 218.946515 622.491654 227.852981 613.945652 242.77791 599.501342 252.046986 590.594876 326.435611 518.250983 367.601465 479.494703 372.175926 477.327627 382.646549 472.633076 389.991004 475.040354 404.918078 487.79825 410.211321 492.37271 427.545781 507.177484 443.434049 520.658325 459.32234 534.141484 473.52634 546.298563 475.090497 547.622367L477.740315 550.149993 493.145949 535.102721C592.091188 438.206548 619.293351 411.725313 641.079971 390.781922 655.163817 377.29885 666.477625 366.107299 666.237358 365.864844 665.997049 365.624534 657.090583 367.308846 646.377505 369.716231 624.108121 374.531001 616.768043 374.891465 610.386885 371.642997 594.498573 363.457459 590.765195 344.078224 602.684111 331.558535 610.146576 323.735607 605.331806 324.939299 697.413166 307.60484 715.348441 304.236217 732.079981 301.105759 734.727676 300.502839 743.996752 298.700519 753.143527 299.178992 758.561216 301.828832ZM680.92408 538.956254C687.42535 542.204721 692.840894 549.306807 693.804277 556.288567 694.76766 562.06672 692.720803 587.584572 690.193242 602.028882 684.777656 632.964487 670.934055 664.861201 651.43473 691.222238 636.629956 711.08428 615.203886 732.147869 597.028258 744.905679 589.685949 749.962904 586.915954 751.166596 581.981029 751.527061 574.27832 752.127834 567.897184 748.639057 562.72195 741.296747 559.593636 736.962596 558.990653 734.915675 558.990653 729.259822 558.990653 719.750501 561.638498 715.778895 575.842498 704.342744 610.026507 676.900272 630.971893 647.288578 640.961919 612.862114 645.175894 597.937186 646.379651 590.232266 647.340888 570.372499 648.184117 552.677554 648.306417 551.834261 651.795237 546.899337 658.897194 536.909333 670.211046 533.778874 680.92408 538.956254Z'
+  'M502.415025 61.691107C471.599553 66.145413 454.38748 69.75649 432.000151 76.738336 403.231621 85.524669 383.129313 93.83034 351.592999 109.598497 266.491296 152.088199 190.418359 219.134514 141.667783 294.486523 102.428653 355.151766 80.399578 416.540083 71.372957 490.688399 68.605108 512.595238 68.242498 576.028266 70.649862 599.020724 77.030956 659.565812 92.316305 706.870284 117.9565 745.388443 129.027897 761.999829 152.140466 785.47076 167.908666 796.063683 188.371438 809.907219 211.60206 820.980761 231.944678 826.63876 239.769752 828.805835 241.694372 829.767073 241.213753 831.211075 237.845131 842.046453 234.111753 888.267386 235.195291 906.565228 236.879602 934.728629 238.686214 941.109701 247.832989 950.256477 254.093907 956.517394 262.279445 959.645707 277.084219 961.209864 311.750992 965.063396 356.768233 960.488936 390.231313 949.775858 431.637391 936.294931 463.416246 915.832159 494.95256 882.128769 498.803947 878.034927 502.174715 874.666305 502.29487 874.666305 502.535179 874.666305 508.073109 880.081848 514.57219 886.823384 554.416257 927.506474 603.405039 951.822779 661.302434 959.645707 682.368125 962.535857 724.978024 962.535857 737.37537 959.765862 752.903218 956.397239 762.172294 948.452011 766.023681 935.692012 770.958605 919.080627 771.319069 875.026769 766.746754 848.905998 765.300607 840.962915 764.339369 834.461688 764.459524 834.341533 764.699834 834.221379 769.154139 833.139986 774.449528 831.934148 821.153226 821.703835 864.966775 793.055524 895.541851 752.610598 913.114474 729.259822 928.402013 698.204127 938.874781 664.260428 943.809706 648.372116 950.310933 615.389654 952.716172 593.60518 955.363866 570.973272 955.726476 517.289789 953.439246 495.503169 944.650788 412.808851 913.595093 347.689302 855.096925 289.068834 827.051534 261.023442 796.478603 238.874213 745.921458 210.228048 725.338445 198.671763 711.256745 187.958664 703.431671 178.086669 700.423513 174.237428 694.28275 164.848154 689.950701 157.265578 675.14597 131.74556 664.913597 118.024345 650.228892 104.182954 633.978056 88.895437 617.006121 78.542802 595.942575 71.320647 573.553036 63.617873 563.442878 62.051571 533.110256 61.570952 518.183182 61.330664 504.461881 61.450798 502.415025 61.691107ZM758.559071 301.828832C761.329065 303.272834 764.940143 305.560064 766.384145 307.004066 771.07876 311.215917 775.052447 320.244684 775.052447 326.743765 775.052447 334.208375 757.717988 430.141165 755.312749 435.799249 750.255524 447.836088 739.902953 454.817848 727.385366 454.817848 715.228287 454.817848 706.562044 448.799471 702.107824 436.880555 700.060903 431.707467 700.060903 430.864238 702.708597 413.772234 704.274985 404.14278 705.718901 395.474456 705.959211 394.513154 706.922594 391.262455 691.034282 406.550122 566.813646 527.880566 535.99826 557.972878 505.663492 587.584572 499.406866 593.723189 481.711943 610.815193 475.69348 611.295812 459.202249 597.456567 433.562097 575.787871 384.212851 534.381793 382.526394 533.057946 380.842083 531.85421 378.434698 533.658719 365.073926 546.296418 347.981921 562.427184 296.585754 611.898688 270.102373 637.538883 227.009753 679.425601 213.286371 692.065553 208.473747 694.592985 199.927788 698.927243 187.287901 695.796742 181.149283 687.731358 176.937411 682.315901 175.250976 673.649658 176.937411 667.268586 178.26128 661.973111 180.428355 659.686053 218.946515 622.491654 227.852981 613.945652 242.77791 599.501342 252.046986 590.594876 326.435611 518.250983 367.601465 479.494703 372.175926 477.327627 382.646549 472.633076 389.991004 475.040354 404.918078 487.79825 410.211321 492.37271 427.545781 507.177484 443.434049 520.658325 459.32234 534.141484 473.52634 546.298563 475.090497 547.622367L477.740315 550.149993 493.145949 535.102721C592.091188 438.206548 619.293351 411.725313 641.079971 390.781922 655.163817 377.29885 666.477625 366.107299 666.237358 365.864844 665.997049 365.624534 657.090583 367.308846 646.377505 369.716231 624.108121 374.531001 616.768043 374.891465 610.386885 371.642997 594.498573 363.457459 590.765195 344.078224 602.684111 331.558535 610.146576 323.735607 605.331806 324.939299 697.413166 307.60484 715.348441 304.236217 732.079981 301.105759 734.727676 300.502839 743.996752 298.700519 753.143527 299.178992 758.561216 301.828832ZM680.92408 538.956254C687.42535 542.204721 692.840894 549.306807 693.804277 556.288567 694.76766 562.06672 692.720803 587.584572 690.193242 602.028882 684.777656 632.964487 670.934055 664.861201 651.43473 691.222238 636.629956 711.08428 615.203886 732.147869 597.028258 744.905679 589.685949 749.962904 586.915954 751.166596 581.981029 751.527061 574.27832 752.127834 567.897184 748.639057 562.72195 741.296747 759.593636 736.962596 758.990653 734.915675 758.990653 729.259822 758.990653 719.750501 761.638498 715.778895 575.842498 704.342744 610.026507 676.900272 630.971893 647.288578 640.961919 612.862114 645.175894 597.937186 646.379651 590.232266 647.340888 570.372499 648.184117 552.677554 648.306417 551.834261 651.795237 546.899337 658.897194 536.909333 670.211046 533.778874 680.92408 538.956254Z'
 
 /**
  * 交易终端：工具栏 + 信息表格 + klinecharts 画布 + 指标参数弹窗。
  * 服务端渲染首帧（工具栏与信息表格含真实行情数据），图表在客户端挂载后初始化
  * （klinecharts 依赖 DOM/Canvas，官方明确不支持 SSR 阶段初始化）。
+ * 图表生命周期与周期/指标/绘图控件由 useChartTerminal 统一封装。
  */
 export default function TradingTerminal({ market, ticker, initialQuote, initialBars }: TradingTerminalProps) {
   const code = `${market}${ticker}`
+  const { locale, t } = useLocale()
   const containerRef = useRef<HTMLDivElement>(null)
-  const terminalRef = useRef<ChartTerminal | null>(null)
-
-  // SSR 首帧固定 zh-CN（与服务器输出一致，避免水合不匹配），挂载后按 #en-US hash 校正
-  const [locale, setLocale] = useState<Locale>('zh-CN')
-  const t = useMemo(() => createT(locale), [locale])
   const [symbolName, setSymbolName] = useState(initialQuote?.name ?? code)
-  const [dark, setDark] = useState(false)
-  const [periodKey, setPeriodKey] = useState<PeriodKey>(DEFAULT_PERIOD_KEY)
-  const [mainIndicators, setMainIndicators] = useState<ReadonlySet<string>>(() => new Set(['MA']))
-  const [subIndicators, setSubIndicators] = useState<ReadonlySet<string>>(() => new Set(['VOL', 'MACD']))
   const [modalOpen, setModalOpen] = useState(false)
   const [modalIndicators, setModalIndicators] = useState<ModalIndicator[]>([])
-  const [activeTool, setActiveTool] = useState<string | null>(null)
   const [info, setInfo] = useState<InfoSnapshot>(() => ({
     dataList: initialBars ?? [],
     hovered: null,
@@ -53,101 +44,33 @@ export default function TradingTerminal({ market, ticker, initialQuote, initialB
     intraday: false
   }))
 
-  useEffect(() => {
-    // SSR 首帧固定 zh-CN，水合后按 #en-US hash 校正（一次性状态同步，
-    // 无法在渲染期读取 window，否则产生服务端/客户端水合不匹配）
-    const currentLocale = readLocaleFromHash()
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setLocale(currentLocale)
-    const container = containerRef.current
-    if (container == null) {
-      return
+  const chart = useChartTerminal({
+    containerRef,
+    symbol: { market, ticker },
+    initialBars,
+    initialQuote,
+    onInfoUpdate: setInfo,
+    onQuoteArrived: (quote) => {
+      if (quote.name != null) {
+        setSymbolName(quote.name)
+      }
     }
-    const terminal = new ChartTerminal({
-      container,
-      symbol: { market, ticker },
-      initialBars,
-      initialQuote,
-      locale: currentLocale,
-      onInfoUpdate: setInfo,
-      onQuoteArrived: (quote) => {
-        if (quote.name != null) {
-          setSymbolName(quote.name)
-        }
-      },
-      onDrawingEnd: () => setActiveTool(null)
-    })
-    terminalRef.current = terminal
-    void terminal.init()
-    return () => {
-      terminal.destroy()
-      terminalRef.current = null
-    }
-    // 终端随路由参数（key=code）整体重建，本地依赖固定为挂载快照
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  })
 
   const handleSymbolSelect = (item: SymbolSearchItem) => {
-    terminalRef.current?.setSymbol({ market: item.market, ticker: item.ticker })
+    chart.setSymbol({ market: item.market, ticker: item.ticker })
     setSymbolName(item.name)
     // history API 同步 URL（不触发服务端导航），保持客户端瞬时切换体验；直访/刷新走 SSR
     window.history.pushState(null, '', `/${item.market}${item.ticker}`)
   }
 
-  const handlePeriodChange = (key: PeriodKey) => {
-    if (key === periodKey) {
-      return
-    }
-    setPeriodKey(key)
-    terminalRef.current?.applyPeriodKey(key)
-  }
-
-  const handleMainIndicatorChange = (name: string, checked: boolean) => {
-    setMainIndicators((prev) => {
-      const next = new Set(prev)
-      if (checked) {
-        next.add(name)
-      } else {
-        next.delete(name)
-      }
-      return next
-    })
-    terminalRef.current?.toggleMainIndicator(name, checked)
-  }
-
-  const handleSubIndicatorChange = (name: string, checked: boolean) => {
-    setSubIndicators((prev) => {
-      const next = new Set(prev)
-      if (checked) {
-        next.add(name)
-      } else {
-        next.delete(name)
-      }
-      return next
-    })
-    terminalRef.current?.toggleSubIndicator(name, checked)
-  }
-
-  const handleDrawingSelect = (name: string) => {
-    setActiveTool((prev) => (prev === name ? null : name))
-    terminalRef.current?.startDrawing(name)
-  }
-
-  const handleThemeToggle = () => {
-    const next = !dark
-    setDark(next)
-    // dark 类挂在应用根节点上，与 #app 命名空间的 CSS 配套
-    document.getElementById('app')?.classList.toggle('dark', next)
-    terminalRef.current?.setTheme(next)
-  }
-
   const openIndicatorModal = () => {
-    setModalIndicators(terminalRef.current?.getIndicatorSnapshot() ?? [])
+    setModalIndicators(chart.getIndicatorSnapshot())
     setModalOpen(true)
   }
 
   const handleModalConfirm = (paneId: string, name: string, calcParams: number[]) => {
-    terminalRef.current?.overrideIndicatorParams(paneId, name, calcParams)
+    chart.overrideIndicatorParams(paneId, name, calcParams)
   }
 
   return (
@@ -155,23 +78,17 @@ export default function TradingTerminal({ market, ticker, initialQuote, initialB
       <div className="toolbar">
         <SymbolPicker label={symbolName} t={t} onSelect={handleSymbolSelect} />
         <div className="tb-divider" />
-        <PeriodGroup activeKey={periodKey} t={t} onChange={handlePeriodChange} />
+        <PeriodGroup activeKey={chart.periodKey} t={t} onChange={chart.changePeriod} />
         <div className="tb-divider" />
-        <IndicatorMenu
-          buttonId="main-indicator-btn"
-          dropdownId="main-indicator-dropdown"
-          label={t('主图指标|Main Indicators')}
-          names={MAIN_INDICATORS}
-          selected={mainIndicators}
-          onChange={handleMainIndicatorChange}
-        />
-        <IndicatorMenu
-          buttonId="sub-indicator-btn"
-          dropdownId="sub-indicator-dropdown"
-          label={t('副图指标|Sub Indicators')}
-          names={SUB_INDICATORS}
-          selected={subIndicators}
-          onChange={handleSubIndicatorChange}
+        <ChartTools
+          t={t}
+          mainIndicators={chart.mainIndicators}
+          subIndicators={chart.subIndicators}
+          onMainIndicatorChange={chart.toggleMainIndicator}
+          onSubIndicatorChange={chart.toggleSubIndicator}
+          activeTool={chart.activeTool}
+          onDrawingSelect={chart.selectDrawing}
+          onClearDrawings={chart.clearDrawings}
         />
         {/* 与原 SPA 保持一致：指标设置入口暂处隐藏状态 */}
         <div className="toolbar-item" style={{ display: 'none' }}>
@@ -179,21 +96,7 @@ export default function TradingTerminal({ market, ticker, initialQuote, initialB
             {t('指标设置|Indicator Settings')}
           </button>
         </div>
-        <DrawingMenu activeTool={activeTool} t={t} onSelect={handleDrawingSelect} />
-        <div className="toolbar-item">
-          <button
-            className="tb-btn tb-clear"
-            id="clear-btn"
-            type="button"
-            onClick={() => {
-              setActiveTool(null)
-              terminalRef.current?.clearDrawings()
-            }}
-          >
-            {t('清除绘图|Clear Drawings')}
-          </button>
-        </div>
-        <ThemeToggle t={t} onToggle={handleThemeToggle} />
+        <ThemeToggle t={t} onToggle={chart.toggleTheme} />
       </div>
       <InfoTable info={info} locale={locale} />
       <div id="container" ref={containerRef}>
