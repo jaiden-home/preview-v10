@@ -1,0 +1,111 @@
+# 目录结构说明
+
+本文档介绍项目每个文件夹的职责与内容。整体架构可参考 [ARCHITECTURE.md](./ARCHITECTURE.md)。
+
+```
+stock-sim/
+├── .github/
+├── .husky/
+├── docs/
+├── e2e/
+├── public/
+├── src/
+│   ├── app/
+│   ├── components/
+│   └── lib/
+└── tests/
+```
+
+## src/
+
+源码根目录（Next.js `src` 布局），应用代码与仅服务端入口全部收敛于此；`public/`、测试与配置文件按惯例留在仓库根。路径别名 `@/*` 指向 `src/*`。除 `app/`、`components/`、`lib/` 三个子目录外，还包含：
+
+- `proxy.ts`：边界代理（即 Next.js middleware），非法标的路由在边缘直接 404，并为 `/api/*` 注入 `x-request-id` 供日志关联。
+- `instrumentation.ts`：服务端插桩入口，按运行时分发（Edge bundle 中 node 分支被摇树移除）。
+- `instrumentation-node.ts`：仅 Node 运行时加载，输出启动日志并记录 SIGTERM/SIGINT 优雅停机信号。
+
+### src/app/
+
+Next.js App Router 的应用根目录，包含全部页面路由与 BFF 接口。
+
+- `[symbol]/`：动态标的路由（如 `/sh600519`），`page.tsx` 内通过 `generateMetadata` 注入股票名标题与描述，服务端并行拉取实时快照与初始日 K 直出首屏。
+- `api/`：BFF 路由层（Route Handlers），所有上游行情的唯一出口。
+  - `kline/`：K 线数据（`symbol, period, from, to` → `{ bars }`，按需向左加载历史）。
+  - `timeshare/`：分时数据（当日分钟线 + 昨收基准）。
+  - `quote/`：实时快照（名称/现价/昨收 + 基本面估值）。
+  - `search/`：标的搜索（6 位代码精确匹配 + smartbox 名称/拼音联想）。
+  - `healthz/`：健康检查（`{ status, uptime, timestamp }`，供 Docker HEALTHCHECK 与探活使用）。
+- 根级文件：`layout.tsx`（根布局与 `#app` 命名空间）、`page.tsx`（首页，默认上证指数）、`loading.tsx` / `error.tsx` / `not-found.tsx`（路由级加载、错误与 404 兜底）、`globals.css`（全局样式）。
+
+### src/components/
+
+React UI 组件，当前仅有 `terminal/` 一个子目录，存放交易终端的全部展示层组件：
+
+- `TradingTerminal.tsx`：终端主组件，负责组装工具栏、信息表格与图表挂载点。
+- `SymbolPicker.tsx` / `PeriodGroup.tsx`：标的搜索切换与周期（分时/分钟/日/周/月）切换。
+- `IndicatorMenu.tsx` / `IndicatorModal.tsx`：指标选择菜单与指标参数设置弹窗（含 `IndicatorModal.test.tsx` 组件测试）。
+- `DrawingMenu.tsx`：绘图工具菜单（11 种画线工具）。
+- `InfoTable.tsx`：行情 + 基本面混排信息表格（SSR 直出同源）。
+- `ThemeToggle.tsx`：明暗主题切换。
+- `useDismiss.ts`：弹窗外点击关闭的通用 Hook。
+
+组件层不直接触碰 klinecharts 实例，图表命令经 `lib/chart/terminal.ts` 的 `ChartTerminal` 控制器下发。
+
+### src/lib/
+
+与框架解耦的核心业务逻辑，按运行环境划分为三部分：
+
+- `chart/`：与环境无关的图表域逻辑（可在 Node 与浏览器复用，纯函数为主）。
+  - `terminal.ts`：`ChartTerminal`，klinecharts 命令式控制器，仅客户端实例化。
+  - `data-loader.ts`：`DataLoader` 数据加载器（init/forward/backward + 3 秒轮询 + 跨日重载）。
+  - `registers.ts`：自定义指标 / 坐标轴注册（TIME、VOL、MA 覆盖、换手率、振幅、百分比轴）。
+  - `timeshare.ts`：分时状态机纯函数（点位解析、均价口径、昨收对称区间）。
+  - `utils.ts`：时间解析、K 线解析与坏行过滤、周期聚合、市场推断。
+  - `info-cells.ts`：信息表格单元格构建（SSR 与客户端共用同一份）。
+  - `params.ts`：指标参数弹窗辅助（中英文标签、取值钳制、整型/浮点区分）。
+  - `api.ts` / `types.ts` / `constants.ts`：BFF 请求封装、领域类型与常量。
+  - `*.test.ts`：上述模块的单元测试（与源码同目录）。
+- `server/`：仅服务端使用的模块（不进入客户端 bundle）。
+  - `tencent.ts`：腾讯行情上游客户端（服务端 fetch、GBK 解码、超时兜底）。
+  - `cache.ts`：TTL 缓存（含在途请求去重）。
+  - `rate-limit.ts`：按 IP 滑动窗口限流。
+  - `schemas.ts` / `env.ts`：zod 接口参数校验与环境变量解析。
+  - `api.ts` / `logger.ts`：路由层公共封装与 pino 结构化日志。
+- 根级文件：`fundamental.ts`（腾讯实时行情文本解析 + 基本面回溯）、`i18n.ts`（中英双语文案，`#en-US` hash 兼容原 SPA）。
+
+## tests/
+
+跨模块集成测试（Vitest + Testing Library + jsdom）：
+
+- `setup.ts`：测试环境全局设置（mock、匹配器等）。
+- `terminal.test.ts`：`ChartTerminal` 集成测试（mock klinecharts，覆盖初始化顺序、A 股配色、分时状态机、主题重应用、destroy 释放等）。
+
+## e2e/
+
+Playwright 端到端冒烟测试：
+
+- `home.spec.ts`：SSR HTML 断言、水合出 canvas、动态路由标题、404、健康检查、BFF 参数校验。
+
+## public/
+
+静态资源目录，直接按根路径对外服务，当前仅含 `logo.svg`。
+
+## docs/
+
+项目文档：
+
+- `ARCHITECTURE.md`：架构设计说明。
+- `DIRECTORY.md`：本文档（目录结构说明）。
+
+## .github/
+
+GitHub 配置：
+
+- `workflows/ci.yml`：CI 流水线，依次执行 `quality`（format/lint/typecheck/unit）→ `e2e`（构建 + Playwright）→ `docker`（main 分支构建镜像）。
+
+## .husky/
+
+Git Hooks（由 husky 管理，配合 lint-staged 与 commitlint）：
+
+- `pre-commit`：提交前对暂存文件执行 ESLint + Prettier。
+- `commit-msg`：提交信息符合 Conventional Commits 规范。

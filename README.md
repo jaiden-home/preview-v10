@@ -76,29 +76,30 @@ docker run -p 3000:3000 klinecharts-preview
 ## 项目结构
 
 ```
-├── app/
-│   ├── layout.tsx            # 根布局（meta / #app 命名空间）
-│   ├── page.tsx              # 首页（默认上证指数）
-│   ├── [symbol]/page.tsx     # 动态标的路由 + generateMetadata
-│   ├── loading/error/not-found.tsx
-│   └── api/                  # BFF：kline / timeshare / quote / search / healthz
-├── components/terminal/      # TradingTerminal 及工具栏 / 信息表格 / 弹窗组件
-├── lib/
-│   ├── chart/                # 与环境无关的图表域逻辑
-│   │   ├── terminal.ts       # ChartTerminal：klinecharts 命令式控制器（仅客户端实例化）
-│   │   ├── data-loader.ts    # DataLoader（BFF 版：init/forward/backward + 3s 轮询）
-│   │   ├── registers.ts      # 自定义指标/坐标轴注册（TIME、VOL、MA 覆盖、换手率、振幅、百分比轴）
-│   │   ├── timeshare.ts      # 分时状态机纯函数（解析/均价/对称区间）
-│   │   ├── utils.ts          # 时间解析 / K 线解析 / 聚合 / 市场推断
-│   │   ├── info-cells.ts     # 信息表格单元格构建（SSR 直出同源）
-│   │   └── params.ts         # 指标参数弹窗辅助（标签/钳制/取整）
-│   ├── fundamental.ts        # 腾讯实时行情文本解析 + 基本面回溯
-│   ├── i18n.ts               # 双语文案（#en-US hash，与原 SPA 兼容）
-│   └── server/               # 仅服务端：tencent 客户端 / TTL 缓存 / 限流 / pino / zod / env
-├── e2e/                      # Playwright 冒烟
-├── tests/                    # ChartTerminal 集成测试（mock klinecharts）
-├── proxy.ts                  # /api/* 注入 x-request-id
-├── instrumentation*.ts       # 启动日志 + 优雅停机（Node 分支）
+├── src/                        # 源码根（Next.js src 布局）
+│   ├── app/
+│   │   ├── layout.tsx          # 根布局（meta / #app 命名空间）
+│   │   ├── page.tsx            # 首页（默认上证指数）
+│   │   ├── [symbol]/page.tsx   # 动态标的路由 + generateMetadata
+│   │   ├── loading/error/not-found.tsx
+│   │   └── api/                # BFF：kline / timeshare / quote / search / healthz
+│   ├── components/terminal/    # TradingTerminal 及工具栏 / 信息表格 / 弹窗组件
+│   ├── lib/
+│   │   ├── chart/              # 与环境无关的图表域逻辑
+│   │   │   ├── terminal.ts     # ChartTerminal：klinecharts 命令式控制器（仅客户端实例化）
+│   │   │   ├── data-loader.ts  # DataLoader（BFF 版：init/forward/backward + 3s 轮询）
+│   │   │   ├── registers.ts    # 自定义指标/坐标轴注册（TIME、VOL、MA 覆盖、换手率、振幅、百分比轴）
+│   │   │   ├── timeshare.ts    # 分时状态机纯函数（解析/均价/对称区间）
+│   │   │   ├── utils.ts        # 时间解析 / K 线解析 / 聚合 / 市场推断
+│   │   │   ├── info-cells.ts   # 信息表格单元格构建（SSR 直出同源）
+│   │   │   └── params.ts       # 指标参数弹窗辅助（标签/钳制/取整）
+│   │   ├── fundamental.ts      # 腾讯实时行情文本解析 + 基本面回溯
+│   │   ├── i18n.ts             # 双语文案（#en-US hash，与原 SPA 兼容）
+│   │   └── server/             # 仅服务端：tencent 客户端 / TTL 缓存 / 限流 / pino / zod / env
+│   ├── proxy.ts                # /api/* 注入 x-request-id
+│   └── instrumentation*.ts     # 启动日志 + 优雅停机（Node 分支）
+├── e2e/                        # Playwright 冒烟
+├── tests/                      # ChartTerminal 集成测试（mock klinecharts）
 ├── Dockerfile / .github/workflows/ci.yml
 └── vitest.config.ts / playwright.config.ts / eslint.config.mjs
 ```
