@@ -757,3 +757,546 @@ body {
   border-top-color: var(--tb-active);
   animation: klinecharts-fundamental-pulse 1.2s ease-in-out infinite;
 }
+
+/* ---------------- 模拟交易页 ---------------- */
+
+/* 红涨绿跌（与 A 股配色一致） */
+#app .up {
+  color: #ef2323;
+}
+
+#app .down {
+  color: #14a143;
+}
+
+#app .flat {
+  color: var(--tb-text);
+}
+
+#app .trade-loading {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--tb-text-sub);
+  font-size: 13px;
+}
+
+/* 账户汇总条 */
+#app .trade-summary {
+  flex: none;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: stretch;
+  padding: 4px 10px;
+  background-color: var(--tb-bg);
+  border-top: 1px solid var(--tb-border);
+  color: var(--tb-text);
+}
+
+#app .stat-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 6px 16px;
+  min-width: 130px;
+}
+
+#app .stat-label {
+  font-size: 10px;
+  color: var(--tb-text-sub);
+  white-space: nowrap;
+}
+
+#app .stat-value {
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+#app .stat-reset {
+  margin-left: auto;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 0 6px 16px;
+}
+
+/* 主区：行情图表 + 委托面板（上排），持仓/记录（下排通栏） */
+#app .trade-main {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  grid-template-rows: minmax(400px, auto) auto;
+  gap: 10px;
+  padding: 10px;
+  align-content: start;
+}
+
+#app .trade-card {
+  background-color: var(--tb-bg);
+  border: 1px solid var(--tb-border);
+  border-radius: 8px;
+  color: var(--tb-text);
+}
+
+/* ---- 行情图表 ---- */
+
+#app .trade-chart {
+  grid-column: 1;
+  grid-row: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 400px;
+}
+
+/* 图表工具栏：周期/指标/绘图，与行情页同款组件，窄屏自动换行 */
+#app .trade-chart-toolbar {
+  flex: none;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--tb-border);
+}
+
+/* 覆盖 .toolbar-item:last-child 的 margin-left:auto（那是行情页主题开关的推右规则），
+   清除绘图须紧跟绘图菜单排列 */
+#app .trade-chart-toolbar .toolbar-item:last-child {
+  margin-left: 0;
+}
+
+#app .trade-chart-body {
+  flex: 1;
+  min-height: 0;
+}
+
+/* 卡片内信息表格：去掉与工具栏重复的上边框 */
+#app .trade-chart .info-table {
+  border-top: none;
+}
+
+/* ---- 委托面板 ---- */
+
+#app .order-panel {
+  grid-column: 2;
+  grid-row: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  overflow-y: auto;
+}
+
+#app .trade-right {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  min-width: 0;
+  overflow: hidden;
+}
+
+#app .order-head {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px dashed var(--chart-grid);
+}
+
+#app .order-title {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+#app .order-name {
+  font-size: 14px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#app .order-code {
+  font-size: 11px;
+  color: var(--tb-text-sub);
+}
+
+#app .order-quote {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+}
+
+#app .order-price {
+  font-size: 20px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+
+#app .order-change {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+#app .side-tabs {
+  display: flex;
+  flex-direction: row;
+  gap: 6px;
+}
+
+#app .side-btn {
+  flex: 1;
+  padding: 7px 0;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--tb-text-sub);
+  background-color: var(--tb-hover);
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+#app .side-btn.buy.active {
+  color: #ffffff;
+  background-color: #ef2323;
+}
+
+#app .side-btn.sell.active {
+  color: #ffffff;
+  background-color: #14a143;
+}
+
+#app .order-avail {
+  font-size: 11px;
+  color: var(--tb-text-sub);
+  font-variant-numeric: tabular-nums;
+}
+
+#app .order-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+#app .order-field-label {
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--tb-text-sub);
+}
+
+#app .order-hint {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+#app .order-input {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--tb-border);
+  background-color: transparent;
+  color: var(--tb-text);
+  font-size: 13px;
+  padding: 7px 10px;
+  border-radius: 4px;
+  outline: none;
+  font-variant-numeric: tabular-nums;
+}
+
+#app .order-input:focus {
+  border-color: var(--tb-active);
+}
+
+#app .order-input:disabled {
+  opacity: 0.5;
+}
+
+#app .quick-row {
+  display: flex;
+  flex-direction: row;
+  gap: 4px;
+}
+
+#app .quick-btn {
+  flex: 1;
+  padding: 4px 0;
+  border: none;
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+  color: var(--tb-text-sub);
+  background-color: var(--tb-hover);
+  transition: color 0.15s ease;
+}
+
+#app .quick-btn:hover {
+  color: var(--tb-text);
+}
+
+#app .order-estimate {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background-color: var(--tb-hover);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+#app .order-estimate-row {
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+#app .order-estimate-label {
+  color: var(--tb-text-sub);
+}
+
+#app .order-submit {
+  padding: 10px 0;
+  border: none;
+  border-radius: 6px;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: filter 0.15s ease;
+}
+
+#app .order-submit.buy {
+  background-color: #ef2323;
+}
+
+#app .order-submit.sell {
+  background-color: #14a143;
+}
+
+#app .order-submit:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+
+#app .order-submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+#app .order-untradable {
+  padding: 18px 4px;
+  font-size: 12px;
+  color: var(--tb-text-sub);
+  text-align: center;
+}
+
+/* ---- 持仓 / 成交记录 ---- */
+
+#app .trade-tabs {
+  display: flex;
+  flex-direction: row;
+  gap: 2px;
+  padding: 6px 10px 0;
+  border-bottom: 1px solid var(--tb-border);
+}
+
+#app .trade-tabs .tb-btn {
+  border-radius: 4px 4px 0 0;
+}
+
+#app .trade-table-wrap {
+  overflow-x: auto;
+}
+
+#app .trade-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  color: var(--tb-text);
+}
+
+#app .trade-table th {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--tb-text-sub);
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--tb-border);
+  white-space: nowrap;
+}
+
+#app .trade-table td {
+  padding: 8px 12px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+#app .trade-table td.num,
+#app .trade-table th.num {
+  text-align: right;
+}
+
+#app .trade-table td.txt-left,
+#app .trade-table th.txt-left {
+  text-align: left;
+}
+
+#app .trade-table tbody tr:hover {
+  background-color: var(--tb-hover);
+}
+
+#app .cell-symbol {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+#app .cell-name {
+  font-weight: 600;
+}
+
+#app .cell-code {
+  font-size: 10px;
+  color: var(--tb-text-sub);
+}
+
+#app .cell-actions {
+  display: inline-flex;
+  flex-direction: row;
+  gap: 4px;
+}
+
+#app .trade-action-btn {
+  padding: 2px 10px;
+  border: 1px solid var(--tb-border);
+  border-radius: 4px;
+  background-color: transparent;
+  font-size: 11px;
+  cursor: pointer;
+  color: var(--tb-text);
+}
+
+#app .trade-action-btn.buy {
+  color: #ef2323;
+  border-color: rgba(239, 35, 35, 0.45);
+}
+
+#app .trade-action-btn.sell {
+  color: #14a143;
+  border-color: rgba(20, 161, 67, 0.45);
+}
+
+#app .trade-action-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+#app .trade-empty {
+  padding: 32px 0;
+  text-align: center;
+  color: var(--tb-text-sub);
+  font-size: 12px;
+}
+
+/* ---- 成交提示 ---- */
+
+#app .trade-toast {
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1200;
+  max-width: calc(100vw - 32px);
+  padding: 8px 18px;
+  border-radius: 6px;
+  color: #ffffff;
+  font-size: 13px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
+  animation: klinecharts-trade-toast-in 0.2s ease;
+}
+
+#app .trade-toast.ok {
+  background-color: #14a143;
+}
+
+#app .trade-toast.err {
+  background-color: #ef2323;
+}
+
+@keyframes klinecharts-trade-toast-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+/* ---- 模拟交易页移动端适配 ---- */
+
+@media (max-width: 768px) {
+  #app .trade-summary {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 2px 0;
+    padding: 4px 8px;
+  }
+
+  #app .stat-cell {
+    min-width: 0;
+    padding: 6px 8px;
+  }
+
+  #app .stat-reset {
+    grid-column: 1 / -1;
+    margin-left: 0;
+    justify-content: space-between;
+    padding: 6px 8px;
+  }
+
+  /* 纵向排布：卡片不压缩（flex:none）保持内容高度，由 trade-main 滚动；
+     拉伸到容器宽度（stretch），表格横向滚动而不是把卡片撑出屏幕 */
+  #app .trade-main {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    padding: 8px;
+  }
+
+  #app .trade-main > * {
+    flex: none;
+  }
+
+  /* 图表固定高度（含工具栏与信息表格），委托面板与表格依次下排 */
+  #app .trade-chart {
+    height: 360px;
+    min-height: 0;
+  }
+
+  #app .trade-tabs {
+    flex-wrap: wrap;
+  }
+}
