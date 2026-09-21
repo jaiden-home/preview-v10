@@ -47,7 +47,7 @@ flowchart TB
     end
 
     subgraph NextApp["Next.js 应用（standalone）"]
-        MW["middleware.ts（Edge）<br/>非法标的路由 404 · x-request-id 注入"]
+        MW["proxy.ts（Edge）<br/>非法标的路由 404 · x-request-id 注入"]
         PAGE["页面层（RSC）<br/>首页与动态标的路由<br/>fetchInitialTerminalData（并行 + 3s 超时）"]
         BFF["BFF 路由层（Route Handlers）<br/>kline · timeshare · quote · search · healthz"]
         SRV["lib/server（仅服务端）<br/>zod 校验 · 滑动窗口限流 · TTL 缓存（在途去重）· pino 日志 · env 解析"]
@@ -73,7 +73,7 @@ flowchart TB
 
 **请求链路（两类）：**
 
-1. **页面请求**：浏览器 → `middleware`（边缘校验 + requestId）→ RSC 页面 → `fetchInitialTerminalData`（服务端并行拉 quote + 500 根日 K，各自 3s 超时，失败回退 null 不阻塞渲染）→ SSR HTML → 客户端水合 → `ChartTerminal.init()` 动态加载 klinecharts。
+1. **页面请求**：浏览器 → `proxy`（边缘校验 + requestId）→ RSC 页面 → `fetchInitialTerminalData`（服务端并行拉 quote + 500 根日 K，各自 3s 超时，失败回退 null 不阻塞渲染）→ SSR HTML → 客户端水合 → `ChartTerminal.init()` 动态加载 klinecharts。
 2. **数据请求**：水合后图表 → BFF Route Handler（zod 校验 → 限流 → TTL 缓存/在途去重 → 上游 fetch，GBK 解码 + 5s 超时）。
 
 **分层依赖规则**：`app/`（路由与 BFF）→ `components/`（React 视图）→ `lib/chart/`（与环境无关的图表域逻辑，可被 SSR 与客户端共同引用）→ `lib/server/`（仅服务端，纯 Node 依赖）。`lib/chart/terminal.ts`、`registers.ts` 内部对 klinecharts 一律动态 `import()`，保证不进入服务端模块图。
@@ -105,7 +105,7 @@ flowchart TB
 ```mermaid
 flowchart TD
     subgraph L1["路由层 app/"]
-        MW["middleware（Edge）<br/>边缘 404 · x-request-id"]
+        MW["proxy（Edge）<br/>边缘 404 · x-request-id"]
         PAGES["页面 RSC<br/>首页与 symbol 动态路由<br/>generateMetadata + fetchInitialTerminalData"]
         API["BFF Route Handlers<br/>kline · timeshare · quote · search · healthz"]
     end
@@ -158,9 +158,9 @@ flowchart TD
 | `loading.tsx` / `error.tsx` / `not-found.tsx` | 骨架屏 / 客户端错误边界（含 Sentry 挂点）/ 404 提示                                                                                                                                                                                    |
 | `api/*/route.ts`                              | BFF 五接口（见第 6 节）                                                                                                                                                                                                                |
 
-### 4.2 中间件与启动钩子
+### 4.2 边界代理与启动钩子
 
-- **`middleware.ts`**（Edge，matcher 排除 `_next/static`、`_next/image`）：
+- **`proxy.ts`**（Edge，matcher 排除 `_next/static`、`_next/image`）：
   - **边缘 404**：单段路径、非保留段（`api`、`_next`、`favicon.ico` 等）且不匹配 `^(sh|sz|bj)\d{6}$` 时直接返回内联 404。动机：Next 流式响应下页面内 `notFound()` 在响应头冲刷后抛出，无法再改状态码。
   - **`x-request-id` 注入**：已有则透传，否则 `crypto.randomUUID()` 写回响应头，供日志关联。
 - **`instrumentation.ts` / `instrumentation-node.ts`**：按 `NEXT_RUNTIME` 静态判定仅 Node 运行时加载 node 分支——启动日志（node 版本/pid）+ `SIGTERM`/`SIGINT` 优雅停机记录；Edge bundle 中被摇树移除。
@@ -401,7 +401,7 @@ sequenceDiagram
 sequenceDiagram
     autonumber
     participant CL as 客户端
-    participant MW as middleware（Edge）
+    participant MW as proxy（Edge）
     participant RT as Route Handler
     participant Z as zod 校验
     participant RL as 限流器
@@ -451,7 +451,7 @@ sequenceDiagram
 │   └── i18n.ts               # 双语文案（#en-US hash）
 ├── e2e/                      # Playwright 冒烟
 ├── tests/                    # ChartTerminal 集成测试（mock klinecharts）
-├── middleware.ts             # 边缘 404 + x-request-id
+├── proxy.ts                  # 边缘 404 + x-request-id
 ├── instrumentation*.ts       # 启动日志 + 优雅停机（Node 分支）
 ├── Dockerfile / .github/workflows/ci.yml
 └── vitest.config.ts / playwright.config.ts / eslint.config.mjs

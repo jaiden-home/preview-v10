@@ -17,12 +17,12 @@ const NOT_FOUND_HTML = `<!DOCTYPE html>
 </html>`
 
 /**
- * 边界中间件：
+ * 边界代理：
  * 1. 非法标的路由在边缘直接 404（Next 流式响应下，页面内 notFound()
  *    在响应头冲刷后抛出，无法改变状态码）
  * 2. 为 API 请求注入 x-request-id（已有则透传），供日志关联与链路追踪
  */
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const segments = request.nextUrl.pathname.split('/').filter(Boolean)
   if (
     segments.length === 1 &&

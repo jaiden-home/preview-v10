@@ -97,7 +97,7 @@ docker run -p 3000:3000 klinecharts-preview
 │   └── server/               # 仅服务端：tencent 客户端 / TTL 缓存 / 限流 / pino / zod / env
 ├── e2e/                      # Playwright 冒烟
 ├── tests/                    # ChartTerminal 集成测试（mock klinecharts）
-├── middleware.ts             # /api/* 注入 x-request-id
+├── proxy.ts                  # /api/* 注入 x-request-id
 ├── instrumentation*.ts       # 启动日志 + 优雅停机（Node 分支）
 ├── Dockerfile / .github/workflows/ci.yml
 └── vitest.config.ts / playwright.config.ts / eslint.config.mjs
