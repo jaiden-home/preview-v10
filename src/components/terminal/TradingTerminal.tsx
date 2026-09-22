@@ -60,8 +60,6 @@ export default function TradingTerminal({ market, ticker, initialQuote, initialB
   const handleSymbolSelect = (item: SymbolSearchItem) => {
     chart.setSymbol({ market: item.market, ticker: item.ticker })
     setSymbolName(item.name)
-    // history API 同步 URL（不触发服务端导航），保持客户端瞬时切换体验；直访/刷新走 SSR
-    window.history.pushState(null, '', `/${item.market}${item.ticker}`)
   }
 
   const openIndicatorModal = () => {

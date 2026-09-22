@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import ThemeToggle from '@/components/terminal/ThemeToggle'
 import PeriodGroup from '@/components/terminal/PeriodGroup'
@@ -215,9 +216,9 @@ export default function PaperTrading() {
     <>
       <div className="toolbar">
         <div className="toolbar-item">
-          <a className="tb-btn tb-clear" href={`/${selectedCode}`}>
+          <Link className="tb-btn tb-clear" href="/">
             ← {t('返回行情|Back to chart')}
-          </a>
+          </Link>
         </div>
         <ThemeToggle t={t} onToggle={chart.toggleTheme} />
       </div>
