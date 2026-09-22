@@ -67,18 +67,11 @@ export default function OrderPanel({ t, side, onSideChange, code, quote, account
   const buyMax = livePrice != null ? maxBuyQty(account.cash, livePrice) : 0
   const availableQty = position?.availableQty ?? 0
 
-  // 字段下方微提示：涨跌停范围 + 侧别上下文（最大可买 / 可卖数量），按需拼接；
-  // 可用资金不重复展示（摘要栅格已有），可卖数量仅持仓时提示
-  const hints: string[] = []
-  if (limits != null) {
-    hints.push(`${t('涨停|Limit up')} ${limits.upper.toFixed(2)} · ${t('跌停|Limit down')} ${limits.lower.toFixed(2)}`)
-  }
-  if (side === 'buy' && buyMax > 0) {
-    hints.push(`${t('最大可买|Max buy')} ${buyMax}`)
-  }
-  if (side === 'sell' && availableQty > 0) {
-    hints.push(`${t('可卖|Sellable')} ${availableQty}/${position?.qty ?? 0}`)
-  }
+  // 涨跌停与侧别上下文（最大可买 / 可卖数量）以三枚描边小格区分展示；
+  // 可用资金不重复展示（摘要栅格已有）；缺行情时以 -- 占位保持布局稳定
+  const limitUpText = limits == null ? '--' : limits.upper.toFixed(2)
+  const limitDownText = limits == null ? '--' : limits.lower.toFixed(2)
+  const availText = side === 'buy' ? `${buyMax}` : `${availableQty}/${position?.qty ?? 0}`
 
   const applyQuickBuy = (pct: number) => {
     if (livePrice == null) {
@@ -124,7 +117,8 @@ export default function OrderPanel({ t, side, onSideChange, code, quote, account
         )}
       </header>
 
-      <div className="side-tabs" role="tablist">
+      <div className={`side-tabs ${side}`} role="tablist">
+        <span className="side-thumb" aria-hidden="true" />
         <button
           className={`side-btn buy${side === 'buy' ? ' active' : ''}`}
           type="button"
@@ -216,15 +210,20 @@ export default function OrderPanel({ t, side, onSideChange, code, quote, account
             )}
           </div>
 
-          {hints.length > 0 && (
-            <div className="order-field-hints">
-              {hints.map((hint) => (
-                <span key={hint} className="order-hint">
-                  {hint}
-                </span>
-              ))}
+          <div className="order-limits">
+            <div className="limit-cell">
+              <span className="limit-label">{t('涨停|Limit up')}</span>
+              <span className={`limit-value${limits == null ? ' flat' : ' up'}`}>{limitUpText}</span>
             </div>
-          )}
+            <div className="limit-cell">
+              <span className="limit-label">{t('跌停|Limit down')}</span>
+              <span className={`limit-value${limits == null ? ' flat' : ' down'}`}>{limitDownText}</span>
+            </div>
+            <div className="limit-cell">
+              <span className="limit-label">{side === 'buy' ? t('最大可买|Max buy') : t('可卖|Sellable')}</span>
+              <span className="limit-value accent">{availText}</span>
+            </div>
+          </div>
 
           <div className="order-estimate">
             <div className="estimate-cell">

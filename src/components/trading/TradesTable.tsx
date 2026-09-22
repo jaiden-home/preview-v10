@@ -62,7 +62,7 @@ export default function TradesTable({ t, trades, locale }: TradesTableProps) {
                   <span className="cell-code">{trade.code}</span>
                 </div>
               </td>
-              <td className={`txt-left ${trade.side === 'buy' ? 'up' : 'down'}`}>
+              <td className={`txt-left ${trade.side === 'buy' ? 'up' : 'accent'}`}>
                 {trade.side === 'buy' ? t('买入|Buy') : t('卖出|Sell')}
               </td>
               <td className="num">{trade.price.toFixed(2)}</td>

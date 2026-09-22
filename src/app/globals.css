@@ -849,6 +849,11 @@ body {
   color: var(--tb-text);
 }
 
+/* 卖出动作色：品牌蓝（绿只表达价格/盈亏方向，不再用于卖出，UI_SPEC §3.8） */
+#app .accent {
+  color: var(--tb-active);
+}
+
 #app .trade-loading {
   flex: 1;
   display: flex;
@@ -875,15 +880,15 @@ body {
   overflow-y: auto;
 }
 
-/* ---- 账户摘要（嵌入委托面板首段）：hero + 2×2 指标栅格 ---- */
+/* ---- 账户摘要（委托面板末段，v2.9 起资产殿后）：hero + 2×2 指标栅格 ---- */
 
 #app .panel-summary {
   flex: none;
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--tb-border);
+  padding-top: 10px;
+  border-top: 1px solid var(--tb-border);
 }
 
 #app .summary-hero {
@@ -1020,7 +1025,7 @@ body {
   border-top: none;
 }
 
-/* ---- 委托面板：账户摘要 + 委托表单同卡（右侧列单卡三段式） ---- */
+/* ---- 委托面板：行情 + 委托表单 + 账户摘要同卡（右侧列单卡三段式，v2.9 起资产殿后） ---- */
 
 #app .trade-panel {
   grid-column: 2;
@@ -1096,42 +1101,56 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* 买卖切换：滑块式分段——thumb 随侧别平移（transform）并换色（买红/卖蓝） */
 #app .side-tabs {
+  position: relative;
   display: flex;
   flex-direction: row;
-  gap: 6px;
   padding: 2px;
   border-radius: var(--radius-md);
   background-color: var(--tb-hover);
 }
 
+#app .side-thumb {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  left: 2px;
+  /* 与单枚按钮等宽（容器 padding 2px 两侧，两枚按钮平分余量） */
+  width: calc(50% - 2px);
+  border-radius: 6px;
+  background-color: var(--up);
+  box-shadow: 0 2px 8px rgba(239, 35, 35, 0.28);
+  transition:
+    transform 0.2s ease,
+    background-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+#app .side-tabs.sell .side-thumb {
+  transform: translateX(100%);
+  background-color: var(--tb-active);
+  box-shadow: 0 2px 8px rgba(22, 119, 255, 0.28);
+}
+
 #app .side-btn {
+  position: relative;
+  z-index: 1;
   flex: 1;
   height: 40px;
   padding: 0;
   border: none;
-  border-radius: var(--radius-sm);
+  border-radius: 6px;
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
   color: var(--tb-text-sub);
   background-color: transparent;
-  transition:
-    background-color 0.2s ease,
-    color 0.2s ease,
-    box-shadow 0.2s ease;
+  transition: color 0.2s ease;
 }
 
-#app .side-btn.buy.active {
+#app .side-btn.active {
   color: var(--on-solid);
-  background-color: var(--up);
-  box-shadow: 0 2px 8px rgba(239, 35, 35, 0.28);
-}
-
-#app .side-btn.sell.active {
-  color: var(--on-solid);
-  background-color: var(--down);
-  box-shadow: 0 2px 8px rgba(20, 161, 67, 0.28);
 }
 
 #app .order-field {
@@ -1150,8 +1169,44 @@ body {
   color: var(--tb-text-sub);
 }
 
-#app .order-hint {
+/* 字段区双列：价格/数量并排；涨跌停与最大可买为下方三枚描边小格（见 .order-limits） */
+#app .order-fields {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+/* 涨跌停 / 最大可买（可卖）：三枚描边小格，值按语义区分——涨停红 / 跌停绿 / 侧别上下文蓝；
+   与费用预估的淡底整带构成两级数据容器语言 */
+#app .order-limits {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+#app .limit-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 6px 4px;
+  min-width: 0;
+  border: 1px solid var(--tb-border);
+  border-radius: var(--radius-sm);
+  background-color: var(--tb-bg);
+}
+
+#app .limit-label {
+  font-size: 10px;
+  color: var(--tb-text-sub);
+  white-space: nowrap;
+}
+
+#app .limit-value {
   font-family: var(--font-num);
+  font-size: 12px;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -1181,21 +1236,6 @@ body {
 
 #app .order-input:disabled {
   opacity: 0.5;
-}
-
-/* 字段区双列：价格/数量并排；涨跌停与最大可买合并为下方一行微提示 */
-#app .order-fields {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 8px;
-}
-
-#app .order-field-hints {
-  display: flex;
-  flex-direction: row;
-  gap: 8px;
-  font-size: 11px;
-  color: var(--tb-text-sub);
 }
 
 /* 快捷仓位按钮：字段区下方整行，等宽分布 */
@@ -1278,8 +1318,8 @@ body {
 }
 
 #app .order-submit.sell {
-  background-color: var(--down);
-  box-shadow: 0 2px 8px rgba(20, 161, 67, 0.28);
+  background-color: var(--tb-active);
+  box-shadow: 0 2px 8px rgba(22, 119, 255, 0.28);
 }
 
 #app .order-submit:hover:not(:disabled) {
@@ -1417,8 +1457,8 @@ body {
 }
 
 #app .trade-action-btn.sell {
-  color: var(--down);
-  border-color: rgba(20, 161, 67, 0.45);
+  color: var(--tb-active);
+  border-color: rgba(22, 119, 255, 0.45);
 }
 
 /* 悬停以边框强调色反馈（行悬停已占用 --tb-hover 底色） */
@@ -1428,8 +1468,8 @@ body {
 }
 
 #app .trade-action-btn.sell:hover:not(:disabled) {
-  border-color: var(--down);
-  background-color: rgba(20, 161, 67, 0.08);
+  border-color: var(--tb-active);
+  background-color: rgba(22, 119, 255, 0.08);
 }
 
 #app .trade-action-btn:disabled {

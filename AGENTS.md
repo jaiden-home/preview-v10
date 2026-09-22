@@ -41,7 +41,7 @@ A 股行情预览 + 模拟交易的 Web 终端：Next.js 16（App Router，stand
 
 ## 硬性约束（违反即返工）
 
-1. **红涨绿跌**（A 股语义，不可反转）：涨/盈利/买入 = `var(--up)`（红），跌/亏损/卖出 = `var(--down)`（绿），与 `lib/chart/constants.ts` 的 K 线配色联动。
+1. **红涨绿跌**（A 股语义，不可反转）：涨/盈利 = `var(--up)`（红），跌/亏损 = `var(--down)`（绿）；动作色：买入 = `var(--up)`（红）、卖出 = `var(--tb-active)`（品牌蓝，UI_SPEC v2.9 起），与 `lib/chart/constants.ts` 的 K 线配色联动。
 2. **样式令牌制**：颜色/圆角/阴影/字族只引用 `globals.css` 顶部设计令牌；`lint:css` 会拦截组件区硬编码 hex、阶外圆角与非令牌字族；新增令牌先在 `docs/UI_SPEC.md` §2 登记。
 3. **数值排版**：金额/价格/百分比/股票代码必须 `font-family: var(--font-num)` + `font-variant-numeric: tabular-nums`，数字列右对齐（`.num`）。
 4. **图表不参与 SSR**：klinecharts 只能动态 `import()`；服务端渲染外壳（工具栏 + 信息表格）与数据。

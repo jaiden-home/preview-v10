@@ -246,9 +246,8 @@ export default function PaperTrading() {
               {/* klinecharts 画布容器（客户端初始化，不参与 SSR） */}
               <div className="trade-chart-body" ref={chartContainerRef} />
             </section>
-            {/* 账户摘要 + 委托表单同卡（右侧列单卡三段式） */}
+            {/* 委托面板同卡三段式：标的行情 → 委托表单 → 账户摘要（资产殿后） */}
             <section className="trade-card trade-panel">
-              <TradeSummary t={t} account={account} equity={equity} onReset={handleReset} />
               <OrderPanel
                 t={t}
                 side={side}
@@ -258,6 +257,7 @@ export default function PaperTrading() {
                 account={account}
                 onSubmit={handleSubmit}
               />
+              <TradeSummary t={t} account={account} equity={equity} onReset={handleReset} />
             </section>
             <section className="trade-card trade-records">
               <div className="trade-tabs">
