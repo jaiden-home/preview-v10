@@ -55,6 +55,9 @@ body {
   flex-direction: column;
   height: 100vh;
   min-height: 100vh;
+  /* 移动端动态视口：避免地址栏收起/展开时 100vh 裁掉底部内容 */
+  height: 100dvh;
+  min-height: 100dvh;
   background-color: var(--bg);
 }
 
@@ -864,6 +867,14 @@ body {
   background-color: var(--page-tint);
 }
 
+/* 单一滚动容器：工具栏固定，其下（汇总卡 + 主区）整体滚动；
+   禁止在主区/面板再嵌 overflow，避免底部内容被静默裁剪 */
+#app .trade-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
 /* 账户汇总：总资产主卡（左：总额 + 总盈亏；右：指标栅格） */
 #app .trade-summary {
   flex: none;
@@ -907,22 +918,26 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* 指标栅格：单元格等宽铺满，竖分隔线形成节奏（与 hero 的分隔线同语言） */
 #app .summary-grid {
   flex: 1;
   display: flex;
   flex-direction: row;
-  flex-wrap: wrap;
   align-items: stretch;
-  gap: 8px 0;
 }
 
 #app .stat-cell {
+  flex: 1;
   display: flex;
   flex-direction: column;
   justify-content: center;
   gap: 3px;
   min-width: 128px;
   padding: 2px 18px;
+}
+
+#app .stat-cell + .stat-cell {
+  border-left: 1px solid var(--tb-border);
 }
 
 #app .stat-label {
@@ -940,26 +955,23 @@ body {
 }
 
 #app .stat-reset {
-  margin-left: auto;
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: flex-end;
   gap: 6px;
   padding-left: 18px;
+  border-left: 1px solid var(--tb-border);
 }
 
-/* 主区：行情图表 + 委托面板（上排），持仓/记录（下排通栏） */
+/* 主区：行情图表 + 委托面板（上排），持仓/记录（下排通栏）；
+   高度由内容自然撑开，滚动交给外层 .trade-scroll（不在此处滚） */
 #app .trade-main {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 360px;
-  grid-template-rows: minmax(400px, auto) auto;
+  grid-template-rows: minmax(clamp(480px, 60vh, 720px), auto) auto;
   gap: 12px;
   padding: 12px;
-  align-content: start;
 }
 
 #app .trade-card {
@@ -972,13 +984,14 @@ body {
 
 /* ---- 行情图表 ---- */
 
+/* 图表卡高度随视口伸缩（与 trade-main 首行同步）：矮屏保底 480px，高屏至多 720px */
 #app .trade-chart {
   grid-column: 1;
   grid-row: 1;
   display: flex;
   flex-direction: column;
   min-width: 0;
-  min-height: 400px;
+  min-height: clamp(480px, 60vh, 720px);
 }
 
 /* 图表工具栏：周期/指标/绘图，与行情页同款组件，窄屏自动换行 */
@@ -1018,7 +1031,6 @@ body {
   flex-direction: column;
   gap: 12px;
   padding: 14px 16px;
-  overflow-y: auto;
 }
 
 #app .trade-right {
@@ -1483,9 +1495,24 @@ body {
     min-width: 160px;
   }
 
+  /* 汇总栅格降为 2×2：单元格不再挤压，分隔线只落在每行右列（避免行首竖线） */
+  #app .summary-grid {
+    flex-wrap: wrap;
+    row-gap: 10px;
+  }
+
   #app .stat-cell {
+    flex: 1 1 50%;
     min-width: 0;
     padding: 2px 12px;
+  }
+
+  #app .stat-cell + .stat-cell {
+    border-left: none;
+  }
+
+  #app .stat-cell:nth-child(even) {
+    border-left: 1px solid var(--tb-border);
   }
 }
 
@@ -1517,15 +1544,20 @@ body {
     padding: 0 4px;
   }
 
+  /* 双列栅格换行后竖分隔线会落在行首，移动端取消 */
+  #app .stat-cell + .stat-cell {
+    border-left: none;
+  }
+
   #app .stat-reset {
     flex-direction: row;
     justify-content: space-between;
     align-items: center;
-    margin-left: 0;
     padding: 0 4px;
+    border-left: none;
   }
 
-  /* 纵向排布：卡片不压缩（flex:none）保持内容高度，由 trade-main 滚动；
+  /* 纵向排布：卡片不压缩（flex:none）保持内容高度，由外层 trade-scroll 滚动；
      拉伸到容器宽度（stretch），表格横向滚动而不是把卡片撑出屏幕 */
   #app .trade-main {
     display: flex;
@@ -1541,7 +1573,7 @@ body {
 
   /* 图表固定高度（含工具栏与信息表格），委托面板与表格依次下排 */
   #app .trade-chart {
-    height: 360px;
+    height: 420px;
     min-height: 0;
   }
 

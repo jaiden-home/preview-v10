@@ -226,7 +226,8 @@ export default function PaperTrading() {
       {account == null || equity == null ? (
         <div className="trade-loading">{t('加载中|Loading')}…</div>
       ) : (
-        <>
+        /* 单一滚动容器：工具栏固定，汇总卡与主区整体滚动（避免嵌套滚动导致面板内容被裁剪） */
+        <div className="trade-scroll">
           {/* 总资产主卡：左侧总额 + 总盈亏，右侧指标栅格 */}
           <div className="trade-summary">
             <div className="summary-hero">
@@ -321,7 +322,7 @@ export default function PaperTrading() {
               )}
             </section>
           </div>
-        </>
+        </div>
       )}
 
       {notice != null && (
