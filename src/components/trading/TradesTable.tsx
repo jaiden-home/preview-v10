@@ -22,7 +22,19 @@ const formatTs = (ts: number, locale: 'zh-CN' | 'en-US'): string =>
 /** 成交记录（新成交在前） */
 export default function TradesTable({ t, trades, locale }: TradesTableProps) {
   if (trades.length === 0) {
-    return <div className="trade-empty">{t('暂无成交记录|No trades yet')}</div>
+    return (
+      <div className="trade-empty">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+          <path
+            d="M8 5V3m8 2V3M4 9h16M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Zm3 8h2m4 0h2m-8 3.5h2m4 0h2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+        <span className="trade-empty-title">{t('暂无成交记录|No trades yet')}</span>
+        <span className="trade-empty-sub">{t('委托成交后将显示在这里|Trades will appear here after filling')}</span>
+      </div>
+    )
   }
 
   return (

@@ -213,7 +213,7 @@ export default function PaperTrading() {
   const pnlClass = (n: number) => (n > 0 ? 'up' : n < 0 ? 'down' : 'flat')
 
   return (
-    <>
+    <div className="trade-page">
       <div className="toolbar">
         <div className="toolbar-item">
           <Link className="tb-btn tb-clear" href="/">
@@ -227,32 +227,34 @@ export default function PaperTrading() {
         <div className="trade-loading">{t('加载中|Loading')}…</div>
       ) : (
         <>
+          {/* 总资产主卡：左侧总额 + 总盈亏，右侧指标栅格 */}
           <div className="trade-summary">
-            <div className="stat-cell">
+            <div className="summary-hero">
               <span className="stat-label">{t('总资产|Total assets')}</span>
-              <span className="stat-value">{fmtMoney(equity.totalAssets)}</span>
-            </div>
-            <div className="stat-cell">
-              <span className="stat-label">{t('当日盈亏|Day P&L')}</span>
-              <span className={`stat-value ${pnlClass(equity.dayPnl)}`}>{fmtSignedMoney(equity.dayPnl)}</span>
-            </div>
-            <div className="stat-cell">
-              <span className="stat-label">{t('总盈亏|Total P&L')}</span>
-              <span className={`stat-value ${pnlClass(equity.totalPnl)}`}>
-                {fmtSignedMoney(equity.totalPnl)}（{fmtPct(equity.totalPnlPct)}）
+              <span className="summary-total">{fmtMoney(equity.totalAssets)}</span>
+              <span className={`summary-pnl ${pnlClass(equity.totalPnl)}`}>
+                {t('总盈亏|Total P&L')} {fmtSignedMoney(equity.totalPnl)}（{fmtPct(equity.totalPnlPct)}）
               </span>
             </div>
-            <div className="stat-cell">
-              <span className="stat-label">{t('可用资金|Cash')}</span>
-              <span className="stat-value">{fmtMoney(account.cash)}</span>
-            </div>
-            <div className="stat-cell">
-              <span className="stat-label">{t('持仓市值|Market value')}</span>
-              <span className="stat-value">{fmtMoney(equity.marketValue)}</span>
-            </div>
-            <div className="stat-cell">
-              <span className="stat-label">{t('持仓盈亏|Position P&L')}</span>
-              <span className={`stat-value ${pnlClass(equity.positionPnl)}`}>{fmtSignedMoney(equity.positionPnl)}</span>
+            <div className="summary-grid">
+              <div className="stat-cell">
+                <span className="stat-label">{t('当日盈亏|Day P&L')}</span>
+                <span className={`stat-value ${pnlClass(equity.dayPnl)}`}>{fmtSignedMoney(equity.dayPnl)}</span>
+              </div>
+              <div className="stat-cell">
+                <span className="stat-label">{t('可用资金|Cash')}</span>
+                <span className="stat-value">{fmtMoney(account.cash)}</span>
+              </div>
+              <div className="stat-cell">
+                <span className="stat-label">{t('持仓市值|Market value')}</span>
+                <span className="stat-value">{fmtMoney(equity.marketValue)}</span>
+              </div>
+              <div className="stat-cell">
+                <span className="stat-label">{t('持仓盈亏|Position P&L')}</span>
+                <span className={`stat-value ${pnlClass(equity.positionPnl)}`}>
+                  {fmtSignedMoney(equity.positionPnl)}
+                </span>
+              </div>
             </div>
             <div className="stat-reset">
               <span className="stat-label">
@@ -322,8 +324,19 @@ export default function PaperTrading() {
         </>
       )}
 
-      {notice != null && <div className={`trade-toast ${notice.kind}`}>{notice.text}</div>}
-    </>
+      {notice != null && (
+        <div className={`trade-toast ${notice.kind}`} role="status">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" aria-hidden="true">
+            {notice.kind === 'ok' ? (
+              <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
+            ) : (
+              <path d="M7 7l10 10M17 7L7 17" strokeLinecap="round" />
+            )}
+          </svg>
+          <span>{notice.text}</span>
+        </div>
+      )}
+    </div>
   )
 }
 

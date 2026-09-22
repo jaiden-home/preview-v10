@@ -240,6 +240,13 @@ export default function OrderPanel({ t, side, onSideChange, code, quote, account
         </>
       ) : (
         <div className="order-untradable">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+            <path
+              d="M12 9v4m0 3.5v.5M10.3 3.9 2.8 17a2 2 0 0 0 1.7 3h15a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
           <p>
             {t(
               '指数与该类标的暂不支持模拟交易，请选择 A 股个股。|Indexes are not tradable here. Please pick an A-share stock.'

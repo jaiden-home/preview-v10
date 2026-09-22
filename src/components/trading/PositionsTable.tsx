@@ -14,7 +14,19 @@ interface PositionsTableProps {
 /** 持仓列表：现价取轮询行情（缺省回退成本价），盈亏红涨绿跌 */
 export default function PositionsTable({ t, positions, quotes, onTrade }: PositionsTableProps) {
   if (positions.length === 0) {
-    return <div className="trade-empty">{t('暂无持仓|No positions yet')}</div>
+    return (
+      <div className="trade-empty">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+          <path
+            d="M3 8.5 4.5 4h15L21 8.5M3 8.5v10.5a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V8.5M3 8.5h18M9.5 13h5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+        <span className="trade-empty-title">{t('暂无持仓|No positions yet')}</span>
+        <span className="trade-empty-sub">{t('买入成交后将显示在这里|Positions will appear here after buying')}</span>
+      </div>
+    )
   }
 
   return (
