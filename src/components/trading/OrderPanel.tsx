@@ -73,19 +73,15 @@ export default function OrderPanel({ t, side, onSideChange, code, quote, account
   const limitDownText = limits == null ? '--' : limits.lower.toFixed(2)
   const availText = side === 'buy' ? `${buyMax}` : `${availableQty}/${position?.qty ?? 0}`
 
-  const applyQuickBuy = (pct: number) => {
-    if (livePrice == null) {
+  // 快捷仓位（买卖同款 1/n 仓）：按最大可买/可卖取整手；
+  // 全仓买入 = 最大可买（整手），全仓卖出 = 全部可卖（可含零股）
+  const applyFraction = (frac: number) => {
+    const base = side === 'buy' ? buyMax : availableQty
+    if (base <= 0) {
+      setQty('')
       return
     }
-    const target = Math.floor((buyMax * pct) / 100 / 100) * 100
-    setQty(target > 0 ? `${target}` : '')
-  }
-  const applyQuickSell = (pct: number) => {
-    if (pct >= 100) {
-      setQty(availableQty > 0 ? `${availableQty}` : '')
-      return
-    }
-    const target = Math.floor((availableQty * pct) / 100 / 100) * 100
+    const target = frac >= 1 ? base : Math.floor((base * frac) / 100) * 100
     setQty(target > 0 ? `${target}` : '')
   }
 
@@ -183,31 +179,18 @@ export default function OrderPanel({ t, side, onSideChange, code, quote, account
           </div>
 
           <div className="quick-row">
-            {side === 'buy' ? (
-              <>
-                <button className="quick-btn" type="button" onClick={() => applyQuickBuy(25)}>
-                  25%
-                </button>
-                <button className="quick-btn" type="button" onClick={() => applyQuickBuy(50)}>
-                  50%
-                </button>
-                <button className="quick-btn" type="button" onClick={() => applyQuickBuy(75)}>
-                  75%
-                </button>
-                <button className="quick-btn" type="button" onClick={() => setQty(buyMax > 0 ? `${buyMax}` : '')}>
-                  {t('全仓|Max')}
-                </button>
-              </>
-            ) : (
-              <>
-                <button className="quick-btn" type="button" onClick={() => applyQuickSell(50)}>
-                  {t('半仓|Half')}
-                </button>
-                <button className="quick-btn" type="button" onClick={() => applyQuickSell(100)}>
-                  {t('全部|All')}
-                </button>
-              </>
-            )}
+            <button className="quick-btn" type="button" onClick={() => applyFraction(1 / 2)}>
+              {t('1/2仓|1/2')}
+            </button>
+            <button className="quick-btn" type="button" onClick={() => applyFraction(1 / 3)}>
+              {t('1/3仓|1/3')}
+            </button>
+            <button className="quick-btn" type="button" onClick={() => applyFraction(1 / 4)}>
+              {t('1/4仓|1/4')}
+            </button>
+            <button className="quick-btn" type="button" onClick={() => applyFraction(1)}>
+              {t('全仓|Max')}
+            </button>
           </div>
 
           <div className="order-limits">

@@ -188,7 +188,7 @@
 - 容器 `.trade-panel`（`trade-main` 右列）：标的行情、委托表单与账户摘要同卡，单卡三段式（v2.9 起段序：**行情 → 交易 → 资产**），纵向 `gap: 10px`、`padding: 12px 14px`（紧凑表单例外，低于 §2.7 卡片基准）；表单区 `.order-body` 纵向 `gap: 8px` 且 `flex: 1` 弹性填充卡内剩余高度，提交按钮 `margin-top: auto` 锚定在账户摘要之上（行高被图表 `clamp` 推高时不留悬空空白）。**面板内全部按钮与输入框统一 `height: 40px`**（重置 / 买卖切换 / 快捷仓位 / 提交 / 价格数量输入），满足 §5 主要操作 ≥40px；两卡高度由 `trade-main` 首行网格自动同步。
 - 行情段（头部）：名称 Title + 代码 Secondary；现价 Display-S + 涨跌 Secondary，红涨绿跌；底部图表邻接虚线，`padding-bottom: 6px`。
 - 买卖切换（滑块式分段）：容器 `--tb-hover` 底 + `--radius-md` + `padding: 2px`，内嵌绝对定位滑块 `.side-thumb`（`width: calc(50% - 2px)`、圆角 `6px`，与单枚按钮等宽），切换时 `transform: translateX(0 → 100%)` + 颜色红↔蓝同步 `0.2s ease` 过渡；`.side-btn` `12px/600; height: 40px` 透明底盖于滑块之上（`z-index: 1`），选中白字。
-- 字段区双列（`.order-fields`，`1fr 1fr`，`gap: 8px`）：委托价格 / 委托数量并排（标签行仅放文字，禁止塞入按钮等宽于半列的内容）；快捷仓位按钮（25%/50%/全仓…）为字段区下方整行等宽按钮（Secondary/num，`height: 40px`，`--tb-hover` 底 + `--radius-sm`，悬停换 `--tb-border` 底）。
+- 字段区双列（`.order-fields`，`1fr 1fr`，`gap: 8px`）：委托价格 / 委托数量并排（标签行仅放文字，禁止塞入按钮等宽于半列的内容）；快捷仓位按钮（买卖同款 **1/2仓 / 1/3仓 / 1/4仓 / 全仓**，按最大可买或可卖取整手、全仓卖出含零股）为字段区下方整行等宽按钮（Secondary/num，`height: 40px`，`--tb-hover` 底 + `--radius-sm`，悬停换 `--tb-border` 底）。
 - 涨跌停与侧别上下文 `.order-limits`：三枚描边小格（`.limit-cell`，`--tb-bg` 底 + `--tb-border` 描边 + `--radius-sm`，标签上 Micro、数值下 Base/600/num、居中）——涨停值 `--up` 红、跌停值 `--down` 绿、最大可买/可卖 `--tb-active` 蓝（`.accent`），缺行情以 `--` 占位；与费用预估的淡底整带构成两级数据容器语言。可用资金不重复展示（摘要栅格已有）。
 - 费用预估 `.order-estimate`：三列统计（`.estimate-cell`，标签上 Micro、数值下 CTA/num），`--tb-hover` 底 + `--radius-md`，与摘要栅格同范式。
 - 提交 `.order-submit`：CTA `14px/700; height: 40px; --radius-md`，买 `--up` 卖 `--tb-active` + 语义色投影，悬停 `brightness(1.06)`。
