@@ -56,6 +56,8 @@ export default function PaperTrading() {
   const [side, setSide] = useState<TradeSide>('buy')
   const [tab, setTab] = useState<'positions' | 'trades'>('positions')
   const [notice, setNotice] = useState<TradeNotice | null>(null)
+  // 移动端底部弹层（交易坞）展开态；桌面无交易坞，恒为收合（§3.11）
+  const [panelOpen, setPanelOpen] = useState(false)
   const [info, setInfo] = useState<InfoSnapshot>(() => ({
     dataList: [],
     hovered: null,
@@ -105,6 +107,20 @@ export default function PaperTrading() {
     const timer = setTimeout(() => setNotice(null), 3000)
     return () => clearTimeout(timer)
   }, [notice])
+
+  // 弹层展开时 Escape 收起
+  useEffect(() => {
+    if (!panelOpen) {
+      return
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setPanelOpen(false)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [panelOpen])
 
   const positionKey = useMemo(
     () =>
@@ -158,6 +174,18 @@ export default function PaperTrading() {
   const priceMap = useMemo(() => priceMapOf(account, quotes), [account, quotes])
   const equity = account != null ? calcEquity(account, priceMap) : null
 
+  // 交易坞摘要（§3.11）：当前标的现价与涨跌
+  const dockQuote = quotes[selectedCode] ?? null
+  const dockPrice = dockQuote?.price ?? null
+  const dockChange =
+    dockQuote != null && dockPrice != null && dockQuote.prevClose != null && dockQuote.prevClose > 0
+      ? {
+          abs: round2(dockPrice - dockQuote.prevClose),
+          pct: ((dockPrice - dockQuote.prevClose) / dockQuote.prevClose) * 100
+        }
+      : null
+  const dockClass = dockChange == null || dockChange.abs === 0 ? 'flat' : dockChange.abs > 0 ? 'up' : 'down'
+
   const handlePositionTrade = (code: string, tradeSide: TradeSide) => {
     const parsed = parseSymbolCode(code)
     if (parsed == null) {
@@ -209,14 +237,14 @@ export default function PaperTrading() {
   }
 
   return (
-    <div className="trade-page">
+    <div className={`trade-page${panelOpen ? ' sheet-open' : ''}`}>
       <div className="toolbar">
         <div className="toolbar-item">
           <Link className="tb-btn tb-clear" href="/">
             ← {t('返回行情|Back to chart')}
           </Link>
         </div>
-        <ThemeToggle t={t} onToggle={chart.toggleTheme} />
+        <ThemeToggle t={t} onToggle={chart.toggleTheme} id="theme-btn-top" itemClassName="theme-at-top" />
       </div>
 
       {account == null || equity == null ? (
@@ -227,9 +255,18 @@ export default function PaperTrading() {
           <div className="trade-main">
             <section className="trade-card trade-chart">
               <div className="trade-chart-toolbar">
+                {/* 返回行情（移动端，§3.11）：微信式左箭头图标按钮，与周期分段同行；
+                    桌面隐藏，保留顶部工具栏文字链 */}
+                <Link className="tb-btn tb-back" href="/" aria-label={t('返回行情|Back to chart')}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                    <path d="M15 5l-7 7 7 7" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </Link>
                 {/* 精简周期组：仅日/周/月 */}
                 <PeriodGroup simple activeKey={chart.periodKey} t={t} onChange={chart.changePeriod} />
                 <div className="tb-divider" />
+                {/* 移动端（§3.11）：强制换行——行 1 = 返回 + 周期 + 主题，行 2 = 功能按钮；桌面隐藏 */}
+                <div className="tb-line-break" aria-hidden="true" />
                 <ChartTools
                   t={t}
                   idPrefix="trade-"
@@ -241,26 +278,73 @@ export default function PaperTrading() {
                   onDrawingSelect={chart.selectDrawing}
                   onClearDrawings={chart.clearDrawings}
                 />
+                {/* 主题开关双位渲染：移动端并入图表工具栏（对齐首页），桌面隐藏于此（§3.11） */}
+                <ThemeToggle t={t} onToggle={chart.toggleTheme} id="theme-btn-chart" itemClassName="theme-in-chart" />
               </div>
               <InfoTable info={info} locale={locale} />
               {/* klinecharts 画布容器（客户端初始化，不参与 SSR） */}
               <div className="trade-chart-body" ref={chartContainerRef} />
             </section>
-            {/* 委托面板同卡三段式：标的行情 → 委托表单 → 账户摘要（资产殿后） */}
-            <section className="trade-card trade-panel">
-              <OrderPanel
-                t={t}
-                side={side}
-                onSideChange={setSide}
-                code={selectedCode}
-                quote={quotes[selectedCode] ?? null}
-                account={account}
-                onSubmit={handleSubmit}
-              />
-              <TradeSummary t={t} account={account} equity={equity} onReset={handleReset} />
+            {/* 委托面板：桌面为右列单卡三段式（行情 → 交易 → 资产）；
+               移动端转悬浮交易坞（收合仅露坞条）+ 底部弹层（§3.11） */}
+            <section
+              id="trade-order-panel"
+              className={`trade-card trade-panel${panelOpen ? ' open' : ''}`}
+              role={panelOpen ? 'dialog' : undefined}
+              aria-modal={panelOpen ? true : undefined}
+              aria-label={t('委托交易|Order ticket')}
+            >
+              <button
+                className="trade-dock-bar"
+                type="button"
+                aria-expanded={panelOpen}
+                aria-controls="trade-order-panel"
+                onClick={() => setPanelOpen((v) => !v)}
+              >
+                <svg
+                  className="dock-chevron"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  aria-hidden="true"
+                >
+                  <path d="M6 15l6-6 6 6" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                <span className="dock-symbol">
+                  <span className="dock-name">{dockQuote?.name ?? selectedCode}</span>
+                  <span className="dock-code">{selectedCode}</span>
+                </span>
+                {dockPrice != null && (
+                  <span className="dock-quote">
+                    <span className={`dock-price ${dockClass}`}>{dockPrice.toFixed(2)}</span>
+                    {dockChange != null && (
+                      <span className={`dock-change ${dockClass}`}>
+                        {dockChange.abs > 0 ? '+' : ''}
+                        {dockChange.abs.toFixed(2)} ({dockChange.pct > 0 ? '+' : ''}
+                        {dockChange.pct.toFixed(2)}%)
+                      </span>
+                    )}
+                  </span>
+                )}
+              </button>
+              <div className="trade-panel-body">
+                <OrderPanel
+                  t={t}
+                  side={side}
+                  onSideChange={setSide}
+                  code={selectedCode}
+                  quote={quotes[selectedCode] ?? null}
+                  account={account}
+                  onSubmit={handleSubmit}
+                />
+                <TradeSummary t={t} account={account} equity={equity} onReset={handleReset} />
+              </div>
             </section>
             <section className="trade-card trade-records">
-              <div className="trade-tabs">
+              {/* 移动端（§3.11）：滑块式分段（.tabs-thumb 平移），桌面为常规标签按钮 */}
+              <div className={`trade-tabs${tab === 'trades' ? ' trades' : ''}`}>
+                <span className="tabs-thumb" aria-hidden="true" />
                 <button
                   className={`tb-btn${tab === 'positions' ? ' active' : ''}`}
                   type="button"
@@ -285,6 +369,9 @@ export default function PaperTrading() {
           </div>
         </div>
       )}
+
+      {/* 移动端弹层遮罩（桌面经 CSS 恒不显示） */}
+      {panelOpen && <div className="trade-sheet-mask" aria-hidden="true" onClick={() => setPanelOpen(false)} />}
 
       {notice != null && (
         <div className={`trade-toast ${notice.kind}`} role="status">

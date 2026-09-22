@@ -1012,6 +1012,21 @@ body {
   margin-left: 0;
 }
 
+/* 主题开关双位渲染（§3.11）：桌面只在顶部工具栏显示，图表工具栏内实例隐藏 */
+#app .trade-chart-toolbar .theme-in-chart {
+  display: none;
+}
+
+/* 移动端返回入口（§3.11）：微信式左箭头图标按钮，桌面隐藏（顶部工具栏保留文字链） */
+#app .trade-chart-toolbar > .tb-back {
+  display: none;
+}
+
+/* 移动端工具栏强制换行元素（§3.11）：桌面隐藏 */
+#app .trade-chart-toolbar > .tb-line-break {
+  display: none;
+}
+
 #app .trade-chart-body {
   flex: 1;
   min-height: 0;
@@ -1034,6 +1049,22 @@ body {
   flex-direction: column;
   gap: 10px;
   padding: 12px 14px;
+}
+
+/* 弹层内容包裹（§3.11）：桌面承担原面板纵向 gap 与弹性填充，视觉与拆包前一致；
+   移动端转底部弹层的滚动容器 */
+#app .trade-panel-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+  min-height: 0;
+}
+
+/* 移动端交易坞与弹层遮罩（§3.11）：桌面恒不显示 */
+#app .trade-dock-bar,
+#app .trade-sheet-mask {
+  display: none;
 }
 
 #app .order-body {
@@ -1369,6 +1400,16 @@ body {
   overflow-x: auto;
 }
 
+/* 记录移动端列表模式（§3.11）：双层信息行替代宽表，桌面隐藏 */
+#app .trade-list {
+  display: none;
+}
+
+/* 移动端滑块式记录标签页（§3.11）：桌面隐藏滑块 */
+#app .trade-tabs .tabs-thumb {
+  display: none;
+}
+
 #app .trade-table {
   width: 100%;
   border-collapse: collapse;
@@ -1562,30 +1603,422 @@ body {
   }
 }
 
-/* ---- 模拟交易页移动端适配 ---- */
+/* ---- 模拟交易页移动端改版（§3.11，v2.10）：图表通栏对齐行情页 + 悬浮交易坞/底部弹层 ---- */
 
 @media (max-width: 768px) {
-  /* 纵向排布：卡片不压缩（flex:none）保持内容高度，由外层 trade-scroll 滚动；
-     拉伸到容器宽度（stretch），表格横向滚动而不是把卡片撑出屏幕 */
+  /* 交易坞高度：收合态 72px 主体（双 22px 锚点：名称 + 现价，行情头式排版）+ 底部安全区；
+     展开态 56px 作弹层头部（--dock-h-open），弹层可用高度按展开态计算不受影响 */
+  #app .trade-page {
+    --dock-h: calc(72px + env(safe-area-inset-bottom));
+    --dock-h-open: calc(56px + env(safe-area-inset-bottom));
+  }
+
+  /* 顶部工具栏整体隐藏：返回与主题开关均已并入图表工具栏（§3.11） */
+  #app .trade-page > .toolbar {
+    display: none;
+  }
+
+  /* 主区转纵向：图表通栏无边距，记录卡悬浮其下（底边预留交易坞高度） */
   #app .trade-main {
     display: flex;
     flex-direction: column;
     align-items: stretch;
-    gap: 10px;
-    padding: 8px;
+    gap: 0;
+    padding: 0;
   }
 
   #app .trade-main > * {
     flex: none;
   }
 
-  /* 图表固定高度（含工具栏与信息表格），委托面板与表格依次下排 */
+  /* 图表卡对齐行情页终端式：去卡片壳，首屏占满交易坞之外的全部视口 */
   #app .trade-chart {
-    height: 420px;
-    min-height: 0;
+    height: calc(100vh - 72px);
+    height: calc(100dvh - var(--dock-h));
+    min-height: 420px;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
   }
 
+  /* 返回行情：微信式左箭头图标按钮（36px 触控），与周期分段同行，中间以工具栏 gap 分隔 */
+  #app .trade-chart-toolbar > .tb-back {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+  }
+
+  #app .trade-chart-toolbar > .tb-back svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  /* 卡内图表工具栏固定 2 行（§3.11，flex order + 强制换行元素）：
+     行 1 = 返回 + 周期分段（铺满剩余宽度）+ 主题开关（收尾靠右）；
+     行 2 = 功能按钮（指标/绘图/清除）整行等宽（侧 padding 收窄保证窄屏也单行，
+     单行内 grow 均分、视觉等宽不受影响）。0 高换行元素使两行间距 = 2×gap（分组感） */
+  #app .trade-chart-toolbar {
+    gap: 6px;
+    padding: 6px 8px;
+  }
+
+  #app .trade-chart-toolbar > .period-group {
+    flex: 1 1 auto;
+  }
+
+  #app .trade-chart-toolbar > .tb-line-break {
+    display: block;
+    flex-basis: 100%;
+    height: 0;
+    order: 1;
+  }
+
+  #app .trade-chart-toolbar > .toolbar-item:not(.period-group):not(:last-child) {
+    flex: 1 1 auto;
+    order: 2;
+  }
+
+  #app .trade-chart-toolbar > .toolbar-item:not(.period-group):not(:last-child) > .tb-btn {
+    width: 100%;
+    text-align: center;
+    padding: 6px 4px;
+  }
+
+  /* 主题开关并入图表工具栏第 1 行收尾（对齐首页末位推右规则），顶部实例隐藏 */
+  #app .toolbar .theme-at-top {
+    display: none;
+  }
+
+  #app .trade-chart-toolbar .toolbar-item.theme-in-chart {
+    display: flex;
+    flex: 0 0 auto;
+    order: 0;
+    /* 特性对齐 .toolbar-item:last-child 覆盖规则（1 id + 3 类），后声明胜出 */
+    margin-left: auto;
+  }
+
+  /* 记录卡与图表融合（§3.11）：通栏零间隙连续表面（去卡片壳），
+     顶部仅 8px 呼吸（内容自悬浮坞下方滑过），末尾内容不被坞遮挡（padding-bottom） */
+  #app .trade-records {
+    margin: 0;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    padding: 8px 0 calc(var(--dock-h) + 10px);
+  }
+
+  /* 记录标签页：滑块式分段（复用 §3.8 side-tabs 滑块范式，品牌蓝选中、白字）；
+     轨道通栏方角作分段头带（两端锚定屏幕边缘，与工具栏同语言），消除悬浮药丸的割裂感 */
   #app .trade-tabs {
+    position: relative;
+    flex-wrap: nowrap;
+    gap: 0;
+    margin: 0 0 8px;
+    padding: 2px;
+    border-bottom: none;
+    border-radius: 0;
+    background-color: var(--tb-hover);
+  }
+
+  #app .trade-tabs .tabs-thumb {
+    display: block;
+    position: absolute;
+    top: 2px;
+    bottom: 2px;
+    left: 2px;
+    /* 与单枚按钮等宽（容器 padding 2px 两侧，两枚按钮平分余量） */
+    width: calc(50% - 2px);
+    border-radius: 6px;
+    background-color: var(--tb-active);
+    box-shadow: 0 2px 8px rgba(22, 119, 255, 0.28);
+    transition: transform 0.2s ease;
+  }
+
+  #app .trade-tabs.trades .tabs-thumb {
+    transform: translateX(100%);
+  }
+
+  #app .trade-tabs .tb-btn {
+    position: relative;
+    z-index: 1;
+    flex: 1 1 0;
+    height: 40px;
+    padding: 0 4px;
+    text-align: center;
+  }
+
+  /* 选中态白字盖于滑块之上（覆盖 .tb-btn.active 的浅底/蓝字） */
+  #app .trade-tabs .tb-btn.active {
+    color: var(--on-solid);
+    background-color: transparent;
+  }
+
+  /* 记录卡移动端列表模式（§3.11）：宽表隐藏，双层信息行（主行/数据行/脚行）；
+     数值一律等宽字族（.num），语义色沿用全局 up/down/flat/accent */
+  #app .trade-records .trade-table-wrap {
+    display: none;
+  }
+
+  #app .trade-list {
+    display: flex;
+    flex-direction: column;
+  }
+
+  #app .trade-list .num {
+    font-family: var(--font-num);
+    font-variant-numeric: tabular-nums;
+  }
+
+  #app .list-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--tb-border);
+  }
+
+  #app .list-item:last-child {
+    border-bottom: none;
+  }
+
+  #app .list-line-main,
+  #app .list-line-foot {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  #app .list-line-data {
+    display: flex;
+    flex-direction: row;
     flex-wrap: wrap;
+    gap: 2px 10px;
+    font-size: 11px;
+    color: var(--tb-text-sub);
+  }
+
+  #app .list-main-value {
+    font-family: var(--font-num);
+    font-size: 13px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  #app .list-pnl-group {
+    display: inline-flex;
+    flex-direction: row;
+    align-items: baseline;
+    gap: 4px;
+    min-width: 0;
+  }
+
+  #app .list-pnl {
+    font-family: var(--font-num);
+    font-size: 12px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  #app .list-foot-label {
+    font-size: 10px;
+    color: var(--tb-text-sub);
+    white-space: nowrap;
+  }
+
+  /* 成交方向前缀（名称行内）：买入红 / 卖出品牌蓝 */
+  #app .list-side {
+    margin-right: 4px;
+    font-weight: 600;
+  }
+
+  /* 委托面板转底部弹层：固定视口底部，收合仅露交易坞（仅过渡 transform）；
+     阴影在 --shadow-pop 上叠加一层向上的微投影（同族基色 15,23,42 派生），强调自底部升起的浮层感 */
+  #app .trade-panel {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1100;
+    gap: 0;
+    padding: 0;
+    border-bottom: none;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    box-shadow:
+      0 -4px 16px rgba(15, 23, 42, 0.08),
+      var(--shadow-pop);
+    transform: translateY(calc(100% - var(--dock-h)));
+    transition: transform 0.2s ease;
+  }
+
+  #app .trade-panel.open {
+    transform: translateY(0);
+  }
+
+  /* 弹层遮罩：复用 .modal-mask 同款定位，底色减淡（0.3），层级低于弹层与 Toast */
+  #app .trade-sheet-mask {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 1090;
+    background-color: rgba(0, 0, 0, 0.3);
+  }
+
+  /* 展开期间锁定页面滚动（弹层内容自滚） */
+  #app .trade-page.sheet-open .trade-scroll {
+    overflow: hidden;
+  }
+
+  /* 弹层内行情头与交易坞内容重复（名称/代码/现价/涨跌）：移动端隐藏 order-head，
+     坞条即弹层头部；桌面为面板行情段保留（§3.8） */
+  #app .order-head {
+    display: none;
+  }
+
+  /* 弹层内容：整卡（坞条 + 内容 + 边框）不超过视口 58%，超出部分容器内滚动（弹窗豁免）；
+     border-box 使 padding 计入 max-height；padding 底部让出安全区 */
+  #app .trade-panel-body {
+    box-sizing: border-box;
+    max-height: calc(58vh - var(--dock-h-open) - 1px);
+    max-height: calc(58dvh - var(--dock-h-open) - 1px);
+    overflow-y: auto;
+    gap: 8px;
+    padding: 8px 14px calc(10px + env(safe-area-inset-bottom));
+  }
+
+  /* 弹层内紧凑化（§3.11 移动端例外，桌面规格不变）：
+     间距降一档 + 次要控件高度收敛（快捷仓位 36 / 重置 32 / 总资产 22px Display-S），
+     主要操作（买卖切换/价格数量输入/提交）保持 40px 触控基线 */
+  #app .order-body {
+    gap: 6px;
+  }
+
+  #app .order-field {
+    gap: 3px;
+  }
+
+  #app .quick-btn {
+    height: 36px;
+  }
+
+  #app .limit-cell {
+    padding: 4px;
+  }
+
+  #app .order-estimate {
+    padding: 4px 12px;
+  }
+
+  #app .panel-summary {
+    gap: 4px;
+    padding-top: 8px;
+  }
+
+  #app .summary-head .tb-btn {
+    height: 32px;
+    padding: 0 10px;
+  }
+
+  #app .summary-total {
+    font-size: 22px;
+  }
+
+  #app .summary-grid {
+    row-gap: 4px;
+  }
+
+  /* 交易坞条（收合态排版）：双 22px 锚点——左名称 / 右现价（语义色），行情头式平衡；
+     图标↔文本 12px、栈内 2px、水平内边距 16px */
+  #app .trade-dock-bar {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    height: var(--dock-h);
+    padding: 8px 16px calc(8px + env(safe-area-inset-bottom));
+    border: none;
+    border-radius: 0;
+    background-color: transparent;
+    color: var(--tb-text);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  /* 展开态坞条回落 56px 作弹层头部：竖向内边距收窄保证 22px 名称栈完整（高度瞬切） */
+  #app .trade-panel.open .trade-dock-bar {
+    height: var(--dock-h-open);
+    padding-top: 5px;
+    padding-bottom: calc(5px + env(safe-area-inset-bottom));
+  }
+
+  #app .dock-chevron {
+    flex: none;
+    width: 18px;
+    height: 18px;
+    color: var(--tb-text-sub);
+    transition: transform 0.2s ease;
+  }
+
+  #app .trade-panel.open .dock-chevron {
+    transform: rotate(180deg);
+  }
+
+  #app .dock-symbol {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  #app .dock-name {
+    /* 与 .summary-total（移动端 Display-S 22px）同尺，作弹层头部主标题；
+       行高 1.3 防字腔超行盒被 overflow:hidden 裁切 */
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 1.3;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  #app .dock-code {
+    font-family: var(--font-num);
+    font-size: 10px;
+    line-height: 1.3;
+    font-variant-numeric: tabular-nums;
+    color: var(--tb-text-sub);
+  }
+
+  #app .dock-quote {
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 2px;
+  }
+
+  #app .dock-price {
+    /* 右侧锚点：与名称同尺同字重，语义色承载方向（行高 1.3 同防裁切） */
+    font-family: var(--font-num);
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 1.3;
+    font-variant-numeric: tabular-nums;
+  }
+
+  #app .dock-change {
+    font-family: var(--font-num);
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.2;
+    font-variant-numeric: tabular-nums;
   }
 }

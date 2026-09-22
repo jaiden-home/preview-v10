@@ -19,7 +19,7 @@ const formatTs = (ts: number, locale: 'zh-CN' | 'en-US'): string =>
     hour12: false
   })
 
-/** 成交记录（新成交在前） */
+/** 成交记录（新成交在前）；桌面为宽表，移动端为双层信息行列表（.trade-list，§3.11） */
 export default function TradesTable({ t, trades, locale }: TradesTableProps) {
   if (trades.length === 0) {
     return (
@@ -38,46 +38,91 @@ export default function TradesTable({ t, trades, locale }: TradesTableProps) {
   }
 
   return (
-    <div className="trade-table-wrap">
-      <table className="trade-table">
-        <thead>
-          <tr>
-            <th className="txt-left">{t('时间|Time')}</th>
-            <th className="txt-left">{t('标的|Symbol')}</th>
-            <th className="txt-left">{t('方向|Side')}</th>
-            <th className="num">{t('价格|Price')}</th>
-            <th className="num">{t('数量|Qty')}</th>
-            <th className="num">{t('金额|Amount')}</th>
-            <th className="num">{t('费用|Fee')}</th>
-            <th className="num">{t('已实现盈亏|Realized P&L')}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {trades.map((trade) => (
-            <tr key={trade.id}>
-              <td className="txt-left">{formatTs(trade.ts, locale)}</td>
-              <td className="txt-left">
-                <div className="cell-symbol">
-                  <span className="cell-name">{trade.name || trade.code}</span>
-                  <span className="cell-code">{trade.code}</span>
-                </div>
-              </td>
-              <td className={`txt-left ${trade.side === 'buy' ? 'up' : 'accent'}`}>
-                {trade.side === 'buy' ? t('买入|Buy') : t('卖出|Sell')}
-              </td>
-              <td className="num">{trade.price.toFixed(2)}</td>
-              <td className="num">{trade.qty}</td>
-              <td className="num">{fmtMoney(trade.amount)}</td>
-              <td className="num">{fmtMoney(trade.fee)}</td>
-              <td
-                className={`num ${trade.realizedPnl == null ? 'flat' : trade.realizedPnl > 0 ? 'up' : trade.realizedPnl < 0 ? 'down' : 'flat'}`}
-              >
-                {trade.realizedPnl == null ? '--' : fmtSignedMoney(trade.realizedPnl)}
-              </td>
+    <>
+      <div className="trade-table-wrap">
+        <table className="trade-table">
+          <thead>
+            <tr>
+              <th className="txt-left">{t('时间|Time')}</th>
+              <th className="txt-left">{t('标的|Symbol')}</th>
+              <th className="txt-left">{t('方向|Side')}</th>
+              <th className="num">{t('价格|Price')}</th>
+              <th className="num">{t('数量|Qty')}</th>
+              <th className="num">{t('金额|Amount')}</th>
+              <th className="num">{t('费用|Fee')}</th>
+              <th className="num">{t('已实现盈亏|Realized P&L')}</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {trades.map((trade) => (
+              <tr key={trade.id}>
+                <td className="txt-left">{formatTs(trade.ts, locale)}</td>
+                <td className="txt-left">
+                  <div className="cell-symbol">
+                    <span className="cell-name">{trade.name || trade.code}</span>
+                    <span className="cell-code">{trade.code}</span>
+                  </div>
+                </td>
+                <td className={`txt-left ${trade.side === 'buy' ? 'up' : 'accent'}`}>
+                  {trade.side === 'buy' ? t('买入|Buy') : t('卖出|Sell')}
+                </td>
+                <td className="num">{trade.price.toFixed(2)}</td>
+                <td className="num">{trade.qty}</td>
+                <td className="num">{fmtMoney(trade.amount)}</td>
+                <td className="num">{fmtMoney(trade.fee)}</td>
+                <td
+                  className={`num ${trade.realizedPnl == null ? 'flat' : trade.realizedPnl > 0 ? 'up' : trade.realizedPnl < 0 ? 'down' : 'flat'}`}
+                >
+                  {trade.realizedPnl == null ? '--' : fmtSignedMoney(trade.realizedPnl)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {/* 移动端（§3.11）：宽表转双层信息行，桌面经 CSS 隐藏 */}
+      <div className="trade-list">
+        {trades.map((trade) => (
+          <div className="list-item" key={trade.id}>
+            <div className="list-line-main">
+              <div className="cell-symbol">
+                <span className="cell-name">
+                  <span className={`list-side ${trade.side === 'buy' ? 'up' : 'accent'}`}>
+                    {trade.side === 'buy' ? t('买入|Buy') : t('卖出|Sell')}
+                  </span>
+                  {trade.name || trade.code}
+                </span>
+                <span className="cell-code">{trade.code}</span>
+              </div>
+              <span className="list-main-value">{fmtMoney(trade.amount)}</span>
+            </div>
+            <div className="list-line-data">
+              <span>
+                <span className="num">{formatTs(trade.ts, locale)}</span>
+              </span>
+              <span>
+                {t('价格|Price')} <span className="num">{trade.price.toFixed(2)}</span>
+              </span>
+              <span>
+                {t('数量|Qty')} <span className="num">{trade.qty}</span>
+              </span>
+              <span>
+                {t('费用|Fee')} <span className="num">{fmtMoney(trade.fee)}</span>
+              </span>
+            </div>
+            <div className="list-line-foot">
+              <span className="list-pnl-group">
+                <span className="list-foot-label">{t('已实现盈亏|Realized P&L')}</span>
+                <span
+                  className={`list-pnl ${trade.realizedPnl == null ? 'flat' : trade.realizedPnl > 0 ? 'up' : trade.realizedPnl < 0 ? 'down' : 'flat'}`}
+                >
+                  {trade.realizedPnl == null ? '--' : fmtSignedMoney(trade.realizedPnl)}
+                </span>
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
   )
 }
