@@ -1,7 +1,8 @@
 # 技术架构文档
 
-> KLineChart A 股行情预览（`@klinecharts/preview`）
-> 基于 Next.js 16（App Router）+ React 19 + klinecharts v10 的 SSR 行情终端，覆盖沪（sh）、深（sz）、北（bj）三市场。
+> KLineChart A 股行情预览 + 模拟交易（`@klinecharts/preview`）
+> 基于 Next.js 16（App Router）+ React 19 + klinecharts v10 的 SSR 行情终端，覆盖沪（sh）、深（sz）、北（bj）三市场；
+> 另含 `/trade` 模拟交易页（客户端虚拟账户 + BFF 行情轮询，A 股语义仿真）。
 
 ---
 
@@ -23,15 +24,15 @@
 
 ## 1. 项目定位与设计目标
 
-本项目是由原「纯客户端 SPA」改造而来的**全量服务端渲染（SSR）+ BFF 行情代理**架构的 A 股 K 线预览应用。核心设计目标：
+本项目是由原「纯客户端 SPA」改造而来的**全量服务端渲染（SSR）+ BFF 行情代理**架构的 A 股行情终端（K 线预览 + 模拟交易）。核心设计目标：
 
-| 目标                 | 实现手段                                                                                         |
-| -------------------- | ------------------------------------------------------------------------------------------------ |
-| **首屏可用**         | 服务端并行拉取实时快照 + 初始日 K（3s 超时兜底），信息表格直出真实行情，图表 init 免首轮网络往返 |
-| **SEO 友好**         | `/[symbol]` 动态路由（如 `/sh600519`），`generateMetadata` 注入股票名标题与描述                  |
-| **上游解耦**         | 腾讯行情统一在服务端聚合：GBK 解码、超时兜底、TTL 缓存、参数校验、按 IP 限流                     |
-| **解锁浏览器端能力** | smartbox 联想接口无 CORS 头，经 BFF 代理后支持按**名称/拼音**搜索标的（原 SPA 仅支持 6 位代码）  |
-| **A 股语义正确**     | 红涨绿跌按昨收判定、量柱颜色与 K 线同步、分时均价口径按个股/指数区分                             |
+| 目标                 | 实现手段                                                                                                                      |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| **首屏可用**         | 服务端并行拉取实时快照 + 初始日 K（3s 超时兜底），信息表格直出真实行情，图表 init 免首轮网络往返                              |
+| **页面 metadata**    | 首页与 `/trade` 页注入标题与描述（`[symbol]` 动态标的路由与 `generateMetadata` 已随路由收敛移除，标的切换为纯客户端不落 URL） |
+| **上游解耦**         | 腾讯行情统一在服务端聚合：GBK 解码、超时兜底、TTL 缓存、参数校验、按 IP 限流                                                  |
+| **解锁浏览器端能力** | smartbox 联想接口无 CORS 头，经 BFF 代理后支持按**名称/拼音**搜索标的（原 SPA 仅支持 6 位代码）                               |
+| **A 股语义正确**     | 红涨绿跌按昨收判定、量柱颜色与 K 线同步、分时均价口径按个股/指数区分                                                          |
 
 **一条贯穿全局的约束**：klinecharts 是 Canvas 库，官方明确不支持服务端初始化。因此架构上强制「**图表不参与 SSR**」——所有 klinecharts 相关模块经动态导入隔离在客户端，服务端只渲染外壳（工具栏 + 信息表格）与数据。
 
@@ -42,13 +43,13 @@
 ```mermaid
 flowchart TB
     subgraph Browser["浏览器"]
-        HTML["SSR HTML<br/>首页与动态标的路由<br/>工具栏 + 信息表格首帧真实数据 + SEO meta"]
+        HTML["SSR HTML<br/>首页（行情终端）与 /trade（模拟交易）<br/>工具栏 + 信息表格首帧真实数据"]
         HYD["客户端水合<br/>klinecharts 画布初始化 + 交互"]
     end
 
     subgraph NextApp["Next.js 应用（standalone）"]
         MW["proxy.ts（Edge）<br/>非法标的路由 404 · x-request-id 注入"]
-        PAGE["页面层（RSC）<br/>首页与动态标的路由<br/>fetchInitialTerminalData（并行 + 3s 超时）"]
+        PAGE["页面层（RSC）<br/>首页：fetchInitialTerminalData（并行 + 3s 超时）<br/>/trade：静态 metadata + 客户端虚拟账户壳"]
         BFF["BFF 路由层（Route Handlers）<br/>kline · timeshare · quote · search · healthz"]
         SRV["lib/server（仅服务端）<br/>zod 校验 · 滑动窗口限流 · TTL 缓存（在途去重）· pino 日志 · env 解析"]
     end
@@ -82,17 +83,17 @@ flowchart TB
 
 ## 3. 技术选型
 
-| 依赖                                    | 版本    | 选型理由                                                                |
-| --------------------------------------- | ------- | ----------------------------------------------------------------------- |
-| Next.js（App Router, standalone）       | ^16.3.5 | SSR / 动态路由 / Route Handlers（BFF）一体；standalone 产物适配容器化   |
-| React + TypeScript（strict）            | ^19.3.0 | UI 层；组件只持状态，图表操作收敛到 `ChartTerminal` 命令式控制器        |
-| klinecharts                             | ^10.0.3 | 图表引擎：可注册自定义指标/坐标轴、DataLoader 回调式取数、多语言/时区   |
-| zod                                     | ^4.6.5  | 边界参数校验（API 查询参数、环境变量启动期快速失败）                    |
-| pino                                    | ^10.3.1 | 结构化日志，requestId 关联                                              |
-| Vitest + Testing Library                | ^5.0.1  | 纯函数 / DataLoader / 控制器（mock klinecharts）/ 组件测试              |
-| Playwright                              | ^1.63.0 | E2E 冒烟（SSR HTML 断言 + 水合出 canvas），webServer 与 Docker 镜像同构 |
-| ESLint + Prettier + husky + lint-staged | —       | 代码规范与提交门禁                                                      |
-| Docker（多阶段）+ GitHub Actions        | —       | 交付与 CI/CD                                                            |
+| 依赖                                                | 版本    | 选型理由                                                                |
+| --------------------------------------------------- | ------- | ----------------------------------------------------------------------- |
+| Next.js（App Router, standalone）                   | ^16.3.5 | SSR / Route Handlers（BFF）一体；standalone 产物适配容器化              |
+| React + TypeScript（strict）                        | ^19.3.0 | UI 层；组件只持状态，图表操作收敛到 `ChartTerminal` 命令式控制器        |
+| klinecharts                                         | ^10.0.3 | 图表引擎：可注册自定义指标/坐标轴、DataLoader 回调式取数、多语言/时区   |
+| zod                                                 | ^4.6.5  | 边界参数校验（API 查询参数、环境变量启动期快速失败）                    |
+| pino                                                | ^10.3.1 | 结构化日志，requestId 关联                                              |
+| Vitest + Testing Library                            | ^5.0.1  | 纯函数 / DataLoader / 控制器（mock klinecharts）/ 组件测试              |
+| Playwright                                          | ^1.63.0 | E2E 冒烟（SSR HTML 断言 + 水合出 canvas），webServer 与 Docker 镜像同构 |
+| ESLint + Prettier + stylelint + husky + lint-staged | —       | 代码规范与提交门禁（stylelint 管控 UI 设计令牌）                        |
+| Docker（多阶段）+ GitHub Actions                    | —       | 交付与 CI/CD                                                            |
 
 运行要求：Node.js ≥ 20.9（Docker/CI 使用 node:22-alpine）。
 
@@ -106,7 +107,7 @@ flowchart TB
 flowchart TD
     subgraph L1["路由层 app/"]
         MW["proxy（Edge）<br/>边缘 404 · x-request-id"]
-        PAGES["页面 RSC<br/>首页与 symbol 动态路由<br/>generateMetadata + fetchInitialTerminalData"]
+        PAGES["页面 RSC<br/>首页：fetchInitialTerminalData<br/>/trade：静态 metadata 壳"]
         API["BFF Route Handlers<br/>kline · timeshare · quote · search · healthz"]
     end
     subgraph L2["组件层 components/terminal/"]
@@ -155,17 +156,18 @@ flowchart TD
 
 ### 4.1 路由层（`app/`）
 
-| 文件                                          | 职责                                                                                                                                                                                                                                   |
-| --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `layout.tsx`                                  | `metadataBase` 取 `SITE_URL`、title 模板 `%s \| KLineChart`、`<div id="app">` 样式命名空间                                                                                                                                             |
-| `page.tsx` / `[symbol]/page.tsx`              | 均 `dynamic = 'force-dynamic'`；动态路由 `params: Promise<{symbol}>`（Next 15+ 异步参数）。`generateMetadata` 在流式冲刷前对非法标的 `notFound()` 保证 404 状态码；上游可用时标题为 `贵州茅台(sh600519) K线行情`，失败退回纯代码不阻塞 |
-| `loading.tsx` / `error.tsx` / `not-found.tsx` | 骨架屏 / 客户端错误边界（含 Sentry 挂点）/ 404 提示                                                                                                                                                                                    |
-| `api/*/route.ts`                              | BFF 五接口（见第 6 节）                                                                                                                                                                                                                |
+| 文件                                          | 职责                                                                                                                         |
+| --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `layout.tsx`                                  | `metadataBase` 取 `SITE_URL`、title 模板 `%s \| KLineChart`、`<div id="app">` 样式命名空间                                   |
+| `page.tsx`                                    | 首页（默认上证指数 sh000001），`dynamic = 'force-dynamic'`；`fetchInitialTerminalData` 服务端并行拉取快照与初始日 K 直出首屏 |
+| `trade/page.tsx`                              | 模拟交易页，`dynamic = 'force-dynamic'` + 静态 `metadata`；页面只做壳，虚拟账户与轮询全在客户端（见 4.6）                    |
+| `loading.tsx` / `error.tsx` / `not-found.tsx` | 骨架屏 / 客户端错误边界（含 Sentry 挂点）/ 404 提示                                                                          |
+| `api/*/route.ts`                              | BFF 五接口（见第 6 节）                                                                                                      |
 
 ### 4.2 边界代理与启动钩子
 
 - **`proxy.ts`**（Edge，matcher 排除 `_next/static`、`_next/image`）：
-  - **边缘 404**：单段路径、非保留段（`api`、`_next`、`favicon.ico` 等）且不匹配 `^(sh|sz|bj)\d{6}$` 时直接返回内联 404。动机：Next 流式响应下页面内 `notFound()` 在响应头冲刷后抛出，无法再改状态码。
+  - **边缘 404**：单段路径、非保留段（`api`、`_next`、`favicon.ico`、`logo.svg`、`robots.txt`、`trade`）且不匹配 `^(sh|sz|bj)\d{6}$` 时直接返回内联 404。动机：Next 流式响应下页面内 `notFound()` 在响应头冲刷后抛出，无法再改状态码。匹配标的模式的路径放行后由 Next 渲染 `not-found.tsx` 兜底（`[symbol]` 路由已移除）。
   - **`x-request-id` 注入**：已有则透传，否则 `crypto.randomUUID()` 写回响应头，供日志关联。
 - **`instrumentation.ts` / `instrumentation-node.ts`**：按 `NEXT_RUNTIME` 静态判定仅 Node 运行时加载 node 分支——启动日志（node 版本/pid）+ `SIGTERM`/`SIGINT` 优雅停机记录；Edge bundle 中被摇树移除。
 
@@ -198,28 +200,40 @@ flowchart TD
 | `api.ts`            | 客户端 BFF 请求封装（失败静默返回 null，由调用方兜底）                                                      |
 | `types.ts`          | `SymbolRef`、`QuoteSnapshot`、`FundamentalData`、`SYMBOL_PATTERN` 等类型与校验                              |
 | `../fundamental.ts` | 基本面展示回溯（悬停 K 线按价格比例近似）+ 信息表格渲染数据                                                 |
-| `../i18n.ts`        | 极简双语：`中文                                                                                             | English`键 +`#en-US` hash 读取（兼容原 SPA） |
+| `../i18n.ts`        | 极简双语：`中文\|English` 键 + `#en-US` hash 读取（兼容原 SPA）                                             |
 
 ### 4.5 组件层（`components/terminal/`）
 
 `TradingTerminal` 为顶层组件（工具栏 + 信息表格 + 画布 + 指标弹窗），**服务端渲染首帧**。Props：`{ market, ticker, initialQuote, initialBars }`——`initialQuote` 为 null 表示上游超时/失败，由客户端补拉。
 
-状态管理：**无第三方状态库**，纯 `useState`/`useRef`。Refs 持有容器 DOM 与 `ChartTerminal` 实例；11 个 useState 管理 locale、主题、周期、主/副图指标集合、弹窗、激活绘图工具、信息快照（`InfoSnapshot`，由控制器经 `onInfoUpdate` 单向回写）。挂载 effect 依赖数组刻意为 `[]`（挂载快照），终端随路由参数 key 整体重建。
+状态管理：**无第三方状态库**，纯 `useState`/`useRef`。图表相关状态（周期、主/副图指标、绘图工具、主题、`InfoSnapshot` 信息快照）统一收敛在 `useChartTerminal` 钩子，信息快照由控制器经 `onInfoUpdate` 单向回写；组件层只持标的名称、指标参数弹窗等少量本地状态。终端随挂载条件整体重建，此后切标的走 `setSymbol` 增量同步。
 
 子组件一览：
 
-| 组件             | 职责要点                                                                                                          |
-| ---------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `SymbolPicker`   | 标的搜索下拉：空查询展示 6 个默认指数；输入 **300ms 防抖** 调 `/api/search`；结果与关键词绑定防过期；支持键盘选择 |
-| `PeriodGroup`    | 日/周/月常驻，分时 + 分钟/小时周期收进「周期」下拉并高亮当前项                                                    |
-| `InfoTable`      | 渲染 `buildInfoCells` 产物；空数据时显示加载占位                                                                  |
-| `IndicatorMenu`  | 主图/副图指标复选下拉（复用两次，id 区分）                                                                        |
-| `IndicatorModal` | 指标参数设置弹窗：条件挂载（每次打开重置）、min 钳制、整数/小数 step 区分、四种关闭途径（取消/×/遮罩/Esc）        |
-| `DrawingMenu`    | 11 种绘图工具下拉                                                                                                 |
-| `ThemeToggle`    | 明暗主题开关（深色由 `#app.dark` 类驱动 CSS 变量）                                                                |
-| `useDismiss`     | 下拉/弹窗外点击 + Esc 关闭通用 hook                                                                               |
+| 组件               | 职责要点                                                                                                          |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------- |
+| `SymbolPicker`     | 标的搜索下拉：空查询展示 6 个默认指数；输入 **300ms 防抖** 调 `/api/search`；结果与关键词绑定防过期；支持键盘选择 |
+| `PeriodGroup`      | 日/周/月常驻，分时 + 分钟/小时周期收进「周期」下拉并高亮当前项                                                    |
+| `InfoTable`        | 渲染 `buildInfoCells` 产物；空数据时显示加载占位                                                                  |
+| `IndicatorMenu`    | 主图/副图指标复选下拉（复用两次，id 区分）                                                                        |
+| `IndicatorModal`   | 指标参数设置弹窗：条件挂载（每次打开重置）、min 钳制、整数/小数 step 区分、四种关闭途径（取消/×/遮罩/Esc）        |
+| `DrawingMenu`      | 11 种绘图工具下拉                                                                                                 |
+| `ThemeToggle`      | 明暗主题开关（深色由 `#app.dark` 类驱动 CSS 变量）                                                                |
+| `useChartTerminal` | 图表终端交互钩子（行情页与交易页共用）：ChartTerminal 生命周期（创建/销毁/切标的/主题）与周期、指标、绘图控件状态 |
+| `useDismiss`       | 下拉/弹窗外点击 + Esc 关闭通用 hook                                                                               |
 
-**客户端切标的不走服务端导航**：`window.history.pushState` 同步 URL 保持瞬时切换，仅直访/刷新走 SSR。
+**客户端切标的不走服务端导航**：经 `ChartTerminal.setSymbol` 增量同步（URL 不变，刷新回默认标的），水合后的数据请求走 BFF。
+
+### 4.6 模拟交易层（`components/trading/` + `lib/trading/`）
+
+`/trade` 页（`PaperTrading`）为纯客户端虚拟账户：localStorage 持久化、BFF 行情 3s 轮询（当前标的 + 持仓标的，与行情终端同频）、跨交易日自动滚动当日盈亏基准并解冻 T+1 持仓；行情图表复用行情页组件（`useChartTerminal` + 精简周期组），与交易标的双向同步。
+
+| 模块                                     | 职责                                                                                                        |
+| ---------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `lib/trading/account.ts`                 | 交易域纯函数（带测试）：账户创建/持久化、整手买入、T+1 可卖、涨跌停校验、佣金/印花税/过户费、权益与盈亏计算 |
+| `PaperTrading.tsx`                       | 交易页主组件：账户状态、轮询编排、图表 / 委托 / 持仓三区布局                                                |
+| `OrderPanel.tsx`                         | 买/卖委托面板：现价跟随、整手快捷仓位、费用预估（校验与成交在父组件完成）                                   |
+| `PositionsTable.tsx` / `TradesTable.tsx` | 持仓列表（现价取轮询行情，缺省回退成本价）与成交记录                                                        |
 
 ---
 
@@ -230,10 +244,10 @@ flowchart TD
 ```mermaid
 sequenceDiagram
     participant B as 浏览器
-    participant P as [symbol]/page.tsx (RSC)
+    participant P as page.tsx（首页 RSC）
     participant F as fetchInitialTerminalData
     participant U as 腾讯上游
-    B->>P: GET /sh600519
+    B->>P: GET /（首页，默认上证指数）
     P->>F: Promise.all([quote, kline])
     par 各自 3s 超时兜底
         F->>U: qt.gtimg.cn 快照
@@ -310,7 +324,7 @@ flowchart LR
 ```
 
 - **形态延迟应用**：激活仅切周期；指标/坐标轴/样式变更延迟到数据就绪后与注入**同帧**执行——旧图保持显示直至被一次重绘替换，无白屏无中间形态。上游失败也切形态（空网格 + 轮询补数）。
-- **`applyTimeShareTransforms`**：移除主图 MA → 挂 `TIME` 指标（均价线 + 昨收基准虚线）→ `createYAxis` 左侧百分比轴（`cnTimePercent`，幂等防重）→ `overrideYAxis`（昨收居中对称区间 + 0.08/0.08 留白）→ `overrideXAxis`（交易时段锚点 `09:30 / 10:30 / 11:30/13:00 / 14:00 / 15:00`，窄屏 <360px 精简为 3 个）→ 主图切面积走势线。
+- **`applyTimeShareTransforms`**：移除主图 MA → 挂 `TIME` 指标（均价线 + 昨收基准虚线）→ `createYAxis` 左侧百分比轴（`cnTimePercent`，幂等防重）→ `overrideYAxis`（昨收居中对称区间 + 0.08/0.08 留白）→ `overrideXAxis`（交易时段锚点 `09:30 / 10:30 / 11:30 / 13:00 / 14:00 / 15:00`，窄屏 <360px 精简为 3 个）→ 主图切面积走势线。
 - **全天一屏校准** `calibrateTimeShareFit`：最多 3 轮「resize → 读画布宽 → width/242 定 barSpace → `setOffsetRightDistance` 右侧留白」迭代收敛（Y 轴宽度随刻度文本变化会改变内容宽），最后补一次全量布局；`fitTimeShareBars` 以 1.5s timer 兜底复校。
 - **均价线口径**：个股 = 累计成交额 ÷ (累计量 × 每手股数)（科创板 200 股/手自动换算、北交所缺额近似）；**指数** = 按量加权的点位均值（指数额/量与点位差两个数量级，不能混用公式）。
 
@@ -367,7 +381,7 @@ sequenceDiagram
 
 **`SlidingWindowRateLimiter`（精确滑动窗口）**：`hits: Map<key, number[]>` 存时间戳，`check` 过滤 `now − 60s` 窗口内命中数与阈值（默认 240/分钟/IP）比较；`maxKeys = 10000` 防键泄漏。client key：`x-forwarded-for` 首段 → `x-real-ip` → `'unknown'`。
 
-**缓存 TTL 与轮询对齐**：quote/timeshare 2s（适配 3s 轮询）、kline 10s、search 5min，均可经环境变量调整。
+**缓存 TTL 与轮询对齐**：quote/timeshare 2s（适配 3s 轮询）、kline 近端 3s / 历史窗口 10min（raw/hist 分层，历史不可变）、search 5min，均可经环境变量调整。
 
 ### 5.8 上游适配（`provider/tencent/`）
 
@@ -449,23 +463,28 @@ sequenceDiagram
 ├── app/
 │   ├── layout.tsx            # 根布局（meta / #app 命名空间）
 │   ├── page.tsx              # 首页（默认上证指数 sh000001）
-│   ├── [symbol]/page.tsx     # 动态标的路由 + generateMetadata
+│   ├── trade/page.tsx        # 模拟交易页（静态 metadata + 客户端虚拟账户壳）
 │   ├── loading/error/not-found.tsx
 │   └── api/                  # BFF：kline / timeshare / quote / search / healthz
-├── components/terminal/      # TradingTerminal 及工具栏 / 信息表格 / 弹窗组件
+├── components/
+│   ├── terminal/             # TradingTerminal 及工具栏 / 信息表格 / 弹窗组件
+│   └── trading/              # PaperTrading / OrderPanel / PositionsTable / TradesTable
 ├── lib/
 │   ├── chart/                # 与环境无关的图表域逻辑（terminal / data-loader /
 │   │                         #   registers / timeshare / utils / info-cells / params / ...）
 │   ├── server/               # 仅服务端：market-service / provider 数据源层（tencent 实现）/
 │   │                         #   TTL 缓存 / 限流 / zod / pino / env
+│   ├── trading/account.ts    # 模拟交易纯函数（整手/T+1/涨跌停/费用，带测试）
 │   ├── fundamental.ts        # 基本面展示回溯 + 信息表格渲染数据
 │   └── i18n.ts               # 双语文案（#en-US hash）
 ├── e2e/                      # Playwright 冒烟
 ├── tests/                    # ChartTerminal 集成测试（mock klinecharts）
 ├── proxy.ts                  # 边缘 404 + x-request-id
 ├── instrumentation*.ts       # 启动日志 + 优雅停机（Node 分支）
+├── docs/                     # ARCHITECTURE / DIRECTORY / UI_SPEC（UI 设计规范）
+├── AGENTS.md · .trae/rules/  # AI agent 指引与项目规则
 ├── Dockerfile / .github/workflows/ci.yml
-└── vitest.config.ts / playwright.config.ts / eslint.config.mjs
+└── vitest.config.ts / playwright.config.ts / eslint.config.mjs / stylelint.config.mjs
 ```
 
 ---
@@ -474,17 +493,17 @@ sequenceDiagram
 
 ### 8.1 测试金字塔
 
-| 层                 | 工具                          | 覆盖点                                                                                                                                                                                      |
-| ------------------ | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 纯函数             | Vitest                        | 时间解析、K 线解析与坏行过滤、聚合、市场/指数识别、分时点解析（量额差分、科创板、北交所）、均价四口径、对称区间、参数钳制、信息表格构建、smartbox/qt 解析、TTL 缓存（含并发去重）、限流窗口 |
-| DataLoader         | Vitest                        | init/forward/backward 语义、SSR 首屏注入与单次消费、失败兜底、在途切走保护、轮询去重、跨日重载（fake timers）、分时防死循环                                                                 |
-| ChartTerminal 集成 | Vitest（vi.mock klinecharts） | 初始化顺序、A 股配色、分时状态机（激活仅切周期 → 同帧形态 → 全天一屏校准 → 逆向恢复）、右键十字光标、主题重放、destroy 释放                                                                 |
-| 组件               | Testing Library               | 指标参数弹窗全交互路径（含四种关闭途径、参数钳制、双语）                                                                                                                                    |
-| E2E                | Playwright                    | SSR HTML 断言、水合出 canvas、动态路由标题、404（验证边缘拦截）、健康检查、BFF 参数校验                                                                                                     |
+| 层                 | 工具                          | 覆盖点                                                                                                                                                                                                                        |
+| ------------------ | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 纯函数             | Vitest                        | 时间解析、K 线解析与坏行过滤、聚合、市场/指数识别、分时点解析（量额差分、科创板、北交所）、均价四口径、对称区间、参数钳制、信息表格构建、smartbox/qt 解析、TTL 缓存（含并发去重）、限流窗口、模拟交易域（费用/权益/整手/T+1） |
+| DataLoader         | Vitest                        | init/forward/backward 语义、SSR 首屏注入与单次消费、失败兜底、在途切走保护、轮询去重、跨日重载（fake timers）、分时防死循环                                                                                                   |
+| ChartTerminal 集成 | Vitest（vi.mock klinecharts） | 初始化顺序、A 股配色、分时状态机（激活仅切周期 → 同帧形态 → 全天一屏校准 → 逆向恢复）、右键十字光标、主题重放、destroy 释放                                                                                                   |
+| 组件               | Testing Library               | 指标参数弹窗全交互路径（含四种关闭途径、参数钳制、双语）                                                                                                                                                                      |
+| E2E                | Playwright                    | SSR HTML 断言、水合出 canvas、非法路由 404（边缘拦截）、健康检查、BFF 参数校验（注：`/sh600519` 动态路由用例已随路由移除失效，待同步删除）                                                                                    |
 
 ### 8.2 规范与门禁
 
-- ESLint（flat config，next/core-web-vitals + TS）+ Prettier；husky pre-commit + lint-staged（ts/tsx 走 eslint --fix + prettier）。
+- ESLint（flat config，next/core-web-vitals + TS）+ Prettier + stylelint（UI 令牌强约束，规则见 `docs/UI_SPEC.md`）；husky pre-commit + lint-staged（ts/tsx 走 eslint --fix + prettier，css 走 stylelint --fix + prettier）。
 - `npm run typecheck`（tsc --noEmit，strict）。
 - Playwright `webServer` 与 Docker 镜像**同构**：build → 拷 static/public 进 standalone → `node .next/standalone/server.js`，就绪探针 `/api/healthz`——E2E 验证的即是生产形态。
 
@@ -520,24 +539,25 @@ runner → NODE_ENV=production，拷 public/.next(standalone,static)（--chown=n
 ### 9.2 CI/CD（GitHub Actions，push main + PR 触发，按 ref 取消旧运行）
 
 ```
-quality（format:check → lint → typecheck → vitest）
+quality（format:check → lint → lint:css → typecheck → vitest）
    ├─→ e2e（缓存 Playwright 浏览器 → install chromium → test:e2e；失败上传报告保留 7 天）
    └─→ docker（仅 main：buildx 构建镜像不推送，GHA 缓存 mode=max）
 ```
 
-### 9.3 环境变量（zod 校验，启动期快速失败）
+### 9.3 环境变量（`lib/server/env.ts` zod 校验，启动期快速失败）
 
-| 变量                                            | 默认                              | 说明                                   |
-| ----------------------------------------------- | --------------------------------- | -------------------------------------- |
-| `PORT` / `HOSTNAME`                             | `3000` / `0.0.0.0`                | 服务监听                               |
-| `DATA_PROVIDER`                                 | `tencent`                         | 行情数据源（provider/registry 登记项） |
-| `LOG_LEVEL`                                     | `info`                            | pino 级别                              |
-| `UPSTREAM_TIMEOUT_MS`                           | `5000`                            | 上游超时（≤ 30000）                    |
-| `CACHE_QUOTE_TTL_MS` / `CACHE_TIMESHARE_TTL_MS` | `2000`                            | 与 3s 轮询对齐                         |
-| `CACHE_KLINE_TTL_MS`                            | `10000`                           | K 线缓存                               |
-| `CACHE_SEARCH_TTL_MS`                           | `300000`                          | 搜索联想缓存                           |
-| `RATE_LIMIT_PER_MINUTE`                         | `240`                             | 每 IP 每分钟上限（≥ 10）               |
-| `SITE_URL`                                      | `https://preview.klinecharts.com` | metadata base                          |
+| 变量                                            | 默认      | 说明                                                       |
+| ----------------------------------------------- | --------- | ---------------------------------------------------------- |
+| `LOG_LEVEL`                                     | `info`    | pino 级别                                                  |
+| `DATA_PROVIDER`                                 | `tencent` | 行情数据源（provider/registry 登记项）                     |
+| `UPSTREAM_TIMEOUT_MS`                           | `5000`    | 上游超时（≤ 30000）                                        |
+| `CACHE_QUOTE_TTL_MS` / `CACHE_TIMESHARE_TTL_MS` | `2000`    | 与 3s 轮询对齐                                             |
+| `CACHE_KLINE_TTL_MS`                            | `3000`    | K 线近端缓存（与轮询对齐，回源频率与用户数无关）           |
+| `CACHE_KLINE_HIST_TTL_MS`                       | `600000`  | K 线历史窗口缓存（历史不可变；有界防除权后前复权全量重算） |
+| `CACHE_SEARCH_TTL_MS`                           | `300000`  | 搜索联想缓存                                               |
+| `RATE_LIMIT_PER_MINUTE`                         | `240`     | 每 IP 每分钟上限（≥ 10）                                   |
+
+另有三个变量不经 zod schema，由运行时直接读取：`PORT` / `HOSTNAME`（Next standalone 服务监听，Docker 注入 `3000` / `0.0.0.0`）、`SITE_URL`（`layout.tsx` 读取作 metadata base，默认 `https://preview.klinecharts.com`）。
 
 ---
 
@@ -555,6 +575,7 @@ quality（format:check → lint → typecheck → vitest）
 
 **已知限制**
 
+- `[symbol]` 动态标的路由已移除：标的切换不落 URL（刷新回默认标的），`/sh600519` 等直访由 `not-found.tsx` 兜底。
 - 指标参数设置弹窗入口保持隐藏（与原版一致）。
 - 副图「换手率」指标为相对近似（无流通股本数据）；信息表格中的为接口真实值。
 - 行情依赖腾讯公开接口，变更或限流时数据可能中断；SSR 上游超时回退客户端补拉，失败显示 `--` 占位。
