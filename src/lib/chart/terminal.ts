@@ -21,7 +21,13 @@ import {
   findPeriodOption,
   type PeriodKey
 } from './constants'
-import { resetTimeShareState, symmetricRangeAround, timeShareState, TIME_SHARE_X_ANCHORS } from './timeshare'
+import {
+  resetTimeShareState,
+  symmetricRangeAround,
+  timeShareAnchorIndex,
+  timeShareState,
+  TIME_SHARE_X_ANCHORS
+} from './timeshare'
 import { setupChartRegisters } from './registers'
 import { createDataLoader } from './data-loader'
 import { parseCnBarTime } from './utils'
@@ -344,8 +350,8 @@ export class ChartTerminal {
   }
 
   // 分时 x 轴：A 股交易时段锚点（默认 tick 估算按日期文本宽度，标签会落在 10:46 之类的任意分钟）
-  private coordinateOfTimestamp = (timestamp: number): number | null => {
-    const point = this.chart?.convertToPixel({ timestamp })
+  private coordinateOfDataIndex = (dataIndex: number): number | null => {
+    const point = this.chart?.convertToPixel({ dataIndex })
     const x = Array.isArray(point) ? point[0]?.x : point?.x
     return typeof x === 'number' ? x : null
   }
@@ -357,6 +363,10 @@ export class ChartTerminal {
     if (dataList.length === 0 || dayKey == null) {
       return defaultTicks
     }
+    // 数据自 09:30 起铺开时锚点位置全天恒定，未到时段（如午休时的 14:00/15:00）
+    // 也按固定下标渲染在右侧留白；否则（停牌复牌等缺失早盘的日线）退回只标注已有 bar
+    const openTimestamp = parseCnBarTime(`${dayKey}0930`)
+    const fullDayLayout = Number.isFinite(openTimestamp) && dataList[0]?.timestamp === openTimestamp
     // 窄屏只保留首、午休、尾三个锚点
     const anchors =
       bounding.width < 360
@@ -368,21 +378,21 @@ export class ChartTerminal {
       if (!Number.isFinite(timestamp)) {
         continue
       }
-      const index = dataList.findIndex((bar) => bar.timestamp === timestamp)
-      if (index < 0 || index < range.realFrom - 1 || index > range.realTo) {
+      const dataIndex = dataList.findIndex((bar) => bar.timestamp === timestamp)
+      if (dataIndex < 0 && !fullDayLayout) {
         continue
       }
-      let coord = this.coordinateOfTimestamp(timestamp)
+      // 直接以固定下标换算像素：mergeNoon 取 1130/1300 两根相邻 bar 的交界（+0.5）
+      let index = dataIndex >= 0 ? dataIndex : timeShareAnchorIndex(anchor.hhmm)
+      if (anchor.mergeNoon === true) {
+        index += 0.5
+      }
+      if (index < range.realFrom - 1 || index > range.realTo) {
+        continue
+      }
+      let coord = this.coordinateOfDataIndex(index)
       if (coord == null) {
         continue
-      }
-      if (anchor.mergeNoon === true) {
-        // 午休中点（11:30 与 13:00 之间）
-        const noonTimestamp = parseCnBarTime(`${dayKey}1300`)
-        const noonCoord = Number.isFinite(noonTimestamp) ? this.coordinateOfTimestamp(noonTimestamp) : null
-        if (noonCoord != null) {
-          coord = (coord + noonCoord) / 2
-        }
       }
       // 首尾标签向内收缩约半字宽，避免被画布边缘裁剪
       coord = Math.min(Math.max(coord, 17), bounding.width - 17)

@@ -109,3 +109,17 @@ export const TIME_SHARE_X_ANCHORS: TimeShareAnchor[] = [
   { hhmm: '1400', text: '14:00' },
   { hhmm: '1500', text: '15:00' }
 ]
+
+/**
+ * 锚点在全天 242 根分时 bar 中的固定下标（午休不占 bar）：
+ * 0930→0、1130→120、1300→121、1500→241。
+ * 未到时段的锚点也按此下标渲染在右侧留白，保证位置全天恒定；
+ * 勿改用 timestamp 让库换算，分钟周期会把 90 分钟午休外推成 90 根 bar
+ */
+export const timeShareAnchorIndex = (hhmm: string): number => {
+  const minutes = Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(2, 4))
+  const open = 9 * 60 + 30
+  const morningEnd = 11 * 60 + 30
+  const afternoonOpen = 13 * 60
+  return minutes <= morningEnd ? minutes - open : morningEnd - open + 1 + (minutes - afternoonOpen)
+}

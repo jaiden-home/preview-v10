@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { AxisRange, KLineData } from 'klinecharts'
-import { calcTimeShareAvg, symmetricRangeAround, timeShareState } from './timeshare'
+import { calcTimeShareAvg, symmetricRangeAround, timeShareAnchorIndex, timeShareState } from './timeshare'
 
 const minute = 60 * 1000
 
@@ -86,5 +86,14 @@ describe('分时图纯函数', () => {
     expect(symmetricRangeAround(Number.NaN, original)).toBe(original)
     // 单边行情：区间覆盖基准价
     expect(symmetricRangeAround(100, range(100.5, 101))).toEqual(range(99, 101))
+  })
+
+  it('timeShareAnchorIndex 给出全天恒定的锚点下标（午休不占 bar）', () => {
+    expect(timeShareAnchorIndex('0930')).toBe(0)
+    expect(timeShareAnchorIndex('1030')).toBe(60)
+    expect(timeShareAnchorIndex('1130')).toBe(120)
+    expect(timeShareAnchorIndex('1300')).toBe(121)
+    expect(timeShareAnchorIndex('1400')).toBe(181)
+    expect(timeShareAnchorIndex('1500')).toBe(241)
   })
 })
