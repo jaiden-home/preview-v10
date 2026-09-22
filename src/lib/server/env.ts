@@ -7,8 +7,10 @@ const envSchema = z.object({
   UPSTREAM_TIMEOUT_MS: z.coerce.number().int().positive().max(30_000).default(5_000),
   /** 实时行情缓存 TTL（与 3 秒轮询对齐） */
   CACHE_QUOTE_TTL_MS: z.coerce.number().int().min(500).default(2_000),
-  /** K 线缓存 TTL */
-  CACHE_KLINE_TTL_MS: z.coerce.number().int().min(1_000).default(10_000),
+  /** K 线近端缓存 TTL（与 3 秒轮询对齐，回源频率与用户数无关） */
+  CACHE_KLINE_TTL_MS: z.coerce.number().int().min(1_000).default(3_000),
+  /** K 线历史窗口缓存 TTL（历史不可变；有界以防除权后前复权全量重算） */
+  CACHE_KLINE_HIST_TTL_MS: z.coerce.number().int().min(1_000).default(600_000),
   /** 分时缓存 TTL（与 3 秒轮询对齐） */
   CACHE_TIMESHARE_TTL_MS: z.coerce.number().int().min(500).default(2_000),
   /** 标的搜索缓存 TTL */
