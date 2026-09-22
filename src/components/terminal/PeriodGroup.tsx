@@ -38,7 +38,10 @@ export default function PeriodGroup({ activeKey, t, onChange, simple = false }: 
           key={option.key}
           className={`tb-btn period-btn${activeKey === option.key ? ' active' : ''}`}
           type="button"
-          onClick={() => onChange(option.key)}
+          onClick={() => {
+            onChange(option.key)
+            setMoreOpen(false)
+          }}
         >
           {t(option.text)}
         </button>
@@ -57,7 +60,10 @@ export default function PeriodGroup({ activeKey, t, onChange, simple = false }: 
             <button
               className={`tb-btn tool-btn period-btn${activeKey === 'time' ? ' active' : ''}`}
               type="button"
-              onClick={() => onChange('time')}
+              onClick={() => {
+                onChange('time')
+                setMoreOpen(false)
+              }}
             >
               {t('分时|Time')}
             </button>
@@ -66,7 +72,10 @@ export default function PeriodGroup({ activeKey, t, onChange, simple = false }: 
                 key={option.key}
                 className={`tb-btn tool-btn period-btn${activeKey === option.key ? ' active' : ''}`}
                 type="button"
-                onClick={() => onChange(option.key)}
+                onClick={() => {
+                  onChange(option.key)
+                  setMoreOpen(false)
+                }}
               >
                 {t(option.text)}
               </button>
