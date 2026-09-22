@@ -25,6 +25,8 @@ jobs:
         run: npm run format:check
       - name: Lint
         run: npm run lint
+      - name: Stylelint
+        run: npm run lint:css
       - name: Typecheck
         run: npm run typecheck
       - name: Unit tests

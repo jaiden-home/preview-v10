@@ -12,6 +12,7 @@
     "start": "next start",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
+    "lint:css": "stylelint 'src/**/*.css'",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
@@ -25,7 +26,11 @@
       "eslint --fix",
       "prettier --write"
     ],
-    "*.{css,md,json,yml,yaml}": [
+    "*.css": [
+      "stylelint --fix",
+      "prettier --write"
+    ],
+    "*.{md,json,yml,yaml}": [
       "prettier --write"
     ]
   },
@@ -52,6 +57,7 @@
     "jsdom": "^30.1.0",
     "lint-staged": "^17.5.1",
     "prettier": "^3.9.8",
+    "stylelint": "^17.15.0",
     "typescript": "^6.0.3",
     "vitest": "^5.0.1"
   }
