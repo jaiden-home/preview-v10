@@ -88,15 +88,15 @@
 
 ### 2.5 字号阶梯（7 级，禁止阶外字号）
 
-| 级别      | 字号/字重        | 字族 | 用途（示例类）                                                              |
-| --------- | ---------------- | ---- | --------------------------------------------------------------------------- |
-| Display   | `26px / 700`     | num  | 总资产 `.summary-total`                                                     |
-| Display-S | `22px / 700`     | num  | 委托现价 `.order-price`                                                     |
-| CTA       | `14px / 600~700` | —    | 提交按钮 `.order-submit`(700)、统计值 `.stat-value`(600, num)               |
-| Title     | `13px / 600`     | —    | 弹窗标题、`.order-name`、Toast、加载文案                                    |
-| Base      | `12px / 400~600` | —    | 工具栏按钮、表格正文、表单标签、预估区                                      |
-| Secondary | `11px / 400~600` | num* | 表头 `th`、`.order-hint`、`.order-avail`、`.info-value`(600, num)、紧凑按钮 |
-| Micro     | `10px / 400`     | —    | `.stat-label`、`.info-label`、`.cell-code`(num)                             |
+| 级别      | 字号/字重        | 字族 | 用途（示例类）                                                |
+| --------- | ---------------- | ---- | ------------------------------------------------------------- |
+| Display   | `26px / 700`     | num  | 总资产 `.summary-total`                                       |
+| Display-S | `22px / 700`     | num  | 委托现价 `.order-price`                                       |
+| CTA       | `14px / 600~700` | —    | 提交按钮 `.order-submit`(700)、统计值 `.stat-value`(600, num) |
+| Title     | `13px / 600`     | —    | 弹窗标题、`.order-name`、Toast、加载文案                      |
+| Base      | `12px / 400~600` | —    | 工具栏按钮、表格正文、表单标签、预估区                        |
+| Secondary | `11px / 400~600` | num* | 表头 `th`、`.order-hint`、`.info-value`(600, num)、紧凑按钮   |
+| Micro     | `10px / 400`     | —    | `.stat-label`、`.info-label`、`.cell-code`(num)               |
 
 `num*`：凡内容为数字/代码即套等宽字族，与级别无关。
 
@@ -111,16 +111,16 @@
 
 ### 2.7 间距
 
-| 场景       | 值                                                                         |
-| ---------- | -------------------------------------------------------------------------- |
-| 工具栏容器 | `padding: 8px 12px`，控件 `gap: 2px`（含卡片内工具栏）                     |
-| 面板/卡片  | 卡片内边距 `14px 16px`，面板纵向 `gap: 12px`                               |
-| 页面栅格   | `gap: 12px; padding: 12px`（移动端 `8px`）；主卡边距 `margin: 12px 12px 0` |
-| 统计单元格 | `padding: 2px 18px`，`min-width: 128px`，标签/数值 `gap: 3px`              |
-| 信息单元格 | `padding: 4px 6px`，`gap: 2px`                                             |
-| 数据表格   | 单元格 `padding: 10px 14px`（th 同款）                                     |
-| 弹窗       | 头/体/尾 `padding: 12px 16px`                                              |
-| 下拉面板   | `padding: 6px`，选项 `padding: 5px 6px`                                    |
+| 场景       | 值                                                                                                   |
+| ---------- | ---------------------------------------------------------------------------------------------------- |
+| 工具栏容器 | `padding: 8px 12px`，控件 `gap: 2px`（含卡片内工具栏）                                               |
+| 面板/卡片  | 卡片内边距 `14px 16px`，面板纵向 `gap: 12px`（委托面板紧凑例外：`12px 14px` / `gap: 10px`，见 §3.8） |
+| 页面栅格   | `gap: 12px; padding: 12px`（移动端 `8px`）；主卡边距 `margin: 12px 12px 0`                           |
+| 统计单元格 | `padding: 2px 18px`，`min-width: 128px`，标签/数值 `gap: 3px`                                        |
+| 信息单元格 | `padding: 4px 6px`，`gap: 2px`                                                                       |
+| 数据表格   | 单元格 `padding: 10px 14px`（th 同款）                                                               |
+| 弹窗       | 头/体/尾 `padding: 12px 16px`                                                                        |
+| 下拉面板   | `padding: 6px`，选项 `padding: 5px 6px`                                                              |
 
 ### 2.8 交互反馈
 
@@ -144,16 +144,14 @@
 - 卡片 `.trade-card`：`--tb-bg` + `1px solid --tb-border` + `--radius-lg` + `var(--shadow-card)`。卡片内首行若是工具栏，底部加结构实线。
 - 终端页（行情页）不铺卡片，保持通栏：toolbar → info-table → 图表。
 
-### 3.2 总资产主卡（.trade-summary，数据卡片范式）
+### 3.2 账户摘要（.panel-summary，嵌入委托面板）
 
-结构：`summary-hero`（左）+ `summary-grid`（中）+ `stat-reset`（右）。
+结构：`summary-head`（总资产标签 + 重置账户幽灵按钮，卡片右上角动作位，按钮 40px 与面板控件统一）→ `summary-hero`（Display 总额、总盈亏语义色）→ `summary-grid`（2×2 次指标：当日盈亏 / 可用资金 / 持仓市值 / 持仓盈亏）。
 
-- 容器：卡片规格（§3.1）+ `margin: 12px 12px 0; padding: 14px 18px`。
-- `summary-hero`：`min-width: 200px`，右侧 `1px` 竖分隔线；上 Micro 标签、中 Display 总额、下 Secondary 总盈亏（`summary-pnl` 套 `up/down/flat`）。
-- `summary-grid`：flex 不换行，`stat-cell` 等宽（`flex: 1`）铺满，相邻单元格之间 `1px` 竖分隔线（`--tb-border`），形成与 hero 一致的列节奏。
-- `stat-reset`：左 `1px` 竖分隔线 + `padding-left: 18px`，右对齐，标签在上、按钮在下。
-- 任何"关键指标卡"（账户/策略/组合）复用此范式：hero 放主指标，grid 放次指标。
-- 主区图表卡高度随视口伸缩：`clamp(480px, 60vh, 720px)`（`trade-main` 首行与 `.trade-chart` 的 `min-height` 同步），保证画布在矮屏不局促、高屏不浪费。
+- 摘要与委托表单同卡（`.trade-panel`，§3.8），是卡内首段：纵向 `gap: 6px`，`padding-bottom: 8px` + 底部结构实线与委托区分隔；指标栅格行距 `6px`。
+- 栅格右列单元格加 `1px` 左竖分隔线（`--tb-border`）+ `padding-left: 12px`；hero 与栅格之间以行距分组，不画线。
+- 任何"关键指标区"（账户/策略/组合）复用此范式：hero 放主指标，grid 放次指标；窄容器 2×2，宽容器可平铺 1×4。
+- 主区首行高度由**面板内容驱动**：`grid-template-rows: minmax(410px, auto) auto`（保底 410px），图表卡 `min-height: 410px` 等高跟随、画布经 flex 自适应。**禁止给首行挂 vh/上限**——否则高视口下会把面板拉伸出大片空白；画布容器 `.trade-chart-body` 须 `contain: size`（画布内联高度不得污染 auto 行轨），且钩子须挂 `ResizeObserver` 调 `chart.resize()`（klinecharts 不自动跟随容器伸缩）。
 
 ### 3.3 工具栏（.toolbar / .trade-chart-toolbar）
 
@@ -166,7 +164,7 @@
 
 ### 3.4 输入框（标准规格）
 
-`font-family: var(--font-num); font-size: 13px; padding: 8px 10px; border: 1px solid var(--tb-border); border-radius: var(--radius-sm); background: var(--tb-bg)`，聚焦按 §2.8。适用于搜索框、参数输入、委托价格/数量输入。
+`font-family: var(--font-num); font-size: 13px; padding: 8px 10px; border: 1px solid var(--tb-border); border-radius: var(--radius-sm); background: var(--tb-bg)`，聚焦按 §2.8。适用于搜索框、参数输入。委托面板内输入框为与按钮统一高度，用 `height: 40px; padding: 0 10px`（§3.8）。
 
 ### 3.5 下拉面板与弹窗
 
@@ -185,13 +183,14 @@
 - 表内操作按钮：胶囊（`999px`，`padding: 5px 14px`，600 字重），买 `--up`/卖 `--down` 描边 + 悬停 8% 语义色底。
 - 标签行 `.trade-tabs`：复用 `.tb-btn`，容器 `padding: 8px 12px 0` + 底部结构实线，选中态同工具栏按钮。
 
-### 3.8 委托面板（.order-panel）
+### 3.8 委托面板（.trade-panel / .order-body）
 
-- 头部：名称 Title + 代码 Secondary；现价 Display-S + 涨跌 Secondary，红涨绿跌；底部图表邻接虚线。
-- 买卖切换：分段容器（`--tb-hover` 底 + `--radius-md` + `padding: 3px`），`.side-btn` `12px/600; padding: 7px 0` 透明底，选中语义色实底白字 + 语义色投影。
-- 快捷仓位按钮（25%/50%/全仓…）：Secondary/num 紧凑按钮，`--tb-hover` 底 + `--radius-sm`，悬停换 `--tb-border` 底。
-- 费用预估 `.order-estimate`：`--tb-hover` 底 + `--radius-md` + num。
-- 提交 `.order-submit`：CTA `14px/700; padding: 11px 0; --radius-md`，买 `--up` 卖 `--down` + 语义色投影，悬停 `brightness(1.06)`。
+- 容器 `.trade-panel`（`trade-main` 右列）：账户摘要（§3.2）与委托表单同卡，单卡三段式（摘要 → 标的行情 → 委托表单），纵向 `gap: 10px`、`padding: 12px 14px`（紧凑表单例外，低于 §2.7 卡片基准）；表单区 `.order-body` 纵向 `gap: 8px` 且 `flex: 1` 弹性填充卡内剩余高度，提交按钮 `margin-top: auto` 锚定卡底（行高被图表 `clamp` 推高时不留悬空空白）。**面板内全部按钮与输入框统一 `height: 40px`**（重置 / 买卖切换 / 快捷仓位 / 提交 / 价格数量输入），满足 §5 主要操作 ≥40px；两卡高度由 `trade-main` 首行网格自动同步。
+- 头部：名称 Title + 代码 Secondary；现价 Display-S + 涨跌 Secondary，红涨绿跌；底部图表邻接虚线，`padding-bottom: 6px`。
+- 买卖切换：分段容器（`--tb-hover` 底 + `--radius-md` + `padding: 2px`），`.side-btn` `12px/600; height: 40px` 透明底，选中语义色实底白字 + 语义色投影。
+- 字段区双列（`.order-fields`，`1fr 1fr`，`gap: 8px`）：委托价格 / 委托数量并排（标签行仅放文字，禁止塞入按钮等宽于半列的内容）；快捷仓位按钮（25%/50%/全仓…）为字段区下方整行等宽按钮（Secondary/num，`height: 40px`，`--tb-hover` 底 + `--radius-sm`，悬停换 `--tb-border` 底）；涨跌停范围与侧别上下文（最大可买 / 可卖数量）合并为其下一行微提示（`.order-field-hints`，Secondary/num），可用资金不重复展示（摘要栅格已有）。
+- 费用预估 `.order-estimate`：三列统计（`.estimate-cell`，标签上 Micro、数值下 CTA/num），`--tb-hover` 底 + `--radius-md`，与摘要栅格同范式。
+- 提交 `.order-submit`：CTA `14px/700; height: 40px; --radius-md`，买 `--up` 卖 `--down` + 语义色投影，悬停 `brightness(1.06)`。
 
 ### 3.9 Toast 与加载
 
@@ -207,11 +206,11 @@
 
 ## 4. 响应式断点
 
-- 平板（769–1024px）：交易页委托面板收窄至 `320px`，汇总卡 hero `min-width: 160px`，统计栅格降为 2×2（分隔线只落在每行右列）。
+- 平板（769–1024px）：交易页委托面板（含账户摘要）收窄至 `320px`（摘要栅格维持 2×2）。
 - 移动端（≤768px）：
   - 工具栏：`gap: 6px; padding: 6px 8px`，隐藏分隔线，按钮整行等宽，标的按钮占满首行。
   - 信息表格降 4 列 `10px`；下拉右对齐防溢出。
-  - 交易页：主卡转纵向（hero 通栏 + 底部分隔线，栅格 2 列，统计单元格取消竖分隔线）；页面栅格转纵向 flex，`padding: 8px`，图表卡固定 `420px` 高。
+  - 交易页：主区转纵向 flex（图表卡 → 摘要+委托面板卡 → 持仓/记录卡），页面栅格转纵向 flex，`padding: 8px`，图表卡固定 `420px` 高；摘要栅格维持 2×2。
 
 ## 5. 无障碍基线
 
@@ -222,13 +221,18 @@
 
 ## 6. 变更记录
 
-| 版本 | 变更                                                                                                                                                                                                                                           |
-| ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| v1   | 交易页对齐行情页：统一令牌、涨跌语义色去硬编码、过渡与禁用态补齐                                                                                                                                                                               |
-| v2   | Soft UI Evolution 改版：圆角/阴影/字族令牌化（8/10/12px + 双层阴影 + 等宽数字）、总资产主卡、分段控件、胶囊操作按钮、交易页淡色画布、全局焦点环与动效降级                                                                                      |
-| v2.1 | 规范工程化：新增 `--on-solid` 令牌（组件区 hex 清零）、stylelint 强制（`lint:css`，pre-commit/CI 接入）、Trae 项目规则入口 `.trae/rules/project_rules.md`、遗留 4px 圆角统一 `--radius-sm`                                                     |
-| v2.2 | 体验细化：滚动条/选区主题化、平板断点（769–1024px）、空状态范式（§3.10，图标+主副文案）、Toast 状态图标 + `role="status"`                                                                                                                      |
-| v2.3 | 交易页排版修复（当前）：新增 `.trade-scroll` 唯一滚动容器（去除主区/委托面板嵌套滚动，修复面板底部被静默裁剪）；汇总卡统计单元格等宽分布 + 竖分隔线；图表卡高度 `clamp(480px, 60vh, 720px)`（移动端 `420px`）；`#app` 视口高度补 `100dvh` 兜底 |
+| 版本 | 变更                                                                                                                                                                                                                                                                                                                                                                                                               |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| v1   | 交易页对齐行情页：统一令牌、涨跌语义色去硬编码、过渡与禁用态补齐                                                                                                                                                                                                                                                                                                                                                   |
+| v2   | Soft UI Evolution 改版：圆角/阴影/字族令牌化（8/10/12px + 双层阴影 + 等宽数字）、总资产主卡、分段控件、胶囊操作按钮、交易页淡色画布、全局焦点环与动效降级                                                                                                                                                                                                                                                          |
+| v2.1 | 规范工程化：新增 `--on-solid` 令牌（组件区 hex 清零）、stylelint 强制（`lint:css`，pre-commit/CI 接入）、Trae 项目规则入口 `.trae/rules/project_rules.md`、遗留 4px 圆角统一 `--radius-sm`                                                                                                                                                                                                                         |
+| v2.2 | 体验细化：滚动条/选区主题化、平板断点（769–1024px）、空状态范式（§3.10，图标+主副文案）、Toast 状态图标 + `role="status"`                                                                                                                                                                                                                                                                                          |
+| v2.3 | 交易页排版修复：新增 `.trade-scroll` 唯一滚动容器（去除主区/委托面板嵌套滚动，修复面板底部被静默裁剪）；汇总卡统计单元格等宽分布 + 竖分隔线；图表卡高度 `clamp(480px, 60vh, 720px)`（移动端 `420px`）；`#app` 视口高度补 `100dvh` 兜底                                                                                                                                                                             |
+| v2.4 | 布局整合：总资产主卡并入委托面板，右侧单卡三段式（账户摘要 → 标的行情 → 委托表单，`.trade-panel` + `.order-body`），去除主区上方通栏卡；摘要 hero 重排（标签行 + 重置右上角），栅格固定 2×2 右列竖分隔线；持仓/成交记录卡重命名 `.trade-right` → `.trade-records`（消除与右列 `trade-panel` 的命名混淆）                                                                                                           |
+| v2.5 | 交易页首行降高（典型视口不出滚动条）：图表卡 `clamp(410px, calc(50vh + 10px), 650px)`；委托面板紧凑化——价格/数量改双列字段（`.order-fields`）、涨跌停/最大可买合并为微提示行（`.order-field-hints`）、预估区改三列统计（`.estimate-cell`，`padding: 8px 12px`）、分段按钮 `6px` 收窄，面板 `12px 14px`、表单区 `gap: 8px`、摘要 `gap: 6px`；快捷仓位按钮保持字段区下方整行等宽（半宽标签行禁止塞按钮，防溢出错版） |
+| v2.6 | 委托面板控件高度统一：重置 / 买卖切换 / 快捷仓位 / 提交按钮与价格数量输入框统一 `height: 40px`（满足主要操作 ≥40px 触控基线）；面板高度变化经 `trade-main` 首行网格自动同步至图表卡                                                                                                                                                                                                                                |
+| v2.7 | 委托面板再降高（控件保持 40px 统一）：去除冗余 `.order-avail` 行（可用资金与摘要栅格重复；可卖数量并入微提示行，仅持仓时展示），预估区 `padding: 6px 12px`、摘要底距 `8px`、栅格行距 `6px`、分段容器 `padding: 2px` 收紧；`.order-body` 弹性填充 + 提交按钮锚定卡底（行高被图表 clamp 推高时消除底部悬空空白）                                                                                                     |
+| v2.8 | 修复面板大量空白（根因）：首行高度改由面板内容驱动（`minmax(410px, auto)`，图表 `min-height: 410px` 等高跟随），去除 `50vh`/上限挂载；画布容器 `contain: size` 阻断 canvas 内联高度污染 auto 行轨；`useChartTerminal` 挂 `ResizeObserver` + `ChartTerminal.resize()` 使画布跟随容器伸缩；不可交易态提示 `flex: 1` 居中填充                                                                                         |
 
 ## 7. AI 交付前检查清单
 

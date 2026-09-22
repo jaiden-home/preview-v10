@@ -136,6 +136,11 @@ export class ChartTerminal {
     resetTimeShareState()
   }
 
+  /** 容器盒尺寸变化时重算画布布局（klinecharts 不会自动跟随容器伸缩，由钩子的 ResizeObserver 调用） */
+  resize(): void {
+    this.chart?.resize()
+  }
+
   // ==================== 标的与行情 ====================
 
   setSymbol(symbol: { market: string; ticker: string }): void {

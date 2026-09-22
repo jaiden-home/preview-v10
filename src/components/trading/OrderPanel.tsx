@@ -67,6 +67,19 @@ export default function OrderPanel({ t, side, onSideChange, code, quote, account
   const buyMax = livePrice != null ? maxBuyQty(account.cash, livePrice) : 0
   const availableQty = position?.availableQty ?? 0
 
+  // 字段下方微提示：涨跌停范围 + 侧别上下文（最大可买 / 可卖数量），按需拼接；
+  // 可用资金不重复展示（摘要栅格已有），可卖数量仅持仓时提示
+  const hints: string[] = []
+  if (limits != null) {
+    hints.push(`${t('涨停|Limit up')} ${limits.upper.toFixed(2)} · ${t('跌停|Limit down')} ${limits.lower.toFixed(2)}`)
+  }
+  if (side === 'buy' && buyMax > 0) {
+    hints.push(`${t('最大可买|Max buy')} ${buyMax}`)
+  }
+  if (side === 'sell' && availableQty > 0) {
+    hints.push(`${t('可卖|Sellable')} ${availableQty}/${position?.qty ?? 0}`)
+  }
+
   const applyQuickBuy = (pct: number) => {
     if (livePrice == null) {
       return
@@ -91,7 +104,7 @@ export default function OrderPanel({ t, side, onSideChange, code, quote, account
   }
 
   return (
-    <section className="trade-card order-panel">
+    <div className="order-body">
       <header className="order-head">
         <div className="order-title">
           <span className="order-name">{quote?.name ?? code}</span>
@@ -134,60 +147,46 @@ export default function OrderPanel({ t, side, onSideChange, code, quote, account
 
       {tradable ? (
         <>
-          <div className="order-avail">
-            {side === 'buy'
-              ? `${t('可用资金|Available cash')} ${fmtMoney(account.cash)}`
-              : `${t('可卖数量|Available to sell')} ${availableQty} / ${position?.qty ?? 0} ${t('股|shares')}`}
-          </div>
-
-          <label className="order-field">
-            <span className="order-field-label">
-              <span>{t('委托价格|Price')}</span>
-              {limits != null && (
-                <span className="order-hint">
-                  {t('涨停|Limit up')} {limits.upper.toFixed(2)} · {t('跌停|Limit down')} {limits.lower.toFixed(2)}
-                </span>
-              )}
-            </span>
-            <input
-              className="order-input"
-              type="number"
-              inputMode="decimal"
-              step="0.01"
-              min="0.01"
-              placeholder={livePrice != null ? livePrice.toFixed(2) : '0.00'}
-              value={price}
-              disabled={livePrice == null}
-              onChange={(event) => {
-                setPriceDirty(true)
-                setPrice(event.target.value)
-              }}
-            />
-          </label>
-
-          <label className="order-field">
-            <span className="order-field-label">
-              <span>
-                {t('委托数量|Quantity')}（{t('股|shares')}）
+          <div className="order-fields">
+            <label className="order-field">
+              <span className="order-field-label">
+                <span>{t('委托价格|Price')}</span>
               </span>
-              {side === 'buy' && buyMax > 0 && (
-                <span className="order-hint">
-                  {t('最大可买|Max buy')} {buyMax} {t('股|shares')}
+              <input
+                className="order-input"
+                type="number"
+                inputMode="decimal"
+                step="0.01"
+                min="0.01"
+                placeholder={livePrice != null ? livePrice.toFixed(2) : '0.00'}
+                value={price}
+                disabled={livePrice == null}
+                onChange={(event) => {
+                  setPriceDirty(true)
+                  setPrice(event.target.value)
+                }}
+              />
+            </label>
+
+            <label className="order-field">
+              <span className="order-field-label">
+                <span>
+                  {t('委托数量|Quantity')}（{t('股|shares')}）
                 </span>
-              )}
-            </span>
-            <input
-              className="order-input"
-              type="number"
-              inputMode="numeric"
-              step="1"
-              min="1"
-              placeholder="0"
-              value={qty}
-              disabled={livePrice == null}
-              onChange={(event) => setQty(event.target.value)}
-            />
-          </label>
+              </span>
+              <input
+                className="order-input"
+                type="number"
+                inputMode="numeric"
+                step="1"
+                min="1"
+                placeholder="0"
+                value={qty}
+                disabled={livePrice == null}
+                onChange={(event) => setQty(event.target.value)}
+              />
+            </label>
+          </div>
 
           <div className="quick-row">
             {side === 'buy' ? (
@@ -217,20 +216,32 @@ export default function OrderPanel({ t, side, onSideChange, code, quote, account
             )}
           </div>
 
+          {hints.length > 0 && (
+            <div className="order-field-hints">
+              {hints.map((hint) => (
+                <span key={hint} className="order-hint">
+                  {hint}
+                </span>
+              ))}
+            </div>
+          )}
+
           <div className="order-estimate">
-            <div className="order-estimate-row">
-              <span className="order-estimate-label">{t('委托金额|Order amount')}</span>
-              <span>{valid ? fmtMoney(amount) : '--'}</span>
+            <div className="estimate-cell">
+              <span className="estimate-label">{t('委托金额|Order amount')}</span>
+              <span className="estimate-value">{valid ? fmtMoney(amount) : '--'}</span>
             </div>
-            <div className="order-estimate-row">
-              <span className="order-estimate-label">{t('预估费用|Est. fee')}</span>
-              <span>{valid ? fmtMoney(fee) : '--'}</span>
+            <div className="estimate-cell">
+              <span className="estimate-label">{t('预估费用|Est. fee')}</span>
+              <span className="estimate-value">{valid ? fmtMoney(fee) : '--'}</span>
             </div>
-            <div className="order-estimate-row">
-              <span className="order-estimate-label">
+            <div className="estimate-cell">
+              <span className="estimate-label">
                 {side === 'buy' ? t('所需金额|Total needed') : t('预计获得|Net proceeds')}
               </span>
-              <span>{valid ? fmtMoney(side === 'buy' ? round2(amount + fee) : round2(amount - fee)) : '--'}</span>
+              <span className="estimate-value">
+                {valid ? fmtMoney(side === 'buy' ? round2(amount + fee) : round2(amount - fee)) : '--'}
+              </span>
             </div>
           </div>
 
@@ -254,6 +265,6 @@ export default function OrderPanel({ t, side, onSideChange, code, quote, account
           </p>
         </div>
       )}
-    </section>
+    </div>
   )
 }

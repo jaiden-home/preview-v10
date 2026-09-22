@@ -15,15 +15,13 @@ import { parseSymbolCode, type QuoteSnapshot } from '@/lib/chart/types'
 import OrderPanel from './OrderPanel'
 import PositionsTable from './PositionsTable'
 import TradesTable from './TradesTable'
+import TradeSummary from './TradeSummary'
 import {
   calcEquity,
   createInitialAccount,
   dayKeyOf,
   executeBuy,
   executeSell,
-  fmtMoney,
-  fmtPct,
-  fmtSignedMoney,
   loadAccount,
   loadSelectedSymbol,
   round2,
@@ -210,8 +208,6 @@ export default function PaperTrading() {
     setNotice({ kind: 'ok', text: t('账户已重置|Account reset') })
   }
 
-  const pnlClass = (n: number) => (n > 0 ? 'up' : n < 0 ? 'down' : 'flat')
-
   return (
     <div className="trade-page">
       <div className="toolbar">
@@ -226,47 +222,8 @@ export default function PaperTrading() {
       {account == null || equity == null ? (
         <div className="trade-loading">{t('加载中|Loading')}…</div>
       ) : (
-        /* 单一滚动容器：工具栏固定，汇总卡与主区整体滚动（避免嵌套滚动导致面板内容被裁剪） */
+        /* 单一滚动容器：工具栏固定，主区整体滚动（避免嵌套滚动导致面板内容被裁剪） */
         <div className="trade-scroll">
-          {/* 总资产主卡：左侧总额 + 总盈亏，右侧指标栅格 */}
-          <div className="trade-summary">
-            <div className="summary-hero">
-              <span className="stat-label">{t('总资产|Total assets')}</span>
-              <span className="summary-total">{fmtMoney(equity.totalAssets)}</span>
-              <span className={`summary-pnl ${pnlClass(equity.totalPnl)}`}>
-                {t('总盈亏|Total P&L')} {fmtSignedMoney(equity.totalPnl)}（{fmtPct(equity.totalPnlPct)}）
-              </span>
-            </div>
-            <div className="summary-grid">
-              <div className="stat-cell">
-                <span className="stat-label">{t('当日盈亏|Day P&L')}</span>
-                <span className={`stat-value ${pnlClass(equity.dayPnl)}`}>{fmtSignedMoney(equity.dayPnl)}</span>
-              </div>
-              <div className="stat-cell">
-                <span className="stat-label">{t('可用资金|Cash')}</span>
-                <span className="stat-value">{fmtMoney(account.cash)}</span>
-              </div>
-              <div className="stat-cell">
-                <span className="stat-label">{t('持仓市值|Market value')}</span>
-                <span className="stat-value">{fmtMoney(equity.marketValue)}</span>
-              </div>
-              <div className="stat-cell">
-                <span className="stat-label">{t('持仓盈亏|Position P&L')}</span>
-                <span className={`stat-value ${pnlClass(equity.positionPnl)}`}>
-                  {fmtSignedMoney(equity.positionPnl)}
-                </span>
-              </div>
-            </div>
-            <div className="stat-reset">
-              <span className="stat-label">
-                {t('初始资金|Initial capital')} {fmtMoney(account.initialCapital)}
-              </span>
-              <button className="tb-btn tb-clear" type="button" onClick={handleReset}>
-                {t('重置账户|Reset')}
-              </button>
-            </div>
-          </div>
-
           <div className="trade-main">
             <section className="trade-card trade-chart">
               <div className="trade-chart-toolbar">
@@ -289,16 +246,20 @@ export default function PaperTrading() {
               {/* klinecharts 画布容器（客户端初始化，不参与 SSR） */}
               <div className="trade-chart-body" ref={chartContainerRef} />
             </section>
-            <OrderPanel
-              t={t}
-              side={side}
-              onSideChange={setSide}
-              code={selectedCode}
-              quote={quotes[selectedCode] ?? null}
-              account={account}
-              onSubmit={handleSubmit}
-            />
-            <section className="trade-card trade-right">
+            {/* 账户摘要 + 委托表单同卡（右侧列单卡三段式） */}
+            <section className="trade-card trade-panel">
+              <TradeSummary t={t} account={account} equity={equity} onReset={handleReset} />
+              <OrderPanel
+                t={t}
+                side={side}
+                onSideChange={setSide}
+                code={selectedCode}
+                quote={quotes[selectedCode] ?? null}
+                account={account}
+                onSubmit={handleSubmit}
+              />
+            </section>
+            <section className="trade-card trade-records">
               <div className="trade-tabs">
                 <button
                   className={`tb-btn${tab === 'positions' ? ' active' : ''}`}

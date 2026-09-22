@@ -23,7 +23,7 @@ A 股行情预览 + 模拟交易的 Web 终端：Next.js 16（App Router，stand
 
 - `app/`：路由层。`page.tsx` 首页（默认上证指数的行情终端）、`trade/` 模拟交易页、`api/` BFF 五接口（kline / timeshare / quote / search / healthz）、`globals.css` **唯一样式文件**。
 - `components/terminal/`：行情终端组件（`TradingTerminal` 及工具栏 / 信息表格 / 指标弹窗，图表生命周期统一在 `useChartTerminal`）。
-- `components/trading/`：模拟交易组件（`PaperTrading` / `OrderPanel` / `PositionsTable` / `TradesTable`）。
+- `components/trading/`：模拟交易组件（`PaperTrading` / `TradeSummary` / `OrderPanel` / `PositionsTable` / `TradesTable`）。
 - `lib/chart/`：环境无关的图表域逻辑（`ChartTerminal` 命令式控制器、`DataLoader`、分时状态机、纯函数及测试）。对 klinecharts 一律动态 `import()`，**禁止进入服务端模块图**。
 - `lib/server/`：仅服务端（`market-service` 数据源编排、`provider/tencent` 腾讯实现、TTLCache、限流、zod、pino），禁止被客户端引用。
 - `lib/trading/account.ts`：模拟交易纯函数（整手买入、T+1、涨跌停、佣金/印花税），带测试。

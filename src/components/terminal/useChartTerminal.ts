@@ -69,7 +69,11 @@ export function useChartTerminal(options: UseChartTerminalOptions) {
     terminalRef.current = terminal
     chartSymbolRef.current = `${symbol.market}${symbol.ticker}`
     void terminal.init()
+    // klinecharts 不自动跟随容器伸缩：容器盒尺寸变化（交易页首行随面板内容变化）时重算画布布局
+    const resizeObserver = new ResizeObserver(() => terminal.resize())
+    resizeObserver.observe(container)
     return () => {
+      resizeObserver.disconnect()
       terminal.destroy()
       terminalRef.current = null
       chartSymbolRef.current = null
