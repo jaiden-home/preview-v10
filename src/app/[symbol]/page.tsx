@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import TradingTerminal from '@/components/terminal/TradingTerminal'
 import { parseSymbolCode } from '@/lib/chart/types'
-import { fetchCnQuote, fetchInitialTerminalData } from '@/lib/server/tencent'
+import { fetchInitialTerminalData, fetchQuote } from '@/lib/server/market-service'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,7 +22,7 @@ export async function generateMetadata({ params }: SymbolPageProps): Promise<Met
   }
   let display = parsed.code
   try {
-    const quote = await fetchCnQuote(parsed)
+    const quote = await fetchQuote(parsed)
     if (quote.name != null) {
       display = `${quote.name}(${parsed.code})`
     }

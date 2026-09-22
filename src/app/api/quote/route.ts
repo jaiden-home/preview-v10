@@ -2,7 +2,7 @@ import type { NextRequest } from 'next/server'
 import { allowRequest, jsonError, jsonOk, queryObject, requestIdOf } from '@/lib/server/api'
 import { requestLogger } from '@/lib/server/logger'
 import { quoteQuerySchema } from '@/lib/server/schemas'
-import { fetchCnQuote } from '@/lib/server/tencent'
+import { fetchQuote } from '@/lib/server/market-service'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
   }
   const { symbol } = parsed.data
   try {
-    const quote = await fetchCnQuote({ market: symbol.slice(0, 2), ticker: symbol.slice(2) })
+    const quote = await fetchQuote({ market: symbol.slice(0, 2), ticker: symbol.slice(2) })
     return jsonOk(quote)
   } catch (error) {
     log.error({ err: String(error), symbol }, 'quote upstream failed')

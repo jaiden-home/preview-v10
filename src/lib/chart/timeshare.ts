@@ -1,5 +1,4 @@
 import type { AxisRange, KLineData } from 'klinecharts'
-import { parseCnBarTime } from './utils'
 
 // ==================== 分时状态（模块级，图表控制器独占写） ====================
 
@@ -33,67 +32,7 @@ export const resetTimeShareState = (): void => {
   timeShareState.isIndex = false
 }
 
-// ==================== 分时解析 ====================
-
-const isTradingMinute = (hhmm: string): boolean =>
-  (hhmm >= '0930' && hhmm <= '1130') || (hhmm >= '1300' && hhmm <= '1500')
-
-/**
- * 官方分时点 "0930 1277.27 133 16987691.06" = 时间 价格 累计量 累计额(元)
- * 主板/创业板/北交 quantity 单位为手，科创板为股（北交所无累计额列）
- * 差分出每分钟量（统一转手）/额；open 取前一分钟价格（首根用 basePrice），供成交量按分钟涨跌着色
- */
-export const parseTimeShareDay = (
-  date: string,
-  points: unknown[],
-  basePrice: number,
-  sharesPerLot = 1
-): KLineData[] => {
-  if (!/^\d{8}$/.test(date)) {
-    return []
-  }
-  const bars: KLineData[] = []
-  let prevCumVolume = 0
-  let prevCumAmount = 0
-  let prevPrice = basePrice
-  for (const point of points) {
-    if (typeof point !== 'string') {
-      continue
-    }
-    const [hhmm, priceText, cumVolumeText, cumAmountText] = point.trim().split(/\s+/)
-    if (!/^\d{4}$/.test(hhmm ?? '') || !isTradingMinute(hhmm)) {
-      continue
-    }
-    const timestamp = parseCnBarTime(`${date}${hhmm}`)
-    const price = Number(priceText)
-    const cumVolume = Number(cumVolumeText)
-    const cumAmount = Number(cumAmountText)
-    if (!Number.isFinite(timestamp) || !Number.isFinite(price) || price <= 0) {
-      continue
-    }
-    // 原始量统一换算为手（科创板除以 200，其余板块本身即手）
-    const volume = Number.isFinite(cumVolume) ? Math.max(0, Math.round((cumVolume - prevCumVolume) / sharesPerLot)) : 0
-    // 累计额缺失（北交所）时留空，由均价计算回退近似
-    const turnover = Number.isFinite(cumAmount) ? Math.max(0, cumAmount - prevCumAmount) : undefined
-    if (Number.isFinite(cumVolume)) {
-      prevCumVolume = cumVolume
-    }
-    if (Number.isFinite(cumAmount)) {
-      prevCumAmount = cumAmount
-    }
-    bars.push({
-      timestamp,
-      open: Number.isFinite(prevPrice) && prevPrice > 0 ? prevPrice : price,
-      high: price,
-      low: price,
-      close: price,
-      volume,
-      turnover
-    })
-    prevPrice = price
-  }
-  return bars
-}
+// ==================== 分时解析（协议解析在 server/provider/<id>/parse.ts） ====================
 
 /**
  * 均价线：个股用官方累计成交额 / 累计成交量（手转股乘 lotSize），缺额时退回 close*volume 近似；

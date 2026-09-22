@@ -3,68 +3,6 @@ import type { FundamentalData } from './chart/types'
 import { timeShareState } from './chart/timeshare'
 import type { Locale } from './i18n'
 
-/**
- * 解析腾讯实时行情（qt.gtimg.cn）GBK 解码后的文本。
- * 格式：v_sh600519="1~贵州茅台~600519~..."，字段以 ~ 分隔。
- * 返回名称、现价、昨收与基本面指标；解析失败返回 null。
- */
-export const parseQtQuote = (
-  text: string,
-  code: string
-): {
-  name: string | null
-  price: number | null
-  prevClose: number | null
-  invalid: boolean
-  fundamental: FundamentalData
-} => {
-  const match = text.match(new RegExp(`${code}="([^"]+)`))
-  if (!match) {
-    return { name: null, price: null, prevClose: null, invalid: true, fundamental: {} }
-  }
-  const fields = match[1].split('~')
-
-  // 腾讯 A 股行情字段表（已用新浪实测数据核对，sh600519）：
-  // [1]  名称              [3]  现价        [4]  昨收
-  // [30] 时间戳(如 20260916110501，勿当数值用!)
-  // [38] 换手率(%)         [39] 市盈率TTM
-  // [43] 振幅(%)           [44] 流通市值(亿)  [45] 总市值(亿)
-  // [46] 市净率            [51] 均价        [52] 市盈率(动)  [53] 市盈率(静)
-  const parseNum = (val: string | undefined): number | undefined => {
-    if (val == null || val === '-' || val === '') return undefined
-    const num = Number(val.replace(/,/g, ''))
-    // 允许负值（亏损股市盈率为负），仅排除 0 和 NaN
-    return Number.isFinite(num) && num !== 0 ? num : undefined
-  }
-  const parsePrice = (val: string | undefined): number | null => {
-    if (val == null || val === '') return null
-    const num = Number(val)
-    return Number.isFinite(num) && num > 0 ? num : null
-  }
-
-  const name = fields.length > 1 && fields[1] !== '' && fields[1] !== '-' ? fields[1] : null
-  const totalCapYi = parseNum(fields[45])
-  const floatCapYi = parseNum(fields[44])
-
-  return {
-    name,
-    price: parsePrice(fields[3]),
-    prevClose: parsePrice(fields[4]),
-    invalid: name == null,
-    fundamental: {
-      turnoverRate: parseNum(fields[38]),
-      amplitude: parseNum(fields[43]),
-      pe: parseNum(fields[39]),
-      peDynamic: parseNum(fields[52]),
-      peStatic: parseNum(fields[53]),
-      pb: parseNum(fields[46]),
-      totalMarketCap: totalCapYi != null ? totalCapYi * 1e8 : undefined,
-      floatMarketCap: floatCapYi != null ? floatCapYi * 1e8 : undefined,
-      avgPrice: parseNum(fields[51])
-    }
-  }
-}
-
 // ==================== 信息表格渲染数据 ====================
 
 export interface FundamentalItem {

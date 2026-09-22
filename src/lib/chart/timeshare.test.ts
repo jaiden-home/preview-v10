@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { AxisRange, KLineData } from 'klinecharts'
-import { calcTimeShareAvg, parseTimeShareDay, symmetricRangeAround, timeShareState } from './timeshare'
+import { calcTimeShareAvg, symmetricRangeAround, timeShareState } from './timeshare'
 
 const minute = 60 * 1000
 
@@ -11,62 +11,6 @@ describe('分时图纯函数', () => {
     timeShareState.dayKey = null
     timeShareState.lotSize = 100
     timeShareState.isIndex = false
-  })
-
-  it('parseTimeShareDay 解析官方分时点：差分量额、open 取前分钟价、过滤非交易时段', () => {
-    const points = [
-      '0930 1277.27 133 16987691.06',
-      '0931 1283.89 689 88207201.15',
-      '1131 1277.96 800 90000000.00', // 午休后首点之前，超时段应被过滤
-      '1300 1275.16 810 91000000.00',
-      '1500 1277.96 16573 2116818687.60',
-      '1530 1277.96 16573 2116818687.60', // 盘后冻结填充点，应被过滤
-      'bad point',
-      12345
-    ]
-    const bars = parseTimeShareDay('20260914', points, 1275.16)
-    expect(bars).toHaveLength(4)
-    expect(bars[0]).toEqual({
-      timestamp: new Date('2026-09-14T09:30').getTime(),
-      open: 1275.16,
-      high: 1277.27,
-      low: 1277.27,
-      close: 1277.27,
-      volume: 133,
-      turnover: 16987691.06
-    })
-    // 差分：第二分钟量 689-133，额 88207201.15-16987691.06
-    expect(bars[1].volume).toBe(556)
-    expect(bars[1].turnover).toBeCloseTo(71219510.09, 2)
-    expect(bars[1].open).toBe(1277.27)
-    // 1300 的量基于上一个有效点 0931（1131 被过滤）差分
-    expect(bars[2].volume).toBe(810 - 689)
-    expect(bars[2].timestamp).toBe(new Date('2026-09-14T13:00').getTime())
-    expect(bars[3].timestamp).toBe(new Date('2026-09-14T15:00').getTime())
-    // 非法日期直接返回空
-    expect(parseTimeShareDay('2026-9-14', points, 1)).toEqual([])
-    expect(parseTimeShareDay('20260914', [], 1)).toEqual([])
-  })
-
-  it('parseTimeShareDay 科创板量为股，除以 200 换算为手', () => {
-    const points = ['0930 116.80 290726 33956797.00', '0931 115.70 802754 93412556.00']
-    const bars = parseTimeShareDay('20260914', points, 117.41, 200)
-    expect(bars).toHaveLength(2)
-    expect(bars[0].volume).toBe(Math.round(290726 / 200))
-    expect(bars[0].turnover).toBe(33956797)
-    expect(bars[1].volume).toBe(Math.round((802754 - 290726) / 200))
-    expect(bars[1].turnover).toBe(93412556 - 33956797)
-    expect(bars[0].open).toBe(117.41)
-  })
-
-  it('parseTimeShareDay 北交所无累计额列，turnover 留空', () => {
-    const points = ['0930 10.82 0', '0931 10.67 243', '0932 10.82 342']
-    const bars = parseTimeShareDay('20260914', points, 10.82)
-    expect(bars).toHaveLength(3)
-    expect(bars[1].volume).toBe(243)
-    expect(bars[1].turnover).toBeUndefined()
-    expect(bars[2].volume).toBe(342 - 243)
-    expect(bars[2].turnover).toBeUndefined()
   })
 
   it('calcTimeShareAvg 优先使用官方成交额（手转股）计算均价', () => {

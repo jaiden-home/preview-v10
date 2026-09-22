@@ -44,19 +44,6 @@ export const DEFAULT_PERIOD_KEY: PeriodKey = '1d'
 
 export const findPeriodOption = (key: PeriodKey) => PERIOD_OPTIONS.find((o) => o.key === key)
 
-// ==================== 腾讯周期映射 ====================
-
-export const CN_TENCENT_PERIOD: Record<string, string> = {
-  '1m': 'm1',
-  '5m': 'm5',
-  '15m': 'm15',
-  '30m': 'm30',
-  '1h': 'm60',
-  '1d': 'day',
-  '1w': 'week',
-  '1M': 'month'
-}
-
 const PERIOD_KEY_PREFIX: Record<Period['type'], string> = {
   second: 's',
   minute: 'm',

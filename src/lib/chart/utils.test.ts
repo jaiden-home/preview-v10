@@ -7,7 +7,6 @@ import {
   isCnStarMarket,
   localDayKey,
   parseCnBarTime,
-  parseTencentKlines,
   pickPrevClose
 } from './utils'
 import type { KLineData } from 'klinecharts'
@@ -19,28 +18,6 @@ describe('A股数据源纯函数', () => {
     expect(parseCnBarTime('202609141445')).toBe(new Date('2026-09-14T14:45').getTime())
     expect(parseCnBarTime('20260914')).toBe(new Date('2026-09-14T00:00:00').getTime())
     expect(Number.isNaN(parseCnBarTime('abc'))).toBe(true)
-  })
-
-  it('parseTencentKlines 解析日K/分钟K并过滤坏行', () => {
-    const rows: unknown[] = [
-      ['2026-09-14', '1277.27', '1277.96', '1285.53', '1270.36', '16571'],
-      ['202609141500', '1278.00', '1277.96', '1278.52', '1277.49', '1545.00', {}, '1.24'],
-      ['bad-row'],
-      ['abc', '1', '2', '3', '4', '5'],
-      'not-an-array'
-    ]
-    const dataList = parseTencentKlines(rows)
-    expect(dataList).toHaveLength(2)
-    expect(dataList[0]).toEqual({
-      timestamp: new Date('2026-09-14T00:00:00').getTime(),
-      open: 1277.27,
-      close: 1277.96,
-      high: 1285.53,
-      low: 1270.36,
-      volume: 16571
-    })
-    expect(dataList[1].timestamp).toBe(new Date('2026-09-14T15:00').getTime())
-    expect(dataList[1].volume).toBe(1545)
   })
 
   it('aggregateBars 按毫秒桶合并 OHLCV 且时间对齐桶起点', () => {

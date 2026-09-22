@@ -1,6 +1,6 @@
 import type { KLineData, Period } from 'klinecharts'
 
-/** 科创板（688/689）每手 200 股，且腾讯分时接口的量为「股」；其余板块每手 100 股，量为「手」 */
+/** 科创板（688/689）每手 200 股，且分时量为「股」口径；其余板块每手 100 股，量为「手」 */
 export const isCnStarMarket = (symbol: { market?: unknown; ticker: string }): boolean =>
   symbol.market === 'sh' && /^(688|689)/.test(symbol.ticker)
 
@@ -40,29 +40,7 @@ export const parseCnBarTime = (value: string): number => {
   return Number.NaN
 }
 
-/** 腾讯 K 线行解析：时间, 开, 收, 高, 低, 量 */
-export const parseTencentKlines = (rows: unknown[]): KLineData[] =>
-  rows
-    .map((row): KLineData | null => {
-      if (!Array.isArray(row) || row.length < 6) {
-        return null
-      }
-      const timestamp = parseCnBarTime(String(row[0]))
-      if (Number.isNaN(timestamp)) {
-        return null
-      }
-      return {
-        timestamp,
-        open: Number(row[1]),
-        close: Number(row[2]),
-        high: Number(row[3]),
-        low: Number(row[4]),
-        volume: Number(row[5])
-      }
-    })
-    .filter((d): d is KLineData => d != null)
-
-/** 按毫秒桶聚合（用于腾讯不直接提供的周期，如 4 小时） */
+/** 按毫秒桶聚合（用于数据源不直接提供的周期，如 4 小时） */
 export const aggregateBars = (dataList: KLineData[], spanMillis: number): KLineData[] => {
   const buckets = new Map<number, KLineData>()
   for (const bar of dataList) {
@@ -79,13 +57,6 @@ export const aggregateBars = (dataList: KLineData[], spanMillis: number): KLineD
     }
   }
   return Array.from(buckets.values()).sort((a, b) => a.timestamp - b.timestamp)
-}
-
-export const formatTencentDate = (timestamp: number): string => {
-  const date = new Date(timestamp)
-  const month = `${date.getMonth() + 1}`.padStart(2, '0')
-  const day = `${date.getDate()}`.padStart(2, '0')
-  return `${date.getFullYear()}-${month}-${day}`
 }
 
 /** 从最近若干日 K 中取展示日的前收盘价 */

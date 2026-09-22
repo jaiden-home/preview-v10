@@ -2,7 +2,7 @@ import type { NextRequest } from 'next/server'
 import { allowRequest, jsonError, jsonOk, queryObject, requestIdOf } from '@/lib/server/api'
 import { requestLogger } from '@/lib/server/logger'
 import { timeShareQuerySchema } from '@/lib/server/schemas'
-import { fetchCnTimeShare } from '@/lib/server/tencent'
+import { fetchTimeShare } from '@/lib/server/market-service'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
   }
   const { symbol } = parsed.data
   try {
-    const snapshot = await fetchCnTimeShare({ market: symbol.slice(0, 2), ticker: symbol.slice(2) })
+    const snapshot = await fetchTimeShare({ market: symbol.slice(0, 2), ticker: symbol.slice(2) })
     return jsonOk(snapshot)
   } catch (error) {
     log.error({ err: String(error), symbol }, 'timeshare upstream failed')

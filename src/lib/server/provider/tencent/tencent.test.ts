@@ -1,8 +1,9 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Period } from 'klinecharts'
-import { parseQtQuote } from '../fundamental'
-import { formatTencentDate } from '../chart/utils'
-import { fetchCnKLines, parseSmartboxResponse, resetServerCaches } from './tencent'
+import { runProviderContractTests } from '../contract'
+import type { MarketDataProvider } from '../types'
+import { createTencentProvider } from './index'
+import { formatTencentDate, parseQtQuote, parseSmartboxResponse, parseTimeShareDay, parseTencentKlines } from './parse'
 
 /** 构造腾讯 qt 行情文本：字段索引与线上接口一致 */
 const buildQtText = (code: string, fields: Record<number, string>): string => {
@@ -89,7 +90,89 @@ describe('parseSmartboxResponse', () => {
   })
 })
 
-describe('fetchCnKLines 缓存路由', () => {
+describe('parseTencentKlines', () => {
+  it('解析日K/分钟K并过滤坏行', () => {
+    const rows: unknown[] = [
+      ['2026-09-14', '1277.27', '1277.96', '1285.53', '1270.36', '16571'],
+      ['202609141500', '1278.00', '1277.96', '1278.52', '1277.49', '1545.00', {}, '1.24'],
+      ['bad-row'],
+      ['abc', '1', '2', '3', '4', '5'],
+      'not-an-array'
+    ]
+    const dataList = parseTencentKlines(rows)
+    expect(dataList).toHaveLength(2)
+    expect(dataList[0]).toEqual({
+      timestamp: new Date('2026-09-14T00:00:00').getTime(),
+      open: 1277.27,
+      close: 1277.96,
+      high: 1285.53,
+      low: 1270.36,
+      volume: 16571
+    })
+    expect(dataList[1].timestamp).toBe(new Date('2026-09-14T15:00').getTime())
+    expect(dataList[1].volume).toBe(1545)
+  })
+})
+
+describe('parseTimeShareDay', () => {
+  it('解析官方分时点：差分量额、open 取前分钟价、过滤非交易时段', () => {
+    const points = [
+      '0930 1277.27 133 16987691.06',
+      '0931 1283.89 689 88207201.15',
+      '1131 1277.96 800 90000000.00', // 午休后首点之前，超时段应被过滤
+      '1300 1275.16 810 91000000.00',
+      '1500 1277.96 16573 2116818687.60',
+      '1530 1277.96 16573 2116818687.60', // 盘后冻结填充点，应被过滤
+      'bad point',
+      12345
+    ]
+    const bars = parseTimeShareDay('20260914', points, 1275.16)
+    expect(bars).toHaveLength(4)
+    expect(bars[0]).toEqual({
+      timestamp: new Date('2026-09-14T09:30').getTime(),
+      open: 1275.16,
+      high: 1277.27,
+      low: 1277.27,
+      close: 1277.27,
+      volume: 133,
+      turnover: 16987691.06
+    })
+    // 差分：第二分钟量 689-133，额 88207201.15-16987691.06
+    expect(bars[1].volume).toBe(556)
+    expect(bars[1].turnover).toBeCloseTo(71219510.09, 2)
+    expect(bars[1].open).toBe(1277.27)
+    // 1300 的量基于上一个有效点 0931（1131 被过滤）差分
+    expect(bars[2].volume).toBe(810 - 689)
+    expect(bars[2].timestamp).toBe(new Date('2026-09-14T13:00').getTime())
+    expect(bars[3].timestamp).toBe(new Date('2026-09-14T15:00').getTime())
+    // 非法日期直接返回空
+    expect(parseTimeShareDay('2026-9-14', points, 1)).toEqual([])
+    expect(parseTimeShareDay('20260914', [], 1)).toEqual([])
+  })
+
+  it('科创板量为股，除以 200 换算为手', () => {
+    const points = ['0930 116.80 290726 33956797.00', '0931 115.70 802754 93412556.00']
+    const bars = parseTimeShareDay('20260914', points, 117.41, 200)
+    expect(bars).toHaveLength(2)
+    expect(bars[0].volume).toBe(Math.round(290726 / 200))
+    expect(bars[0].turnover).toBe(33956797)
+    expect(bars[1].volume).toBe(Math.round((802754 - 290726) / 200))
+    expect(bars[1].turnover).toBe(93412556 - 33956797)
+    expect(bars[0].open).toBe(117.41)
+  })
+
+  it('北交所无累计额列，turnover 留空', () => {
+    const points = ['0930 10.82 0', '0931 10.67 243', '0932 10.82 342']
+    const bars = parseTimeShareDay('20260914', points, 10.82)
+    expect(bars).toHaveLength(3)
+    expect(bars[1].volume).toBe(243)
+    expect(bars[1].turnover).toBeUndefined()
+    expect(bars[2].volume).toBe(342 - 243)
+    expect(bars[2].turnover).toBeUndefined()
+  })
+})
+
+describe('fetchKLines 缓存路由', () => {
   const symbol = { market: 'sh', ticker: '600519' }
   const dayPeriod: Period = { span: 1, type: 'day' }
   const ts = (day: string) => new Date(`${day}T00:00:00`).getTime()
@@ -101,8 +184,11 @@ describe('fetchCnKLines 缓存路由', () => {
     json: async () => ({ data: { sh600519: { [key]: rows } } })
   })
 
+  let provider: MarketDataProvider
+
   beforeEach(() => {
-    resetServerCaches()
+    // 每个用例重建 provider：缓存为 provider 内部状态，重建即重置（替代原 resetServerCaches）
+    provider = createTencentProvider()
     vi.unstubAllGlobals()
   })
 
@@ -111,8 +197,8 @@ describe('fetchCnKLines 缓存路由', () => {
     const fetchMock = vi.fn(async (_url: string) => fqDay(rows))
     vi.stubGlobal('fetch', fetchMock)
 
-    const a = await fetchCnKLines(symbol, dayPeriod, ts('2026-09-14'), ts('2026-09-15'))
-    const b = await fetchCnKLines(symbol, dayPeriod, ts('2026-09-15'), ts('2026-09-16'))
+    const a = await provider.fetchKLines(symbol, dayPeriod, ts('2026-09-14'), ts('2026-09-15'))
+    const b = await provider.fetchKLines(symbol, dayPeriod, ts('2026-09-15'), ts('2026-09-16'))
     // 核心语义：窗口不同也只回源一次（近端原始数据全员共享），裁剪在缓存外
     expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(String(fetchMock.mock.calls[0][0])).toContain('param=sh600519,day,,,640,qfq')
@@ -128,8 +214,8 @@ describe('fetchCnKLines 缓存路由', () => {
 
     const from = ts('2026-08-01')
     const to = ts('2026-08-04')
-    const bars = await fetchCnKLines(symbol, dayPeriod, from, to)
-    await fetchCnKLines(symbol, dayPeriod, from, to)
+    const bars = await provider.fetchKLines(symbol, dayPeriod, from, to)
+    await provider.fetchKLines(symbol, dayPeriod, from, to)
     // raw 1 次 + hist 1 次；同窗口第二次命中缓存
     expect(fetchMock).toHaveBeenCalledTimes(2)
     const histUrl = fetchMock.mock.calls.map(([url]) => String(url)).find((url) => url.includes(',2026-08-01,'))
@@ -143,7 +229,7 @@ describe('fetchCnKLines 缓存路由', () => {
     vi.stubGlobal('fetch', fetchMock)
     const minute: Period = { span: 1, type: 'minute' }
 
-    const bars = await fetchCnKLines(symbol, minute, 0, new Date('2026-09-18T09:30').getTime() - 1)
+    const bars = await provider.fetchKLines(symbol, minute, 0, new Date('2026-09-18T09:30').getTime() - 1)
     expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(String(fetchMock.mock.calls[0][0])).toContain('/kline/mkline?param=sh600519,m1,,640')
     expect(bars).toEqual([])
@@ -160,7 +246,7 @@ describe('fetchCnKLines 缓存路由', () => {
 
     const from = new Date('2026-09-18T08:00').getTime()
     const to = new Date('2026-09-18T12:00').getTime()
-    const bars = await fetchCnKLines(symbol, hour4, from, to)
+    const bars = await provider.fetchKLines(symbol, hour4, from, to)
     expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(String(fetchMock.mock.calls[0][0])).toContain('mkline?param=sh600519,m60,,640')
     expect(bars).toHaveLength(1)
@@ -183,7 +269,7 @@ describe('fetchCnKLines 缓存路由', () => {
       [ts('2026-09-16'), ts('2026-09-16')],
       [ts('2026-09-15'), ts('2026-09-15')]
     ]
-    const results = await Promise.all(windows.map(([from, to]) => fetchCnKLines(symbol, dayPeriod, from, to)))
+    const results = await Promise.all(windows.map(([from, to]) => provider.fetchKLines(symbol, dayPeriod, from, to)))
     expect(fetchMock).toHaveBeenCalledTimes(1)
     results.forEach((bars, i) => {
       const [from, to] = windows[i]
@@ -205,12 +291,12 @@ describe('fetchCnKLines 缓存路由', () => {
       const fetchMock = vi.fn(async (_url: string) => fqDay(rows))
       vi.stubGlobal('fetch', fetchMock)
 
-      await fetchCnKLines(symbol, dayPeriod, ts('2026-09-15'), ts('2026-09-16'))
-      await fetchCnKLines(symbol, dayPeriod, ts('2026-09-15'), ts('2026-09-16'))
+      await provider.fetchKLines(symbol, dayPeriod, ts('2026-09-15'), ts('2026-09-16'))
+      await provider.fetchKLines(symbol, dayPeriod, ts('2026-09-15'), ts('2026-09-16'))
       expect(fetchMock).toHaveBeenCalledTimes(1)
 
       vi.advanceTimersByTime(3_001)
-      await fetchCnKLines(symbol, dayPeriod, ts('2026-09-15'), ts('2026-09-16'))
+      await provider.fetchKLines(symbol, dayPeriod, ts('2026-09-15'), ts('2026-09-16'))
       expect(fetchMock).toHaveBeenCalledTimes(2)
     } finally {
       vi.useRealTimers()
@@ -227,7 +313,7 @@ describe('fetchCnKLines 缓存路由', () => {
     const fetchMock = vi.fn(async (_url: string) => fqDay(rows))
     vi.stubGlobal('fetch', fetchMock)
 
-    const bars = await fetchCnKLines(symbol, dayPeriod, base, base + 600 * 86_400_000)
+    const bars = await provider.fetchKLines(symbol, dayPeriod, base, base + 600 * 86_400_000)
     expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(bars).toHaveLength(500)
     // 丢最旧 100 根，保留第 100..599 根
@@ -243,12 +329,12 @@ describe('fetchCnKLines 缓存路由', () => {
 
     const oldest = ts('2026-09-14')
     // from == oldest：完全落在近端，仅 raw 一次回源且最旧一根包含在结果里
-    const inside = await fetchCnKLines(symbol, dayPeriod, oldest, ts('2026-09-15'))
+    const inside = await provider.fetchKLines(symbol, dayPeriod, oldest, ts('2026-09-15'))
     expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(inside.map((d) => d.close)).toEqual([14, 15])
 
     // from = oldest - 1ms：转历史查询，URL 带起止日期
-    const hist = await fetchCnKLines(symbol, dayPeriod, oldest - 1, ts('2026-09-15'))
+    const hist = await provider.fetchKLines(symbol, dayPeriod, oldest - 1, ts('2026-09-15'))
     expect(fetchMock).toHaveBeenCalledTimes(2)
     expect(String(fetchMock.mock.calls[1][0])).toContain(
       `param=sh600519,day,${formatTencentDate(oldest - 1)},2026-09-15,640,qfq`
@@ -265,7 +351,7 @@ describe('fetchCnKLines 缓存路由', () => {
 
     // from 早于 raw 最旧 → 走历史查询；to = 今天 → end 参数必须为空
     const from = now - 10 * 86_400_000
-    const bars = await fetchCnKLines(symbol, dayPeriod, from, now)
+    const bars = await provider.fetchKLines(symbol, dayPeriod, from, now)
     const histUrl = String(fetchMock.mock.calls.find(([url]) => String(url).includes(`,${tenDaysAgo},`))?.[0])
     expect(histUrl).toContain(`param=sh600519,day,${tenDaysAgo},,640,qfq`)
     expect(bars.map((d) => d.close)).toEqual([2, 1])
@@ -281,8 +367,10 @@ describe('fetchCnKLines 缓存路由', () => {
     })
     vi.stubGlobal('fetch', fetchMock)
 
-    await expect(fetchCnKLines(symbol, dayPeriod, ts('2026-09-15'), ts('2026-09-16'))).rejects.toThrow('upstream down')
-    const bars = await fetchCnKLines(symbol, dayPeriod, ts('2026-09-15'), ts('2026-09-16'))
+    await expect(provider.fetchKLines(symbol, dayPeriod, ts('2026-09-15'), ts('2026-09-16'))).rejects.toThrow(
+      'upstream down'
+    )
+    const bars = await provider.fetchKLines(symbol, dayPeriod, ts('2026-09-15'), ts('2026-09-16'))
     expect(fetchMock).toHaveBeenCalledTimes(2)
     expect(bars.map((d) => d.close)).toEqual([15])
   })
@@ -292,8 +380,8 @@ describe('fetchCnKLines 缓存路由', () => {
     vi.stubGlobal('fetch', fetchMock)
     const week: Period = { span: 1, type: 'week' }
 
-    await fetchCnKLines(symbol, dayPeriod, ts('2026-09-15'), ts('2026-09-16'))
-    await fetchCnKLines(symbol, week, ts('2026-09-15'), ts('2026-09-16'))
+    await provider.fetchKLines(symbol, dayPeriod, ts('2026-09-15'), ts('2026-09-16'))
+    await provider.fetchKLines(symbol, week, ts('2026-09-15'), ts('2026-09-16'))
     expect(fetchMock).toHaveBeenCalledTimes(2)
     expect(String(fetchMock.mock.calls[0][0])).toContain(',day,')
     expect(String(fetchMock.mock.calls[1][0])).toContain(',week,')
@@ -303,9 +391,72 @@ describe('fetchCnKLines 缓存路由', () => {
     const fetchMock = vi.fn(async (_url: string) => fqDay([dayRow('2026-09-15', 15)]))
     vi.stubGlobal('fetch', fetchMock)
 
-    await fetchCnKLines(symbol, dayPeriod, ts('2026-09-15'), ts('2026-09-16'))
-    await fetchCnKLines({ market: 'sz', ticker: '000001' }, dayPeriod, ts('2026-09-15'), ts('2026-09-16'))
+    await provider.fetchKLines(symbol, dayPeriod, ts('2026-09-15'), ts('2026-09-16'))
+    await provider.fetchKLines({ market: 'sz', ticker: '000001' }, dayPeriod, ts('2026-09-15'), ts('2026-09-16'))
     expect(fetchMock).toHaveBeenCalledTimes(2)
     expect(String(fetchMock.mock.calls[1][0])).toContain('param=sz000001,day,')
   })
+})
+
+describe('tencent provider 契约', () => {
+  /** GBK 文本响应桩（数字段 ASCII 安全） */
+  const gbkText = (text: string) => ({ ok: true, arrayBuffer: async () => new TextEncoder().encode(text) })
+
+  beforeEach(() => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.includes('qt.gtimg.cn')) {
+          return gbkText(buildQtText('sh600519', { 1: 'Foo', 3: '1700.00', 4: '1675.00' }))
+        }
+        if (url.includes('/kline/mkline')) {
+          return {
+            ok: true,
+            json: async () => ({
+              data: { sh600519: { m1: [['202609180930', '10.00', '10.50', '11.00', '9.00', '100']] } }
+            })
+          }
+        }
+        if (url.includes('fqkline/get')) {
+          return {
+            ok: true,
+            json: async () => ({
+              data: {
+                sh600519: {
+                  qfqday: [
+                    ['2026-09-14', '10.00', '14', '11.00', '9.00', '1000'],
+                    ['2026-09-15', '10.00', '15', '11.00', '9.00', '1000'],
+                    ['2026-09-16', '10.00', '16', '11.00', '9.00', '1000']
+                  ]
+                }
+              }
+            })
+          }
+        }
+        if (url.includes('day/query')) {
+          return {
+            ok: true,
+            json: async () => ({
+              data: {
+                sh600519: {
+                  qt: { sh600519: ['', 'Foo', '600519', '1700.00', '1675.00'] },
+                  data: [{ date: '20260918', data: ['0930 1700.00 100 170000.00'] }]
+                }
+              }
+            })
+          }
+        }
+        if (url.includes('smartbox')) {
+          return gbkText('v_hint=["sh600519~Foo~gp~sh"]')
+        }
+        throw new Error(`unexpected upstream url: ${url}`)
+      })
+    )
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  runProviderContractTests(() => createTencentProvider())
 })

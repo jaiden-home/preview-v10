@@ -69,12 +69,18 @@ React UI 组件，当前仅有 `terminal/` 一个子目录，存放交易终端�
   - `api.ts` / `types.ts` / `constants.ts`：BFF 请求封装、领域类型与常量。
   - `*.test.ts`：上述模块的单元测试（与源码同目录）。
 - `server/`：仅服务端使用的模块（不进入客户端 bundle）。
-  - `tencent.ts`：腾讯行情上游客户端（服务端 fetch、GBK 解码、超时兜底）。
+  - `market-service.ts`：行情服务（BFF 路由与页面的唯一入口）：数据源编排、能力降级、SSR 初始数据聚合。
+  - `provider/`：数据源抽象层（切换服务商只动此目录）。
+    - `types.ts`：`MarketDataProvider` 接口 + `ProviderCapabilities` 能力声明 + `ProviderError`。
+    - `registry.ts`：按 `DATA_PROVIDER` 环境变量选择数据源实例（进程内单例）。
+    - `periods.ts`：周期兜底计划（原生周期透传，缺口周期基周期拉取 + 本地聚合）。
+    - `contract.ts`：provider 契约测试套件（新数据源上线须通过）。
+    - `tencent/`：腾讯数据源实现（`http` 传输 / `parse` 协议解析 / `quote`·`kline`·`timeshare`·`search` 四类接口 / `index` 组装与缓存策略）。
   - `cache.ts`：TTL 缓存（含在途请求去重）。
   - `rate-limit.ts`：按 IP 滑动窗口限流。
   - `schemas.ts` / `env.ts`：zod 接口参数校验与环境变量解析。
   - `api.ts` / `logger.ts`：路由层公共封装与 pino 结构化日志。
-- 根级文件：`fundamental.ts`（腾讯实时行情文本解析 + 基本面回溯）、`i18n.ts`（中英双语文案，`#en-US` hash 兼容原 SPA）。
+- 根级文件：`fundamental.ts`（基本面展示回溯与信息表格渲染）、`i18n.ts`（中英双语文案，`#en-US` hash 兼容原 SPA）。
 
 ## tests/
 

@@ -2,7 +2,7 @@ import type { NextRequest } from 'next/server'
 import { allowRequest, jsonError, jsonOk, queryObject, requestIdOf } from '@/lib/server/api'
 import { requestLogger } from '@/lib/server/logger'
 import { klineQuerySchema } from '@/lib/server/schemas'
-import { fetchCnKLines } from '@/lib/server/tencent'
+import { fetchKLines } from '@/lib/server/market-service'
 import { findPeriodOption } from '@/lib/chart/constants'
 
 export const dynamic = 'force-dynamic'
@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
     return jsonError(400, 'invalid_params', `unsupported period: ${periodKey}`)
   }
   try {
-    const bars = await fetchCnKLines(
+    const bars = await fetchKLines(
       { market: symbol.slice(0, 2), ticker: symbol.slice(2) },
       { span: option.span, type: option.type },
       from,

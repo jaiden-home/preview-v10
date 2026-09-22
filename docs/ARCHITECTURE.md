@@ -120,7 +120,9 @@ flowchart TD
         PURE["timeshare · utils · info-cells · params<br/>纯函数，SSR 与客户端同源复用"]
     end
     subgraph L4["服务端层 lib/server/（仅 Node）"]
-        TCT["tencent 上游客户端"]
+        MS["market-service 行情服务<br/>数据源编排 · 能力降级 · 初始聚合"]
+        PRV["provider 数据源抽象层<br/>MarketDataProvider 接口 · registry"]
+        TCT["provider/tencent 腾讯实现<br/>http · parse · quote/kline/timeshare/search"]
         CACHE["TTLCache<br/>LRU + 在途去重"]
         RL["滑动窗口限流器"]
         ZOD["schemas · env（zod）"]
@@ -132,10 +134,10 @@ flowchart TD
     MW --> PAGES
     MW --> API
     PAGES --> TT
-    PAGES --> TCT
+    PAGES --> MS
     API --> ZOD
     API --> RL
-    API --> CACHE
+    API --> MS
     TT --> SUB
     TT --> CT
     TT --> PURE
@@ -145,7 +147,9 @@ flowchart TD
     DL --> API
     CT -. 动态 import .-> KC
     REG -. 动态 import .-> KC
-    CACHE --> TCT
+    MS --> PRV
+    PRV --> TCT
+    TCT --> CACHE
     TCT --> UP
 ```
 
@@ -167,15 +171,17 @@ flowchart TD
 
 ### 4.3 BFF 服务端层（`lib/server/`，仅服务端）
 
-| 模块            | 职责                                                                                                                                                                |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `tencent.ts`    | 腾讯上游客户端（唯一上游出口）：实时快照、分钟/日周月 K（qfq 前复权）、分时、昨收兜底、smartbox 搜索；GBK 解码、UA/Referer 伪装、`no-store` + `AbortSignal.timeout` |
-| `cache.ts`      | `TTLCache<T>`：LRU 淘汰 + 过期清扫 + **在途请求去重**                                                                                                               |
-| `rate-limit.ts` | `SlidingWindowRateLimiter`：按 IP 精确滑动窗口                                                                                                                      |
-| `schemas.ts`    | zod 查询参数 schema（symbol 正则、period 枚举、from<to、q 长度 1–40）                                                                                               |
-| `api.ts`        | 路由公共工具：`jsonOk/jsonError`（统一 `Cache-Control: no-store`）、进程级共享限流器、`requestIdOf`、`queryObject`                                                  |
-| `env.ts`        | zod 校验环境变量，进程内懒解析一次，非法值启动期快速失败                                                                                                            |
-| `logger.ts`     | pino 全局 logger + `requestLogger(requestId)` 派生 child logger                                                                                                     |
+| 模块                | 职责                                                                                                                                                                                                                                                               |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `market-service.ts` | 行情服务（BFF 与页面的唯一入口）：按 `DATA_PROVIDER` 取数据源实例；能力降级（无分时 → 当日 1 分钟 K 合成，无联想搜索 → 代码精确匹配）；`fetchInitialTerminalData` 聚合                                                                                             |
+| `provider/`         | 数据源抽象层：`types.ts`（`MarketDataProvider` 接口 + `ProviderCapabilities`）、`registry.ts`（env 选择，进程内单例）、`periods.ts`（周期兜底）、`contract.ts`（契约测试套件）                                                                                     |
+| `provider/tencent/` | 腾讯数据源实现（唯一上游出口）：`http.ts` 传输（UA/Referer 伪装、GBK 解码、超时）、`parse.ts` 协议解析（qt 行情、K 线行、分时点、smartbox、周期映射）、`quote/kline/timeshare/search` 四类接口、`index.ts` 组装与缓存策略（raw/hist 分层，key 带 `tencent:` 前缀） |
+| `cache.ts`          | `TTLCache<T>`：LRU 淘汰 + 过期清扫 + **在途请求去重**                                                                                                                                                                                                              |
+| `rate-limit.ts`     | `SlidingWindowRateLimiter`：按 IP 精确滑动窗口                                                                                                                                                                                                                     |
+| `schemas.ts`        | zod 查询参数 schema（symbol 正则、period 枚举、from<to、q 长度 1–40）                                                                                                                                                                                              |
+| `api.ts`            | 路由公共工具：`jsonOk/jsonError`（统一 `Cache-Control: no-store`）、进程级共享限流器、`requestIdOf`、`queryObject`                                                                                                                                                 |
+| `env.ts`            | zod 校验环境变量，进程内懒解析一次，非法值启动期快速失败                                                                                                                                                                                                           |
+| `logger.ts`         | pino 全局 logger + `requestLogger(requestId)` 派生 child logger                                                                                                                                                                                                    |
 
 ### 4.4 图表域层（`lib/chart/`，环境无关 + 客户端图表控制器）
 
@@ -191,7 +197,7 @@ flowchart TD
 | `constants.ts`      | 周期表、指标清单、绘图工具、A 股配色、分时常量等                                                            |
 | `api.ts`            | 客户端 BFF 请求封装（失败静默返回 null，由调用方兜底）                                                      |
 | `types.ts`          | `SymbolRef`、`QuoteSnapshot`、`FundamentalData`、`SYMBOL_PATTERN` 等类型与校验                              |
-| `../fundamental.ts` | qt 实时行情文本解析 + 基本面历史回溯（悬停 K 线按价格比例近似）                                             |
+| `../fundamental.ts` | 基本面展示回溯（悬停 K 线按价格比例近似）+ 信息表格渲染数据                                                 |
 | `../i18n.ts`        | 极简双语：`中文                                                                                             | English`键 +`#en-US` hash 读取（兼容原 SPA） |
 
 ### 4.5 组件层（`components/terminal/`）
@@ -363,7 +369,11 @@ sequenceDiagram
 
 **缓存 TTL 与轮询对齐**：quote/timeshare 2s（适配 3s 轮询）、kline 10s、search 5min，均可经环境变量调整。
 
-### 5.8 上游适配（`tencent.ts`）
+### 5.8 上游适配（`provider/tencent/`）
+
+行情数据源经 `MarketDataProvider` 接口抽象（`lib/server/provider/types.ts`），`market-service.ts` 是 BFF 与页面的唯一入口，`registry.ts` 按 `DATA_PROVIDER` 环境变量选择实现——切换数据服务商只需新增 provider 目录并通过契约测试（`contract.ts`），路由与前端零改动。能力缺口由服务层降级：无原生分时 → 当日 1 分钟 K 合成；无联想搜索 → 6 位代码精确匹配；缺口周期（如 4h）由 `periods.ts` 计划基周期拉取后本地聚合。
+
+腾讯实现的接口端点：
 
 | 接口       | URL                                              | 用途                                |
 | ---------- | ------------------------------------------------ | ----------------------------------- |
@@ -446,8 +456,9 @@ sequenceDiagram
 ├── lib/
 │   ├── chart/                # 与环境无关的图表域逻辑（terminal / data-loader /
 │   │                         #   registers / timeshare / utils / info-cells / params / ...）
-│   ├── server/               # 仅服务端：tencent 上游 / TTL 缓存 / 限流 / zod / pino / env
-│   ├── fundamental.ts        # qt 文本解析 + 基本面历史回溯
+│   ├── server/               # 仅服务端：market-service / provider 数据源层（tencent 实现）/
+│   │                         #   TTL 缓存 / 限流 / zod / pino / env
+│   ├── fundamental.ts        # 基本面展示回溯 + 信息表格渲染数据
 │   └── i18n.ts               # 双语文案（#en-US hash）
 ├── e2e/                      # Playwright 冒烟
 ├── tests/                    # ChartTerminal 集成测试（mock klinecharts）
@@ -516,16 +527,17 @@ quality（format:check → lint → typecheck → vitest）
 
 ### 9.3 环境变量（zod 校验，启动期快速失败）
 
-| 变量                                            | 默认                              | 说明                     |
-| ----------------------------------------------- | --------------------------------- | ------------------------ |
-| `PORT` / `HOSTNAME`                             | `3000` / `0.0.0.0`                | 服务监听                 |
-| `LOG_LEVEL`                                     | `info`                            | pino 级别                |
-| `UPSTREAM_TIMEOUT_MS`                           | `5000`                            | 上游超时（≤ 30000）      |
-| `CACHE_QUOTE_TTL_MS` / `CACHE_TIMESHARE_TTL_MS` | `2000`                            | 与 3s 轮询对齐           |
-| `CACHE_KLINE_TTL_MS`                            | `10000`                           | K 线缓存                 |
-| `CACHE_SEARCH_TTL_MS`                           | `300000`                          | 搜索联想缓存             |
-| `RATE_LIMIT_PER_MINUTE`                         | `240`                             | 每 IP 每分钟上限（≥ 10） |
-| `SITE_URL`                                      | `https://preview.klinecharts.com` | metadata base            |
+| 变量                                            | 默认                              | 说明                                   |
+| ----------------------------------------------- | --------------------------------- | -------------------------------------- |
+| `PORT` / `HOSTNAME`                             | `3000` / `0.0.0.0`                | 服务监听                               |
+| `DATA_PROVIDER`                                 | `tencent`                         | 行情数据源（provider/registry 登记项） |
+| `LOG_LEVEL`                                     | `info`                            | pino 级别                              |
+| `UPSTREAM_TIMEOUT_MS`                           | `5000`                            | 上游超时（≤ 30000）                    |
+| `CACHE_QUOTE_TTL_MS` / `CACHE_TIMESHARE_TTL_MS` | `2000`                            | 与 3s 轮询对齐                         |
+| `CACHE_KLINE_TTL_MS`                            | `10000`                           | K 线缓存                               |
+| `CACHE_SEARCH_TTL_MS`                           | `300000`                          | 搜索联想缓存                           |
+| `RATE_LIMIT_PER_MINUTE`                         | `240`                             | 每 IP 每分钟上限（≥ 10）               |
+| `SITE_URL`                                      | `https://preview.klinecharts.com` | metadata base                          |
 
 ---
 

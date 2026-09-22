@@ -3,7 +3,9 @@ import { z } from 'zod'
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
-  /** 上游（腾讯行情）请求超时 */
+  /** 行情数据源（provider/registry.ts 登记的 id；切换服务商时扩展枚举） */
+  DATA_PROVIDER: z.enum(['tencent']).default('tencent'),
+  /** 上游行情请求超时 */
   UPSTREAM_TIMEOUT_MS: z.coerce.number().int().positive().max(30_000).default(5_000),
   /** 实时行情缓存 TTL（与 3 秒轮询对齐） */
   CACHE_QUOTE_TTL_MS: z.coerce.number().int().min(500).default(2_000),

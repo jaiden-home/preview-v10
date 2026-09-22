@@ -1,7 +1,7 @@
 import TradingTerminal from '@/components/terminal/TradingTerminal'
 import { DEFAULT_SYMBOL_CODE } from '@/lib/chart/constants'
 import { parseSymbolCode } from '@/lib/chart/types'
-import { fetchInitialTerminalData } from '@/lib/server/tencent'
+import { fetchInitialTerminalData } from '@/lib/server/market-service'
 
 export const dynamic = 'force-dynamic'
 

@@ -2,7 +2,7 @@ import type { NextRequest } from 'next/server'
 import { allowRequest, jsonError, jsonOk, queryObject, requestIdOf } from '@/lib/server/api'
 import { requestLogger } from '@/lib/server/logger'
 import { searchQuerySchema } from '@/lib/server/schemas'
-import { searchCnSymbols } from '@/lib/server/tencent'
+import { searchSymbols } from '@/lib/server/market-service'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
     return jsonError(429, 'rate_limited', 'too many requests')
   }
   try {
-    const items = await searchCnSymbols(parsed.data.q)
+    const items = await searchSymbols(parsed.data.q)
     return jsonOk({ items })
   } catch (error) {
     log.error({ err: String(error), q: parsed.data.q }, 'search upstream failed')
