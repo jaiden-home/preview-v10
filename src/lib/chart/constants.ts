@@ -1,4 +1,4 @@
-import type { Period } from 'klinecharts'
+import type { DeepPartial, Period, Styles } from 'klinecharts'
 import type { SymbolSearchItem } from './types'
 
 export const BAR_LIMIT = 500
@@ -248,3 +248,44 @@ export const TIME_SHARE_TOTAL_BARS = 242
 /** 分时上下留白对称，保证昨收基准线严格居中（默认 gap 上 0.2 / 下 0.1 不对称） */
 export const TIME_SHARE_AXIS_GAP = { top: 0.08, bottom: 0.08 }
 export const DEFAULT_AXIS_GAP = { top: 0.2, bottom: 0.1 }
+
+// ==================== 移动端紧凑价格轴 ====================
+
+/** 移动端视口断点（px），与 globals.css `@media (max-width: 768px)` 一致 */
+export const MOBILE_VIEWPORT_MAX = 768
+
+/**
+ * 移动端紧凑价格轴：klinecharts 右轴 auto 宽 = 轴线 + 刻度线 + 刻度文本（含边距），
+ * 且不小于最新价标签与十字光标横标签的宽度——三者须同步压缩，刻度区才能整体收窄，
+ * 让位给 K 线主体。
+ */
+export const COMPACT_AXIS_STYLES: DeepPartial<Styles> = {
+  yAxis: {
+    tickText: { size: 9, marginStart: 2, marginEnd: 2 },
+    tickLine: { show: false }
+  },
+  candle: {
+    priceMark: {
+      last: { text: { size: 9, paddingLeft: 2, paddingRight: 2 } }
+    }
+  },
+  crosshair: {
+    horizontal: { text: { size: 9, paddingLeft: 2, paddingRight: 2 } }
+  }
+}
+
+/** 退出移动端视口后还原 klinecharts 默认轴样式（值与库默认一致） */
+export const COMPACT_AXIS_STYLES_RESTORE: DeepPartial<Styles> = {
+  yAxis: {
+    tickText: { size: 12, marginStart: 4, marginEnd: 6 },
+    tickLine: { show: true }
+  },
+  candle: {
+    priceMark: {
+      last: { text: { size: 12, paddingLeft: 4, paddingRight: 4 } }
+    }
+  },
+  crosshair: {
+    horizontal: { text: { size: 12, paddingLeft: 4, paddingRight: 4 } }
+  }
+}

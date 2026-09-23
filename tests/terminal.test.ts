@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { KLineData } from 'klinecharts'
 import { timeShareState } from '@/lib/chart/timeshare'
+import { COMPACT_AXIS_STYLES, COMPACT_AXIS_STYLES_RESTORE, MOBILE_VIEWPORT_MAX } from '@/lib/chart/constants'
 
 // klinecharts 内部 DOM 桩：主图主区固定 400×300（0,0 起），画布宽 555
 const fakeDom = vi.hoisted(() => {
@@ -127,6 +128,11 @@ const stubJsonFetch = (payload: unknown) => {
   const fetchMock = vi.fn(async (_url: string) => ({ ok: true, json: async () => payload }))
   vi.stubGlobal('fetch', fetchMock)
   return fetchMock
+}
+
+// jsdom 视口宽默认 1024（桌面形态），按需改写模拟移动端
+const stubViewportWidth = (width: number) => {
+  Object.defineProperty(window, 'innerWidth', { value: width, configurable: true })
 }
 
 describe('图表终端控制器', () => {
@@ -319,6 +325,126 @@ describe('图表终端控制器', () => {
       )
     } finally {
       vi.unstubAllGlobals()
+    }
+  })
+
+  it('移动端视口初始化：价格轴悬浮图上并应用紧凑样式', async () => {
+    stubJsonFetch({})
+    stubViewportWidth(375)
+    try {
+      await createTerminal()
+      // init layout 为此后新建轴定 inside 默认
+      expect(mockInit).toHaveBeenCalledWith(expect.anything(), {
+        locale: 'zh-CN',
+        timezone: 'Asia/Shanghai',
+        layout: { yAxis: { inside: true } }
+      })
+      // 已有轴（主图/VOL/MACD）经 override 悬浮
+      expect(mockChart.overrideYAxis).toHaveBeenCalledWith({ inside: true })
+      expect(mockChart.setStyles).toHaveBeenCalledWith(COMPACT_AXIS_STYLES)
+    } finally {
+      vi.unstubAllGlobals()
+      stubViewportWidth(1024)
+    }
+  })
+
+  it('桌面端视口初始化：价格轴不悬浮，显式下发默认轴样式', async () => {
+    stubJsonFetch({})
+    try {
+      await createTerminal()
+      expect(mockInit).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ layout: { yAxis: { inside: false } } })
+      )
+      expect(mockChart.overrideYAxis).toHaveBeenCalledWith({ inside: false })
+      expect(mockChart.setStyles).toHaveBeenCalledWith(COMPACT_AXIS_STYLES_RESTORE)
+      expect(mockChart.setStyles).not.toHaveBeenCalledWith(COMPACT_AXIS_STYLES)
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('resize 跨断点翻转价格轴悬浮形态与紧凑样式，同形态不重复下发', async () => {
+    stubJsonFetch({})
+    try {
+      const { terminal } = await createTerminal()
+      vi.clearAllMocks()
+      // 桌面形态下 resize：形态未翻转，不下发命令
+      terminal.resize()
+      expect(mockChart.setStyles).not.toHaveBeenCalled()
+      expect(mockChart.overrideYAxis).not.toHaveBeenCalled()
+      // 收窄到移动端断点（含边界值 768）：悬浮 + 紧凑样式并重算布局
+      stubViewportWidth(MOBILE_VIEWPORT_MAX)
+      terminal.resize()
+      expect(mockChart.setStyles).toHaveBeenCalledTimes(1)
+      expect(mockChart.setStyles).toHaveBeenCalledWith(COMPACT_AXIS_STYLES)
+      expect(mockChart.overrideYAxis).toHaveBeenCalledTimes(1)
+      expect(mockChart.overrideYAxis).toHaveBeenCalledWith({ inside: true })
+      expect(mockChart.resize).toHaveBeenCalled()
+      // 放大回桌面：退出悬浮并还原默认轴样式
+      stubViewportWidth(1200)
+      terminal.resize()
+      expect(mockChart.setStyles).toHaveBeenLastCalledWith(COMPACT_AXIS_STYLES_RESTORE)
+      expect(mockChart.overrideYAxis).toHaveBeenLastCalledWith({ inside: false })
+    } finally {
+      vi.unstubAllGlobals()
+      stubViewportWidth(1024)
+    }
+  })
+
+  it('主题切换整体替换样式后重放紧凑价格轴', async () => {
+    stubJsonFetch({})
+    stubViewportWidth(375)
+    try {
+      const { terminal } = await createTerminal()
+      vi.clearAllMocks()
+      terminal.setTheme(true)
+      expect(mockChart.setStyles).toHaveBeenCalledWith('dark')
+      expect(mockChart.setStyles).toHaveBeenCalledWith(COMPACT_AXIS_STYLES)
+      expect(mockChart.overrideYAxis).toHaveBeenCalledWith({ inside: true })
+    } finally {
+      vi.unstubAllGlobals()
+      stubViewportWidth(1024)
+    }
+  })
+
+  it('跨断点后新建轴（副图/分时百分比轴）重申悬浮形态', async () => {
+    stubJsonFetch(timeShareSnapshot)
+    try {
+      const { terminal } = await createTerminal()
+      const loader = grabLoader()
+      // 桌面初始化后翻转到移动端
+      stubViewportWidth(375)
+      terminal.resize()
+      vi.clearAllMocks()
+      // 新建副图：轴按 init 默认（不悬浮）创建，随后被重申为悬浮
+      terminal.toggleSubIndicator('KDJ', true)
+      expect(mockChart.createIndicator).toHaveBeenCalledWith({ name: 'KDJ' })
+      expect(mockChart.overrideYAxis).toHaveBeenCalledWith({ inside: true })
+      // 分时百分比轴同理：数据就绪后创建并重申悬浮形态
+      terminal.applyPeriodKey('time')
+      await loader.getBars({
+        type: 'init',
+        timestamp: null,
+        symbol: { ticker: '600519', pricePrecision: 2, volumePrecision: 0, market: 'sh' },
+        period: { span: 1, type: 'minute' },
+        callback: vi.fn()
+      })
+      expect(mockChart.createYAxis).toHaveBeenCalledWith({
+        paneId: 'candle_pane',
+        position: 'left',
+        name: 'cnTimePercent'
+      })
+      // 百分比轴创建后先重申悬浮，再下发分时轴 range/gap（末次调用）
+      expect(mockChart.overrideYAxis).toHaveBeenCalledWith({ inside: true })
+      expect(mockChart.overrideYAxis).toHaveBeenLastCalledWith({
+        paneId: 'candle_pane',
+        createRange: expect.any(Function),
+        gap: { top: 0.08, bottom: 0.08 }
+      })
+    } finally {
+      vi.unstubAllGlobals()
+      stubViewportWidth(1024)
     }
   })
 

@@ -14,7 +14,10 @@ import { fetchQuoteSnapshot } from './api'
 import {
   CN_DOWN_COLOR,
   CN_UP_COLOR,
+  COMPACT_AXIS_STYLES,
+  COMPACT_AXIS_STYLES_RESTORE,
   DEFAULT_AXIS_GAP,
+  MOBILE_VIEWPORT_MAX,
   PERCENT_Y_AXIS_NAME,
   TIME_SHARE_AXIS_GAP,
   TIME_SHARE_TOTAL_BARS,
@@ -72,6 +75,8 @@ export class ChartTerminal {
   private drawingOverlayId: string | null = null
   private latestFundamental: FundamentalData
   private destroyed = false
+  /** 当前是否处于紧凑价格轴形态（移动端视口） */
+  private compactAxis = false
 
   constructor(private readonly options: ChartTerminalOptions) {
     this.latestFundamental = options.initialQuote?.fundamental ?? {}
@@ -89,7 +94,10 @@ export class ChartTerminal {
 
     const chart = klinecharts.init(this.options.container, {
       locale: this.options.locale,
-      timezone: 'Asia/Shanghai'
+      timezone: 'Asia/Shanghai',
+      // 移动端价格轴悬浮图上（inside 轴不占主区宽度）：layout 是此后所有
+      // 新建轴（副图 / 分时百分比轴）的 inside 默认，init 后无法再改，只能 override
+      layout: { yAxis: { inside: this.isMobileViewport() } }
     })
     if (!chart) {
       return
@@ -111,6 +119,7 @@ export class ChartTerminal {
     this.setSymbol(this.options.symbol)
     this.applyCnColorScheme()
     this.applyTooltipStyles()
+    this.syncAxisCompactness(true)
     chart.createIndicator({ name: 'MA', paneId: 'candle_pane' }, true)
     chart.createIndicator({ name: 'VOL' })
     chart.createIndicator({ name: 'MACD' })
@@ -139,6 +148,8 @@ export class ChartTerminal {
 
   /** 容器盒尺寸变化时重算画布布局（klinecharts 不会自动跟随容器伸缩，由钩子的 ResizeObserver 调用） */
   resize(): void {
+    // 先同步紧凑形态（跨断点时样式变化会改轴宽），再重算布局
+    this.syncAxisCompactness()
     this.chart?.resize()
   }
 
@@ -239,6 +250,30 @@ export class ChartTerminal {
     })
   }
 
+  // ==================== 移动端紧凑价格轴 ====================
+
+  private isMobileViewport = (): boolean => window.innerWidth <= MOBILE_VIEWPORT_MAX
+
+  // 移动端价格轴悬浮图上：inside 轴不参与主区宽度分配，画在主区右缘之上，
+  // K 线主体占满整个画布宽；同时压缩轴 auto 宽（刻度文本 / 最新价标签 /
+  // 十字光标横标签三者取最大，见 constants.ts 注释）。
+  // init 与 setTheme 后样式被整体重置须无条件重放（force）；resize 时仅在形态
+  // 翻转（跨断点旋转/缩放窗口）才重放，避免每次布局多余 setStyles。
+  private syncAxisCompactness = (force = false): void => {
+    const compact = this.isMobileViewport()
+    if (!force && compact === this.compactAxis) {
+      return
+    }
+    this.compactAxis = compact
+    this.reassertAxisInside()
+    this.chart?.setStyles(compact ? COMPACT_AXIS_STYLES : COMPACT_AXIS_STYLES_RESTORE)
+  }
+
+  /** 重申全部 y 轴的悬浮形态：init 时 layout 定死的 inside 默认在跨断点后会过期 */
+  private reassertAxisInside = (): void => {
+    this.chart?.overrideYAxis({ inside: this.compactAxis })
+  }
+
   // ==================== 指标 ====================
 
   toggleMainIndicator = (name: string, on: boolean): void => {
@@ -252,6 +287,8 @@ export class ChartTerminal {
   toggleSubIndicator = (name: string, on: boolean): void => {
     if (on) {
       this.chart?.createIndicator({ name })
+      // 新副图轴的 inside 取 init 时的视口默认，跨断点后创建的需重申悬浮形态
+      this.reassertAxisInside()
     } else {
       this.chart?.removeIndicator({ name })
     }
@@ -421,6 +458,8 @@ export class ChartTerminal {
     // 跨交易日重载时形态已就位，避免重复创建百分比轴
     if (this.percentAxisId == null) {
       this.percentAxisId = chart.createYAxis({ paneId: 'candle_pane', position: 'left', name: PERCENT_Y_AXIS_NAME })
+      // 同副图轴：跨断点后新建的百分比轴需重申悬浮形态
+      this.reassertAxisInside()
     }
     chart.overrideYAxis({ paneId: 'candle_pane', createRange: this.timeShareAxisRange, gap: TIME_SHARE_AXIS_GAP })
     chart.overrideXAxis({ createTicks: this.timeShareXTicks })
@@ -617,6 +656,8 @@ export class ChartTerminal {
     this.chart?.setStyles(dark ? 'dark' : 'light')
     // 主题切换会整体替换样式，A 股配色与分时面积图样式需重新应用
     this.applyCnColorScheme()
+    // 紧凑价格轴样式同理，随主题样式整体替换后恢复
+    this.syncAxisCompactness(true)
     if (timeShareState.active) {
       this.applyTimeShareStyles()
     }
