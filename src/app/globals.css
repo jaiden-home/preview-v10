@@ -1866,7 +1866,7 @@ body {
     position: fixed;
     inset: 0;
     z-index: 1090;
-    background-color: rgba(0, 0, 0, 0.3);
+    background-color: rgba(0, 0, 0, 0.2);
   }
 
   /* 展开期间锁定页面滚动（弹层内容自滚） */
@@ -1880,38 +1880,84 @@ body {
     display: none;
   }
 
-  /* 弹层内容：整卡（坞条 + 内容 + 边框）不超过视口 58%，超出部分容器内滚动（弹窗豁免）；
-     border-box 使 padding 计入 max-height；padding 底部让出安全区 */
+  /* 弹层内容：整卡（坞条 + 内容 + 边框）不超过视口 75%（vh 兜底）；
+     border-box 使 padding 计入 max-height；padding 底部让出安全区。
+     弹层高度由内容自然撑高（不设 min-height），经 v2.16 美化重调自然高度 ≈ 390px，
+     ≥595px 高的直板视口均低于上限、整卡不出现内部滚动；
+     overflow 仅作横屏/极矮视口兜底（弹窗豁免唯一滚动容器约束） */
   #app .trade-panel-body {
     box-sizing: border-box;
-    max-height: calc(58vh - var(--dock-h-open) - 1px);
-    max-height: calc(58dvh - var(--dock-h-open) - 1px);
+    max-height: calc(75vh - var(--dock-h-open) - 1px);
+    max-height: calc(75dvh - var(--dock-h-open) - 1px);
     overflow-y: auto;
     gap: 8px;
-    padding: 8px 14px calc(10px + env(safe-area-inset-bottom));
+    padding: 10px 14px calc(12px + env(safe-area-inset-bottom));
   }
 
-  /* 弹层内紧凑化（§3.11 移动端例外，桌面规格不变）：
-     间距降一档 + 次要控件高度收敛（快捷仓位 36 / 重置 32 / 总资产 22px Display-S），
-     主要操作（买卖切换/价格数量输入/提交）保持 40px 触控基线 */
+  /* 弹层内紧凑而有节奏（§3.11 移动端例外，桌面规格不变；v2.16 美化重调）：
+     间距层级化——组内（表单 6px / 单元格 2~3px）紧、组间（正文 8px）松，
+     数据行行高回升 1.4（触控目标间 ≥8px 由 6px 组距 + 控件自身内边距保证）；
+     控件降档（v2.13 产品决策，§5 触控基线的移动端弹层例外）：
+     主要操作（买卖切换/价格数量输入/提交）36px、次要控件（重置）28px，
+     字段标签 Secondary 11px / 摘要指标值 Secondary 11px / 总资产 22px Display-S */
   #app .order-body {
     gap: 6px;
+  }
+
+  #app .side-btn {
+    height: 36px;
   }
 
   #app .order-field {
     gap: 3px;
   }
 
-  #app .quick-btn {
+  #app .order-field-label {
+    font-size: 11px;
+    line-height: 1.4;
+  }
+
+  #app .order-input {
     height: 36px;
   }
 
+  #app .quick-btn {
+    height: 32px;
+  }
+
+  #app .order-submit {
+    height: 36px;
+  }
+
+  /* 涨跌停/最大可买小格：移动端改单行横排（标签+值内联），省一整行高度；
+     竖排（标签上/值下）为桌面形态（§3.8），此处为移动端排版例外 */
+  #app .order-limits {
+    gap: 6px;
+  }
+
   #app .limit-cell {
-    padding: 4px;
+    flex-direction: row;
+    justify-content: center;
+    gap: 6px;
+    padding: 4px 8px;
+  }
+
+  #app .limit-label,
+  #app .limit-value {
+    line-height: 1.4;
   }
 
   #app .order-estimate {
-    padding: 4px 12px;
+    padding: 6px 12px;
+  }
+
+  #app .estimate-cell {
+    gap: 2px;
+  }
+
+  #app .estimate-label,
+  #app .estimate-value {
+    line-height: 1.4;
   }
 
   #app .panel-summary {
@@ -1919,17 +1965,55 @@ body {
     padding-top: 8px;
   }
 
+  /* 摘要 hero：移动端总资产大数与总盈亏同行基线对齐（省一行高度）——
+     头行（标签+重置）独占首行，gap 归零整体贴紧（盈亏自带「总盈亏」文字前缀，与大数不粘连）；
+     窄屏盈亏过长时在自身列内换行不破版 */
+  #app .summary-hero {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: baseline;
+    gap: 0 4px;
+  }
+
+  #app .summary-head {
+    grid-column: 1 / -1;
+  }
+
   #app .summary-head .tb-btn {
-    height: 32px;
-    padding: 0 10px;
+    height: 28px;
+    padding: 0 8px;
   }
 
   #app .summary-total {
     font-size: 22px;
   }
 
+  #app .summary-pnl {
+    line-height: 1.4;
+  }
+
+  /* 摘要指标栅格：移动端 2×2 转一行四列（省一整行高度）；窄列去竖分隔线让出宽度，
+     指标值降 Secondary 11px/num 防 7 位数金额在 1/4 列宽下溢出（桌面 2×2 不变，§3.2） */
   #app .summary-grid {
-    row-gap: 4px;
+    grid-template-columns: repeat(4, 1fr);
+  }
+
+  #app .summary-grid .stat-cell:nth-child(even) {
+    padding-left: 0;
+    border-left: none;
+  }
+
+  #app .stat-cell {
+    gap: 2px;
+  }
+
+  #app .stat-label,
+  #app .stat-value {
+    line-height: 1.4;
+  }
+
+  #app .stat-value {
+    font-size: 11px;
   }
 
   /* 交易坞条（收合态排版）：双 22px 锚点——左名称 / 右现价（语义色），行情头式平衡；
