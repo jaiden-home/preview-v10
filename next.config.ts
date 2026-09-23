@@ -5,6 +5,8 @@ const nextConfig: NextConfig = {
   output: 'standalone',
   poweredByHeader: false,
   reactStrictMode: true,
+  // 允许局域网 IP 访问开发服务器（HMR 跨源放行）
+  allowedDevOrigins: ['192.168.7.99'],
   async headers() {
     return [
       {
