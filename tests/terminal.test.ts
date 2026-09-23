@@ -2,6 +2,24 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { KLineData } from 'klinecharts'
 import { timeShareState } from '@/lib/chart/timeshare'
 
+// klinecharts 内部 DOM 桩：主图主区固定 400×300（0,0 起），画布宽 555
+const fakeDom = vi.hoisted(() => {
+  const canvas = { getBoundingClientRect: () => ({ width: 555 }) }
+  return {
+    root: { style: {} as Record<string, string> },
+    candleMain: {
+      style: {} as Record<string, string>,
+      getBoundingClientRect: () => ({ left: 0, top: 0, right: 400, bottom: 300 }),
+      querySelector: () => canvas
+    },
+    pane: {
+      style: {} as Record<string, string>,
+      getBoundingClientRect: () => ({ width: 555 }),
+      querySelector: () => canvas
+    }
+  }
+})
+
 const mockChart = vi.hoisted(() => ({
   setDataLoader: vi.fn(),
   setSymbol: vi.fn(),
@@ -19,10 +37,15 @@ const mockChart = vi.hoisted(() => ({
   removeYAxis: vi.fn(() => true),
   overrideYAxis: vi.fn(),
   overrideXAxis: vi.fn(),
-  getDom: vi.fn(() => ({
-    getBoundingClientRect: () => ({ width: 555 }),
-    querySelector: () => ({ getBoundingClientRect: () => ({ width: 555 }) })
-  })),
+  getDom: vi.fn((paneId?: string, position?: string) => {
+    if (paneId === 'candle_pane' && position === 'main') {
+      return fakeDom.candleMain
+    }
+    if (paneId == null) {
+      return fakeDom.root
+    }
+    return fakeDom.pane
+  }),
   setBarSpace: vi.fn(),
   setOffsetRightDistance: vi.fn(),
   resize: vi.fn(),
@@ -93,6 +116,13 @@ const createTerminal = async () => {
 
 const grabLoader = () => mockChart.setDataLoader.mock.calls[0][0]
 
+// jsdom 无 TouchEvent 构造器，以普通 Event 合成 touchstart（touches 由调用方给定）
+const dispatchTouchStart = (target: Element, touches: Array<{ clientX: number; clientY: number }>) => {
+  const event = new Event('touchstart', { bubbles: true, cancelable: true })
+  Object.defineProperty(event, 'touches', { value: touches })
+  target.dispatchEvent(event)
+}
+
 const stubJsonFetch = (payload: unknown) => {
   const fetchMock = vi.fn(async (_url: string) => ({ ok: true, json: async () => payload }))
   vi.stubGlobal('fetch', fetchMock)
@@ -104,6 +134,8 @@ describe('图表终端控制器', () => {
     document.body.innerHTML = ''
     window.location.hash = ''
     vi.clearAllMocks()
+    fakeDom.root.style = {}
+    fakeDom.candleMain.style = {}
     mockChart.getIndicators.mockReturnValue(defaultIndicators())
     timeShareState.active = false
     timeShareState.prevClose = Number.NaN
@@ -343,6 +375,65 @@ describe('图表终端控制器', () => {
       mockChart.executeAction.mockClear()
       subscription[1]({ x: 100, y: 50, paneId: 'candle_pane' })
       expect(mockChart.executeAction).not.toHaveBeenCalled()
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('移动端触摸穿透：容器放行纵向滚动，主图主区保持完全接管', async () => {
+    stubJsonFetch({})
+    try {
+      await createTerminal()
+      expect(fakeDom.root.style.touchAction).toBe('pan-y')
+      // overflow:hidden 会使根容器成为触点最近的滚动容器，纵向平移无法链到页面滚动容器
+      expect(fakeDom.root.style.overflow).toBe('visible')
+      expect(fakeDom.candleMain.style.touchAction).toBe('none')
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('副指标等区域触摸被拦截不下发图表，主图主区放行', async () => {
+    stubJsonFetch({})
+    try {
+      const { container } = await createTerminal()
+      // 模拟 klinecharts 在内部子容器上的触摸监听
+      const chartInner = document.createElement('div')
+      container.appendChild(chartInner)
+      const touchSpy = vi.fn()
+      chartInner.addEventListener('touchstart', touchSpy)
+      // 落点在主图主区（400×300）之外 → capture 拦截，监听不触发
+      dispatchTouchStart(chartInner, [{ clientX: 200, clientY: 400 }])
+      expect(touchSpy).not.toHaveBeenCalled()
+      // 多指中任一触点在主区外（副指标上双指缩放）同样拦截
+      dispatchTouchStart(chartInner, [
+        { clientX: 200, clientY: 150 },
+        { clientX: 200, clientY: 350 }
+      ])
+      expect(touchSpy).not.toHaveBeenCalled()
+      // 主图主区内（含双指均在主区）正常放行
+      dispatchTouchStart(chartInner, [{ clientX: 200, clientY: 150 }])
+      dispatchTouchStart(chartInner, [
+        { clientX: 100, clientY: 50 },
+        { clientX: 300, clientY: 250 }
+      ])
+      expect(touchSpy).toHaveBeenCalledTimes(2)
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('destroy 后解除触摸拦截', async () => {
+    stubJsonFetch({})
+    try {
+      const { terminal, container } = await createTerminal()
+      const chartInner = document.createElement('div')
+      container.appendChild(chartInner)
+      const touchSpy = vi.fn()
+      chartInner.addEventListener('touchstart', touchSpy)
+      terminal.destroy()
+      dispatchTouchStart(chartInner, [{ clientX: 200, clientY: 400 }])
+      expect(touchSpy).toHaveBeenCalledTimes(1)
     } finally {
       vi.unstubAllGlobals()
     }

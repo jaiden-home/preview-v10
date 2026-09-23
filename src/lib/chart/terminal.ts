@@ -116,6 +116,7 @@ export class ChartTerminal {
     chart.createIndicator({ name: 'MACD' })
     chart.setPeriod({ span: 1, type: 'day' })
     this.bindCrosshairBridge()
+    this.applyTouchPassthrough()
     this.emitInfo()
     // SSR 未提供基本面（上游超时/失败）时客户端补拉
     if (this.options.initialQuote == null) {
@@ -526,6 +527,51 @@ export class ChartTerminal {
     this.disposers.push(() => {
       container.removeEventListener('mouseleave', onMouseLeave)
       container.removeEventListener('contextmenu', onContextMenu)
+    })
+  }
+
+  // ==================== 移动端触摸穿透 ====================
+
+  /**
+   * klinecharts 给内部容器写死 touch-action: none，移动端整张图吃掉所有触摸，
+   * 手指落在副指标等区域时页面无法滚动。这里仅保留主图（candle_pane 主绘图区）
+   * 的完整手势（拖动平移 / 双指缩放 / 点按十字光标），其余区域放行浏览器纵向滚动。
+   * 同时以 capture 拦截这些区域的 touchstart，让 klinecharts 完全不感知触摸：
+   * 浏览器接管滚动后只派发 touchcancel，而库不会在 touchcancel 上复位内部手势
+   * 状态，若放任其监听触发，会导致下一次触摸整图无响应。桌面端鼠标交互不受影响。
+   */
+  private applyTouchPassthrough = (): void => {
+    const chart = this.chart
+    const candleMain = chart?.getDom('candle_pane', 'main')
+    const root = chart?.getDom()
+    if (chart == null || candleMain == null || root == null) {
+      return
+    }
+    // 容器放宽为纵向可滚（touch-action 取触点元素与祖先的交集，祖先为 none 时后代无法放宽）
+    root.style.touchAction = 'pan-y'
+    // overflow:hidden 会让根容器成为触点最近的滚动容器，纵向平移止步于此、
+    // 不再向外链到页面滚动容器（.trade-scroll），必须改为 visible 才能滚动页面
+    root.style.overflow = 'visible'
+    // 主图主区收紧回 none，保持库默认的完全接管行为不变
+    candleMain.style.touchAction = 'none'
+
+    const container = this.options.container
+    const onTouchStart = (event: TouchEvent) => {
+      // 任一触点落在主图主区之外（副指标、坐标轴、分隔条等）即拦截，
+      // klinecharts 的触摸监听挂在子容器上，capture 拦截后不触发任何图表手势
+      const rect = candleMain.getBoundingClientRect()
+      const inMainPane = (touch: Touch) =>
+        touch.clientX >= rect.left &&
+        touch.clientX <= rect.right &&
+        touch.clientY >= rect.top &&
+        touch.clientY <= rect.bottom
+      if (!Array.from(event.touches).every(inMainPane)) {
+        event.stopImmediatePropagation()
+      }
+    }
+    container.addEventListener('touchstart', onTouchStart, { capture: true, passive: true })
+    this.disposers.push(() => {
+      container.removeEventListener('touchstart', onTouchStart, { capture: true })
     })
   }
 
