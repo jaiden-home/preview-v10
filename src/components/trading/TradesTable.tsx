@@ -16,7 +16,7 @@ const formatTs = (ts: number, locale: 'zh-CN' | 'en-US'): string =>
     day: '2-digit'
   })
 
-/** 成交记录（新成交在前）；桌面为宽表，移动端为三段式信息卡（.trade-list，§3.11） */
+/** 成交记录（新成交在前）；桌面为宽表，移动端为回执票据式信息卡（.trade-list，§3.11） */
 export default function TradesTable({ t, trades, locale }: TradesTableProps) {
   if (trades.length === 0) {
     return (
@@ -77,43 +77,45 @@ export default function TradesTable({ t, trades, locale }: TradesTableProps) {
           </tbody>
         </table>
       </div>
-      {/* 移动端（§3.11）：三段式信息卡——主行（方向+名称+已实现盈亏锚点）/次行（代码+日期）/固定 4 列数据格带，桌面经 CSS 隐藏 */}
+      {/* 移动端（§3.11）：回执票据式信息卡——双锚点头（方向戳记+名称/代码 | 已实现盈亏大数+日期）+ 淡底统计带，桌面经 CSS 隐藏 */}
       <div className="trade-list">
         {trades.map((trade) => (
           <div className="list-item" key={trade.id}>
-            <div className="list-line-main">
-              <span className="cell-name">
-                <span className={`list-side ${trade.side === 'buy' ? 'up' : 'accent'}`}>
-                  {trade.side === 'buy' ? t('买入|Buy') : t('卖出|Sell')}
+            <div className="list-head">
+              <div className="list-id">
+                <span className="cell-name">
+                  <span className={`list-side ${trade.side === 'buy' ? 'up' : 'accent'}`}>
+                    {trade.side === 'buy' ? t('买入|Buy') : t('卖出|Sell')}
+                  </span>
+                  {trade.name || trade.code}
                 </span>
-                {trade.name || trade.code}
-              </span>
-              <span
-                className={`list-main-value ${trade.realizedPnl == null ? 'flat' : trade.realizedPnl > 0 ? 'up' : trade.realizedPnl < 0 ? 'down' : 'flat'}`}
-              >
-                {trade.realizedPnl == null ? '--' : fmtSignedMoney(trade.realizedPnl)}
-              </span>
+                <span className="cell-code">{trade.code}</span>
+              </div>
+              <div className="list-hero">
+                <span
+                  className={`list-hero-value ${trade.realizedPnl == null ? 'flat' : trade.realizedPnl > 0 ? 'up' : trade.realizedPnl < 0 ? 'down' : 'flat'}`}
+                >
+                  {trade.realizedPnl == null ? '--' : fmtSignedMoney(trade.realizedPnl)}
+                </span>
+                <span className="list-hero-sub num">{formatTs(trade.ts, locale)}</span>
+              </div>
             </div>
-            <div className="list-line-sub">
-              <span className="cell-code">{trade.code}</span>
-              <span className="num">{formatTs(trade.ts, locale)}</span>
-            </div>
-            <div className="list-grid">
-              <div className="list-cell">
-                <span className="list-cell-label">{t('价格|Price')}</span>
-                <span className="num list-cell-value">{trade.price.toFixed(2)}</span>
+            <div className="list-stats">
+              <div className="list-stat">
+                <span className="list-stat-label">{t('价格|Price')}</span>
+                <span className="num list-stat-value">{trade.price.toFixed(2)}</span>
               </div>
-              <div className="list-cell">
-                <span className="list-cell-label">{t('数量|Qty')}</span>
-                <span className="num list-cell-value">{trade.qty}</span>
+              <div className="list-stat">
+                <span className="list-stat-label">{t('数量|Qty')}</span>
+                <span className="num list-stat-value">{trade.qty}</span>
               </div>
-              <div className="list-cell">
-                <span className="list-cell-label">{t('金额|Amount')}</span>
-                <span className="num list-cell-value">{fmtMoney(trade.amount)}</span>
+              <div className="list-stat">
+                <span className="list-stat-label">{t('金额|Amount')}</span>
+                <span className="num list-stat-value">{fmtMoney(trade.amount)}</span>
               </div>
-              <div className="list-cell">
-                <span className="list-cell-label">{t('费用|Fee')}</span>
-                <span className="num list-cell-value">{fmtMoney(trade.fee)}</span>
+              <div className="list-stat">
+                <span className="list-stat-label">{t('费用|Fee')}</span>
+                <span className="num list-stat-value">{fmtMoney(trade.fee)}</span>
               </div>
             </div>
           </div>

@@ -25,6 +25,8 @@ body {
   /* 红涨绿跌（A 股语义，与 constants.ts 的 CN_UP_COLOR/CN_DOWN_COLOR 一致，深浅主题共用） */
   --up: #ef2323;
   --down: #14a143;
+  /* 语义红淡底（方向戳记等，与 --tb-active-bg 同范式派生） */
+  --up-bg: rgba(239, 35, 35, 0.1);
   /* 实底（语义色/主色）上的文字与纯白装饰件，深浅主题共用 */
   --on-solid: #ffffff;
 
@@ -74,6 +76,7 @@ body {
   --dropdown-bg: #1c212b;
   /* 与 klinecharts 深色主题网格线一致（#292929 dashed） */
   --chart-grid: #292929;
+  --up-bg: rgba(239, 35, 35, 0.2);
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.28), 0 6px 16px rgba(0, 0, 0, 0.34);
   --shadow-pop: 0 8px 24px rgba(0, 0, 0, 0.5), 0 16px 40px rgba(0, 0, 0, 0.4);
   --page-tint: #0e1219;
@@ -1711,7 +1714,8 @@ body {
     background-color: transparent;
   }
 
-  /* 记录卡移动端列表模式（§3.11）：宽表隐藏，三段式信息卡（主行/次行/数据格带）；
+  /* 记录卡移动端列表模式（§3.11）：宽表隐藏，「回执票据」式信息卡——
+     双锚点头（左身份栈：方向戳记+名称/代码；右数字栈：盈亏大数+元信息）+ 淡底统计带；
      数值一律等宽字族（.num），语义色沿用全局 up/down/flat/accent */
   #app .trade-records .trade-table-wrap {
     display: none;
@@ -1730,8 +1734,8 @@ body {
   #app .list-item {
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    padding: 10px 14px;
+    gap: 6px;
+    padding: 12px 14px;
     border-bottom: 1px solid var(--tb-border);
   }
 
@@ -1739,69 +1743,96 @@ body {
     border-bottom: none;
   }
 
-  /* 主行：名称（成交含方向前缀）左、盈亏锚点右（语义色） */
-  #app .list-line-main {
+  /* 头部双锚点：左身份栈 / 右数字栈（延续交易坞与摘要 hero 的左右锚点语言） */
+  #app .list-head {
     display: flex;
     flex-direction: row;
-    align-items: center;
+    align-items: flex-start;
     justify-content: space-between;
     gap: 8px;
   }
 
-  /* 次行：代码左、元信息右（持仓=盈亏% / 成交=日期） */
-  #app .list-line-sub {
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    font-size: 10px;
-    color: var(--tb-text-sub);
-  }
-
-  #app .list-main-value {
-    font-family: var(--font-num);
-    font-size: 13px;
-    font-weight: 600;
-    font-variant-numeric: tabular-nums;
-    white-space: nowrap;
-  }
-
-  /* 数据格带：固定 4 列等分（标签上/数值下、居中、列间结构细线），列宽恒定不换行 */
-  #app .list-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-  }
-
-  #app .list-cell {
+  #app .list-id {
     display: flex;
     flex-direction: column;
     gap: 2px;
     min-width: 0;
-    padding: 0 2px;
-    text-align: center;
   }
 
-  #app .list-cell + .list-cell {
-    border-left: 1px solid var(--tb-border);
+  #app .list-id .cell-name {
+    font-size: 13px;
   }
 
-  #app .list-cell-label {
+  #app .list-hero {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 1px;
+  }
+
+  /* 盈亏大数：卡片最响的元素（16/700/num，语义色） */
+  #app .list-hero-value {
+    font-family: var(--font-num);
+    font-size: 16px;
+    font-weight: 700;
+    line-height: 1.2;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  #app .list-hero-sub {
     font-size: 10px;
     color: var(--tb-text-sub);
     white-space: nowrap;
   }
 
-  #app .list-cell-value {
+  /* 统计带：淡底圆角容器（复用 .order-estimate 容器语言），四项分散排布、无分隔线 */
+  #app .list-stats {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 6px 10px;
+    border-radius: var(--radius-md);
+    background-color: var(--tb-hover);
+  }
+
+  #app .list-stat {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  #app .list-stat-label {
+    font-size: 10px;
+    color: var(--tb-text-sub);
+    white-space: nowrap;
+  }
+
+  #app .list-stat-value {
     font-size: 11px;
     font-weight: 600;
     white-space: nowrap;
   }
 
-  /* 成交方向前缀（名称行内）：买入红 / 卖出品牌蓝 */
+  /* 成交方向戳记：语义色淡底胶囊（买入红 / 卖出品牌蓝） */
   #app .list-side {
-    margin-right: 4px;
+    display: inline-block;
+    margin-right: 6px;
+    padding: 0 6px;
+    border-radius: 999px;
+    font-size: 10px;
     font-weight: 600;
+    line-height: 1.6;
+  }
+
+  #app .list-side.up {
+    background-color: var(--up-bg);
+  }
+
+  #app .list-side.accent {
+    background-color: var(--tb-active-bg);
   }
 
   /* 委托面板转底部弹层：固定视口底部，收合仅露交易坞（仅过渡 transform）；
