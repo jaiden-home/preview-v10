@@ -89,6 +89,15 @@ body {
   outline-offset: 2px;
 }
 
+/* 主题切换瞬间抑制过渡（useChartTerminal 挂/摘 .theme-switching）：
+   悬停补间 transition 会对变量换值做 0.2s 渐变，与瞬时切换的周围表面错拍而闪烁 */
+#app.theme-switching,
+#app.theme-switching *,
+#app.theme-switching *::before,
+#app.theme-switching *::after {
+  transition: none !important;
+}
+
 /* 动效降级 */
 @media (prefers-reduced-motion: reduce) {
   #app *,

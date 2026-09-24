@@ -98,10 +98,14 @@ export function useChartTerminal(options: UseChartTerminalOptions) {
 
   const toggleTheme = () => {
     const next = !dark
+    const root = document.getElementById('app')
+    // 切换瞬间抑制 CSS 过渡：避免元素对变量换值做 0.2s 补间（按钮底色闪烁）
+    root?.classList.add('theme-switching')
     setDark(next)
     // dark 类挂在应用根节点上，与 #app 命名空间的 CSS 配套
-    document.getElementById('app')?.classList.toggle('dark', next)
+    root?.classList.toggle('dark', next)
     terminalRef.current?.setTheme(next)
+    window.setTimeout(() => root?.classList.remove('theme-switching'), 50)
   }
 
   const changePeriod = (key: PeriodKey) => {
