@@ -30,6 +30,7 @@ export type TradeSide = 'buy' | 'sell'
 
 export interface TradeRecord {
   id: string
+  /** 成交日期时间戳（截断至本地当日 00:00，不记时分秒） */
   ts: number
   code: string
   name: string
@@ -88,6 +89,12 @@ export const dayKeyOf = (ts: number): string => {
   const month = `${d.getMonth() + 1}`.padStart(2, '0')
   const day = `${d.getDate()}`.padStart(2, '0')
   return `${d.getFullYear()}-${month}-${day}`
+}
+
+/** 截断到本地日界的时间戳（成交记录仅记日期） */
+const dayStartOf = (ts: number): number => {
+  const [y, m, d] = dayKeyOf(ts).split('-').map(Number)
+  return new Date(y, m - 1, d).getTime()
 }
 
 /** A 股个股可交易前缀（指数/ETF 等不在模拟交易范围） */
@@ -160,7 +167,8 @@ export const unfreezePositions = (account: TradingAccount, today: string): Tradi
 const nextTradeId = (ts: number): string => `${ts.toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 
 const appendTrade = (account: TradingAccount, record: Omit<TradeRecord, 'id'>): TradeRecord[] => {
-  const trade: TradeRecord = { ...record, id: nextTradeId(record.ts) }
+  // 成交记录仅记日期：ts 截断至本地日界，不记时分秒
+  const trade: TradeRecord = { ...record, ts: dayStartOf(record.ts), id: nextTradeId(record.ts) }
   return [trade, ...account.trades].slice(0, MAX_TRADE_RECORDS)
 }
 

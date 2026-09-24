@@ -11,7 +11,7 @@ import { useChartTerminal } from '@/components/terminal/useChartTerminal'
 import { POLL_INTERVAL_MS } from '@/lib/chart/constants'
 import type { InfoSnapshot } from '@/lib/chart/terminal'
 import { fetchQuoteSnapshot } from '@/lib/chart/api'
-import { parseSymbolCode, type QuoteSnapshot } from '@/lib/chart/types'
+import type { QuoteSnapshot } from '@/lib/chart/types'
 import OrderPanel from './OrderPanel'
 import PositionsTable from './PositionsTable'
 import TradesTable from './TradesTable'
@@ -26,7 +26,6 @@ import {
   loadSelectedSymbol,
   round2,
   saveAccount,
-  saveSelectedSymbol,
   unfreezePositions,
   validateOrder,
   type TradeSide,
@@ -185,16 +184,6 @@ export default function PaperTrading() {
         }
       : null
   const dockClass = dockChange == null || dockChange.abs === 0 ? 'flat' : dockChange.abs > 0 ? 'up' : 'down'
-
-  const handlePositionTrade = (code: string, tradeSide: TradeSide) => {
-    const parsed = parseSymbolCode(code)
-    if (parsed == null) {
-      return
-    }
-    setSelected({ market: parsed.market, ticker: parsed.ticker })
-    saveSelectedSymbol({ market: parsed.market, ticker: parsed.ticker })
-    setSide(tradeSide)
-  }
 
   const handleSubmit = (orderSide: TradeSide, price: number, qty: number) => {
     if (account == null) {
@@ -361,7 +350,7 @@ export default function PaperTrading() {
                 </button>
               </div>
               {tab === 'positions' ? (
-                <PositionsTable t={t} positions={account.positions} quotes={quotes} onTrade={handlePositionTrade} />
+                <PositionsTable t={t} positions={account.positions} quotes={quotes} />
               ) : (
                 <TradesTable t={t} trades={account.trades} locale={locale} />
               )}

@@ -933,6 +933,7 @@ body {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   row-gap: 6px;
+  justify-items: start;
 }
 
 #app .stat-cell {
@@ -1471,53 +1472,6 @@ body {
   color: var(--tb-text-sub);
 }
 
-#app .cell-actions {
-  display: inline-flex;
-  flex-direction: row;
-  gap: 6px;
-}
-
-#app .trade-action-btn {
-  padding: 5px 14px;
-  border: 1px solid var(--tb-border);
-  border-radius: 999px;
-  background-color: transparent;
-  font-size: 11px;
-  font-weight: 600;
-  cursor: pointer;
-  color: var(--tb-text);
-  transition:
-    border-color 0.2s ease,
-    background-color 0.2s ease,
-    opacity 0.2s ease;
-}
-
-#app .trade-action-btn.buy {
-  color: var(--up);
-  border-color: rgba(239, 35, 35, 0.45);
-}
-
-#app .trade-action-btn.sell {
-  color: var(--tb-active);
-  border-color: rgba(22, 119, 255, 0.45);
-}
-
-/* 悬停以边框强调色反馈（行悬停已占用 --tb-hover 底色） */
-#app .trade-action-btn.buy:hover:not(:disabled) {
-  border-color: var(--up);
-  background-color: rgba(239, 35, 35, 0.08);
-}
-
-#app .trade-action-btn.sell:hover:not(:disabled) {
-  border-color: var(--tb-active);
-  background-color: rgba(22, 119, 255, 0.08);
-}
-
-#app .trade-action-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
 /* 空状态：图标 + 主文案 + 副文案（持仓 / 成交记录 / 不可交易提示共用范式） */
 #app .trade-empty {
   display: flex;
@@ -1757,7 +1711,7 @@ body {
     background-color: transparent;
   }
 
-  /* 记录卡移动端列表模式（§3.11）：宽表隐藏，双层信息行（主行/数据行/脚行）；
+  /* 记录卡移动端列表模式（§3.11）：宽表隐藏，三段式信息卡（主行/次行/数据格带）；
      数值一律等宽字族（.num），语义色沿用全局 up/down/flat/accent */
   #app .trade-records .trade-table-wrap {
     display: none;
@@ -1785,8 +1739,8 @@ body {
     border-bottom: none;
   }
 
-  #app .list-line-main,
-  #app .list-line-foot {
+  /* 主行：名称（成交含方向前缀）左、盈亏锚点右（语义色） */
+  #app .list-line-main {
     display: flex;
     flex-direction: row;
     align-items: center;
@@ -1794,12 +1748,14 @@ body {
     gap: 8px;
   }
 
-  #app .list-line-data {
+  /* 次行：代码左、元信息右（持仓=盈亏% / 成交=日期） */
+  #app .list-line-sub {
     display: flex;
     flex-direction: row;
-    flex-wrap: wrap;
-    gap: 2px 10px;
-    font-size: 11px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 10px;
     color: var(--tb-text-sub);
   }
 
@@ -1808,26 +1764,37 @@ body {
     font-size: 13px;
     font-weight: 600;
     font-variant-numeric: tabular-nums;
+    white-space: nowrap;
   }
 
-  #app .list-pnl-group {
-    display: inline-flex;
-    flex-direction: row;
-    align-items: baseline;
-    gap: 4px;
+  /* 数据格带：固定 4 列等分（标签上/数值下、居中、列间结构细线），列宽恒定不换行 */
+  #app .list-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+  }
+
+  #app .list-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
     min-width: 0;
+    padding: 0 2px;
+    text-align: center;
   }
 
-  #app .list-pnl {
-    font-family: var(--font-num);
-    font-size: 12px;
-    font-weight: 600;
-    font-variant-numeric: tabular-nums;
+  #app .list-cell + .list-cell {
+    border-left: 1px solid var(--tb-border);
   }
 
-  #app .list-foot-label {
+  #app .list-cell-label {
     font-size: 10px;
     color: var(--tb-text-sub);
+    white-space: nowrap;
+  }
+
+  #app .list-cell-value {
+    font-size: 11px;
+    font-weight: 600;
     white-space: nowrap;
   }
 
@@ -1960,19 +1927,25 @@ body {
     line-height: 1.4;
   }
 
+  /* 账户摘要移动端层次化（v2.17~v2.18）：摘要段收进整段淡底资产带（复用 .order-estimate
+     的 --tb-hover + --radius-md 容器语言，替代顶部结构实线作段分隔）；带内 hero 双锚点——
+     总资产大数居左、总盈亏居右基线对齐（延续交易坞左右锚点语言；行距 4px / 列距 8px 防粘连，
+     盈亏右对齐、极窄屏仅在自身列内换行不悬挂，修复 v2.15 左贴紧挤压）；四指标改居中排版
+     对齐 .info-table 移动端 4 列范式，形成「带容器 + 居中指标」两级层次；
+     一行四列补 6px 列距防贴边（值维持 11px 防 7 位金额溢出） */
   #app .panel-summary {
-    gap: 4px;
-    padding-top: 8px;
+    gap: 8px;
+    padding: 8px 12px;
+    background: var(--tb-hover);
+    border-radius: var(--radius-md);
+    border-top: none;
   }
 
-  /* 摘要 hero：移动端总资产大数与总盈亏同行基线对齐（省一行高度）——
-     头行（标签+重置）独占首行，gap 归零整体贴紧（盈亏自带「总盈亏」文字前缀，与大数不粘连）；
-     窄屏盈亏过长时在自身列内换行不破版 */
   #app .summary-hero {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);
     align-items: baseline;
-    gap: 0 4px;
+    gap: 4px 8px;
   }
 
   #app .summary-head {
@@ -1989,22 +1962,24 @@ body {
   }
 
   #app .summary-pnl {
+    justify-self: end;
+    text-align: right;
     line-height: 1.4;
   }
 
-  /* 摘要指标栅格：移动端 2×2 转一行四列（省一整行高度）；窄列去竖分隔线让出宽度，
-     指标值降 Secondary 11px/num 防 7 位数金额在 1/4 列宽下溢出（桌面 2×2 不变，§3.2） */
   #app .summary-grid {
     grid-template-columns: repeat(4, 1fr);
+    column-gap: 6px;
+  }
+
+  /* 四指标居中（对齐 info-table 移动端 4 列居中范式） */
+  #app .summary-grid .stat-cell {
+    align-items: center;
   }
 
   #app .summary-grid .stat-cell:nth-child(even) {
     padding-left: 0;
     border-left: none;
-  }
-
-  #app .stat-cell {
-    gap: 2px;
   }
 
   #app .stat-label,

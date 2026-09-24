@@ -88,6 +88,8 @@ describe('买入执行', () => {
     expect(account.cash).toBe(round(INITIAL_CASH - amount - fee))
     expect(account.trades).toHaveLength(1)
     expect(account.trades[0]).toMatchObject({ side: 'buy', price: 100, qty: 200, amount, fee })
+    // 成交记录只记日期：ts 截断至当日零点，不含时分秒
+    expect(account.trades[0].ts).toBe(new Date(2024, 5, 3).getTime())
   })
 
   it('同日加仓：摊薄成本与冻结累加', () => {
