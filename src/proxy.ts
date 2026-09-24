@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 
-const RESERVED_ROOT_SEGMENTS = new Set(['api', '_next', 'favicon.ico', 'logo.svg', 'robots.txt', 'trade'])
+const RESERVED_ROOT_SEGMENTS = new Set(['api', '_next', 'favicon.ico', 'logo.svg', 'robots.txt', 'trade', 'dashboard'])
 const SYMBOL_PATTERN = /^(sh|sz|bj)\d{6}$/
 
 const NOT_FOUND_HTML = `<!DOCTYPE html>

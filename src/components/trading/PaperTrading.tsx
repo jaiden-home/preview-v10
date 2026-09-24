@@ -229,7 +229,7 @@ export default function PaperTrading() {
     <div className={`trade-page${panelOpen ? ' sheet-open' : ''}`}>
       <div className="toolbar">
         <div className="toolbar-item">
-          <Link className="tb-btn tb-clear" href="/">
+          <Link className="tb-btn tb-clear" href="/dashboard">
             ← {t('返回行情|Back to chart')}
           </Link>
         </div>
@@ -246,7 +246,7 @@ export default function PaperTrading() {
               <div className="trade-chart-toolbar">
                 {/* 返回行情（移动端，§3.11）：微信式左箭头图标按钮，与周期分段同行；
                     桌面隐藏，保留顶部工具栏文字链 */}
-                <Link className="tb-btn tb-back" href="/" aria-label={t('返回行情|Back to chart')}>
+                <Link className="tb-btn tb-back" href="/dashboard" aria-label={t('返回行情|Back to chart')}>
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
                     <path d="M15 5l-7 7 7 7" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>

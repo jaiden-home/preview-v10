@@ -7,6 +7,10 @@ import { DEFAULT_PERIOD_KEY, type PeriodKey } from '@/lib/chart/constants'
 import type { QuoteSnapshot } from '@/lib/chart/types'
 import { readLocaleFromHash } from '@/lib/i18n'
 
+/** 当前是否深色主题：#app.dark 类是唯一事实源（客户端导航不重建根节点，主题类随 DOM 保留到下一页面） */
+const readAppDark = (): boolean =>
+  typeof document !== 'undefined' && (document.getElementById('app')?.classList.contains('dark') ?? false)
+
 interface UseChartTerminalOptions {
   /** 图表挂载容器（由调用方创建并绑定到 DOM） */
   containerRef: RefObject<HTMLDivElement | null>
@@ -32,7 +36,6 @@ export function useChartTerminal(options: UseChartTerminalOptions) {
   /** 当前图表已加载的标的（与同步 effect、setSymbol 共同维护，避免重复切换） */
   const chartSymbolRef = useRef<string | null>(null)
 
-  const [dark, setDark] = useState(false)
   const [periodKey, setPeriodKey] = useState<PeriodKey>(DEFAULT_PERIOD_KEY)
   const [mainIndicators, setMainIndicators] = useState<ReadonlySet<string>>(() => new Set(['MA']))
   const [subIndicators, setSubIndicators] = useState<ReadonlySet<string>>(() => new Set(['VOL', 'MACD']))
@@ -61,6 +64,7 @@ export function useChartTerminal(options: UseChartTerminalOptions) {
       symbol,
       initialBars: initialBars ?? null,
       initialQuote: initialQuote ?? null,
+      dark: readAppDark(),
       locale: readLocaleFromHash(),
       onInfoUpdate: onInfoUpdate ?? (() => {}),
       onQuoteArrived,
@@ -97,11 +101,11 @@ export function useChartTerminal(options: UseChartTerminalOptions) {
   }
 
   const toggleTheme = () => {
-    const next = !dark
+    // 每次从 DOM 取反（而非本地 state）：跨页客户端导航后本组件重建，state 会失真
     const root = document.getElementById('app')
+    const next = !readAppDark()
     // 切换瞬间抑制 CSS 过渡：避免元素对变量换值做 0.2s 补间（按钮底色闪烁）
     root?.classList.add('theme-switching')
-    setDark(next)
     // dark 类挂在应用根节点上，与 #app 命名空间的 CSS 配套
     root?.classList.toggle('dark', next)
     terminalRef.current?.setTheme(next)
@@ -160,7 +164,6 @@ export function useChartTerminal(options: UseChartTerminalOptions) {
 
   return {
     setSymbol,
-    dark,
     toggleTheme,
     periodKey,
     changePeriod,

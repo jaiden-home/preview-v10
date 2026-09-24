@@ -846,6 +846,178 @@ body {
   animation: klinecharts-fundamental-pulse 1.2s ease-in-out infinite;
 }
 
+/* ---------------- 首页入口页（UI_SPEC §3.12） ---------------- */
+
+/* 入口页画布：淡色底衬托卡片（复用交易页 .trade-page 范式） */
+#app .home-page {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--page-tint);
+}
+
+/* 工具栏品牌名：静态文本（非按钮），左锚点 */
+#app .home-brand {
+  padding: 5px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+  color: var(--tb-text);
+  white-space: nowrap;
+}
+
+/* 内容区：垂直水平居中，纵向两组（hero / 入口栅格）；内容超出时可滚动（唯一滚动容器） */
+#app .home-main {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  padding: 18px 12px;
+}
+
+#app .home-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  text-align: center;
+}
+
+/* Display-S 级标题（22/700，字阶内），副文案 Base 次要色 */
+#app .home-hero-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--tb-text);
+}
+
+#app .home-hero-sub {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--tb-text-sub);
+}
+
+/* 入口栅格：双卡等宽居中，页面级 gap 12px */
+#app .home-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  width: 100%;
+  max-width: 640px;
+}
+
+/* 入口卡：.trade-card 同款壳（--radius-lg + --shadow-card），
+   整卡可点；悬停仅描边换强调色 + 阴影升 --shadow-pop（不过渡宽高） */
+#app .home-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 16px 18px;
+  background-color: var(--tb-bg);
+  border: 1px solid var(--tb-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  color: var(--tb-text);
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+#app .home-card:hover {
+  border-color: var(--tb-active);
+  box-shadow: var(--shadow-pop);
+}
+
+#app .home-card.trade:hover {
+  border-color: var(--up);
+}
+
+/* 头行：左图标（40px 淡底圆角块 + 语义色描边图标） / 右进入箭头 */
+#app .home-card-head {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+#app .home-card-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  background-color: var(--tb-active-bg);
+  color: var(--tb-active);
+}
+
+/* 交易卡图标：买入红淡底（复用 --up-bg 方向戳记范式，与 §2.1 登记一致） */
+#app .home-card.trade .home-card-icon {
+  background-color: var(--up-bg);
+  color: var(--up);
+}
+
+#app .home-card-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+#app .home-card-arrow {
+  display: flex;
+  color: var(--tb-text-sub);
+  transition: color 0.2s ease;
+}
+
+#app .home-card-arrow svg {
+  width: 14px;
+  height: 14px;
+}
+
+#app .home-card:hover .home-card-arrow {
+  color: var(--tb-active);
+}
+
+#app .home-card.trade:hover .home-card-arrow {
+  color: var(--up);
+}
+
+#app .home-card-title {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+#app .home-card-desc {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--tb-text-sub);
+}
+
+/* ---- 首页入口页移动端（≤768px）：入口栅格转单列窄幅 ---- */
+
+@media (max-width: 768px) {
+  #app .home-main {
+    gap: 16px;
+    padding: 18px 8px;
+  }
+
+  #app .home-grid {
+    grid-template-columns: minmax(0, 1fr);
+    max-width: 360px;
+  }
+}
+
 /* ---------------- 模拟交易页 ---------------- */
 
 /* 红涨绿跌（与 A 股配色一致） */

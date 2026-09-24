@@ -50,6 +50,8 @@ export interface ChartTerminalOptions {
   initialBars: import('klinecharts').KLineData[] | null
   initialQuote: QuoteSnapshot | null
   locale: Locale
+  /** 初始深色主题：客户端导航保留 #app.dark 时，画布须以当前主题初始化（默认浅色） */
+  dark?: boolean
   /** 信息表格数据变更（十字光标 / 数据刷新 / 基本面到达） */
   onInfoUpdate: (snapshot: InfoSnapshot) => void
   /** 切换标的后行情快照到达（更新按钮文案等） */
@@ -103,6 +105,11 @@ export class ChartTerminal {
       return
     }
     this.chart = chart
+
+    // 初始主题跟随页面：setStyles 整体重置样式，须在 A 股配色/提示框等自定义样式应用前执行
+    if (this.options.dark) {
+      chart.setStyles('dark')
+    }
 
     chart.setDataLoader(
       createDataLoader({

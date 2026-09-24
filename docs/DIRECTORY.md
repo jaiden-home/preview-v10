@@ -35,11 +35,15 @@ Next.js App Router 的应用根目录，包含全部页面路由与 BFF 接口�
   - `quote/`：实时快照（名称/现价/昨收 + 基本面估值）。
   - `search/`：标的搜索（6 位代码精确匹配 + smartbox 名称/拼音联想）。
   - `healthz/`：健康检查（`{ status, uptime, timestamp }`，供 Docker HEALTHCHECK 与探活使用）。
-- 根级文件：`layout.tsx`（根布局与 `#app` 命名空间）、`page.tsx`（首页，默认上证指数）、`loading.tsx` / `error.tsx` / `not-found.tsx`（路由级加载、错误与 404 兜底）、`globals.css`（全局样式）。
+- `dashboard/`：行情看板页（原首页终端整体迁移，默认上证指数，服务端直出首屏行情与日 K）。
+- `trade/`：模拟交易页（客户端虚拟账户 + BFF 行情轮询）。
+- 根级文件：`layout.tsx`（根布局与 `#app` 命名空间）、`page.tsx`（首页入口页，仅承载行情看板与模拟交易两个入口）、`loading.tsx` / `error.tsx` / `not-found.tsx`（路由级加载、错误与 404 兜底）、`globals.css`（全局样式）。
 
 ### src/components/
 
-React UI 组件，当前仅有 `terminal/` 一个子目录，存放交易终端的全部展示层组件：
+React UI 组件，按页面域分子目录（`terminal/` 行情终端、`trading/` 模拟交易、`home/` 首页入口）：
+
+- `home/HomeLanding.tsx`：首页入口页（行情看板 / 模拟交易两张入口卡片，独立主题切换）。
 
 - `TradingTerminal.tsx`：终端主组件，负责组装工具栏、信息表格与图表挂载点。
 - `SymbolPicker.tsx` / `PeriodGroup.tsx`：标的搜索切换与周期（分时/分钟/日/周/月）切换；`PeriodGroup` 支持 `simple` 精简模式（仅日/周/月，交易页图表用）。

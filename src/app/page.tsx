@@ -1,18 +1,12 @@
-import TradingTerminal from '@/components/terminal/TradingTerminal'
-import { DEFAULT_SYMBOL_CODE } from '@/lib/chart/constants'
-import { parseSymbolCode } from '@/lib/chart/types'
-import { fetchInitialTerminalData } from '@/lib/server/market-service'
+import type { Metadata } from 'next'
+import HomeLanding from '@/components/home/HomeLanding'
 
-export const dynamic = 'force-dynamic'
+export const metadata: Metadata = {
+  title: '首页',
+  description: 'A 股行情预览与模拟交易 Web 终端入口：行情看板（K 线 / 分时 / 指标）与模拟交易（Paper Trading）。'
+}
 
-/** 首页：默认展示上证指数（与默认标的列表一致） */
-export default async function HomePage() {
-  const parsed = parseSymbolCode(DEFAULT_SYMBOL_CODE)
-  if (parsed == null) {
-    throw new Error(`invalid default symbol: ${DEFAULT_SYMBOL_CODE}`)
-  }
-  const { quote, initialBars } = await fetchInitialTerminalData(parsed)
-  return (
-    <TradingTerminal market={parsed.market} ticker={parsed.ticker} initialQuote={quote} initialBars={initialBars} />
-  )
+/** 首页：仅承载两个功能页入口（行情看板 / 模拟交易），终端内容已迁移至 /dashboard */
+export default function HomePage() {
+  return <HomeLanding />
 }
