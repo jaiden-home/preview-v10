@@ -41,8 +41,8 @@ import {
   type TradingAccount
 } from '@/lib/trading/account'
 
-/** 极速模拟默认标的（锚定共享交易日历；不可交易标的会被下单校验拦截） */
-const DEFAULT_TRADING_SYMBOL = { market: 'sh', ticker: '600519' }
+/** 极速模拟默认标的（sh600999 招商证券；锚定共享交易日历，不可交易标的会被下单校验拦截） */
+const DEFAULT_TRADING_SYMBOL = { market: 'sh', ticker: '600999' }
 
 interface TradeNotice {
   kind: 'ok' | 'err'
@@ -50,7 +50,7 @@ interface TradeNotice {
 }
 
 /**
- * 极速模拟页（/trade/simtrade）：虚拟时钟 + 历史 K 线回放（UI_SPEC §3.13）。
+ * 极速模拟页（/simtrade）：虚拟时钟 + 历史 K 线回放（UI_SPEC §3.13）。
  * 日原子模型：开局选定起始日后第 1 个交易日立即完成（整根 K 线出现），
  * 每过倍速时长（15/30/60 秒）推进下一交易日，走满即本局结束。
  * 行情分两段：**未开局 = 与 /trade 完全一致（图表实时完整日 K + order-head 实时行情，

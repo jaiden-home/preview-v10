@@ -105,7 +105,7 @@ export default function HomeLanding() {
             </span>
           </Link>
           {/* 极速模拟（加速回放）入口：双列栅格下通栏占位（.home-card.sim），品牌蓝语义 */}
-          <Link className="home-card sim" href="/trade/simtrade">
+          <Link className="home-card sim" href="/simtrade">
             <span className="home-card-head">
               <span className="home-card-icon" aria-hidden="true">
                 <svg

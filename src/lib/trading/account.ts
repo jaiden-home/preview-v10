@@ -22,7 +22,7 @@ export const MAX_TRADE_RECORDS = 200
 const ACCOUNT_STORAGE_KEY = 'klinecharts-paper-account'
 const SYMBOL_STORAGE_KEY = 'klinecharts-paper-symbol'
 
-/** 极速模拟（/trade/simtrade）独立存储 key：账户与选中标的两页互不干扰 */
+/** 极速模拟（/simtrade）独立存储 key：账户与选中标的两页互不干扰 */
 export const REPLAY_ACCOUNT_STORAGE_KEY = 'klinecharts-paper-account-replay'
 export const REPLAY_SYMBOL_STORAGE_KEY = 'klinecharts-paper-symbol-replay'
 

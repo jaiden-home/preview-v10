@@ -223,7 +223,7 @@
 - 卡内结构：头行 `.home-card-head`（左 `.home-card-icon` 40px 淡底圆角块 `--radius-md` + 内联 SVG 22px `stroke: currentColor`；右 `.home-card-arrow` 14px 次要色箭头，悬停随卡换强调色）→ 标题 Title `13/600` → 副文案 Secondary `11px` 次要色。
 - 语义色：行情看板卡 = 品牌蓝（icon `--tb-active` + `--tb-active-bg`）；模拟交易卡 = 买入红（icon `--up` + `--up-bg`，呼应 §0 买入动作色，绿不参与）；极速模拟卡 `.home-card.sim` = 品牌蓝（复用默认 `.home-card` 语义色，无专属色彩规则）；各卡悬停描边/箭头随各自语义色。
 
-### 3.13 极速模拟页（/trade/simtrade，v2.27~v2.29）
+### 3.13 极速模拟页（/simtrade，v2.27~v2.35）
 
 页面骨架与组件全量复用交易页（§3.1~§3.11）；**回放图表与日原子时钟**为本页专属（v2.29 重设计）：
 
@@ -290,6 +290,7 @@
 | v2.32 | 模拟时钟由单行拥挤横条重设计为**两行控制卡**：行 1 = 虚拟日期大字（Display-S `22/700/num`，setup 为起始日输入 + 开始模拟）+ 主操作；行 2 = 整行 6px 计时进度 + 倒计时文案（「N 秒后次日」，setup 为可模拟天数提示）；行 3 = 倍速分段。删除旧横条样式（`.sim-clock-date`/`.sim-clock-progress`/`.sim-days-hint` 及移动端换行规则），新增 `.sim-clock-head`/`.sim-clock-day`/`.sim-day-value`/`.sim-clock-track`/`.sim-progress`/`.sim-countdown`/`.sim-clock-hint`；起始日默认当日（非交易日/超出可选范围回退最近可选日）；§3.13 同步改写                                                                 |
 | v2.33 | 开局校验：**可模拟交易日须大于 1（≥2）才能开始模拟**（按钮禁用 + 提示「交易日不足，请选择更早的起始日期」，`useReplay.start` 兜底拦截）；可选范围 max 改为最新一根日 K；**起始日默认恒为当日、不自动回退**（非交易日/当日 K 线未生成时可模拟 0 天、按钮禁用）；倒计时文案调整为「交易时间还剩余 N 秒」                                                                                                                                                                                                                                                                                                   |
 | v2.34 | 未开局（setup）阶段图表由「起始日之前的历史预览」改为**实时完整日 K（含当日，与 /trade 一致）**——修复默认起始日为当有时图表缺当日 K 线的问题；点「开始模拟」后图表才切换为回放视图（起始日前历史 + 逐日推进）；移除 `useReplay` 的 `previewDate`/`previewBarsOf`，新增 `allBarsOf`                                                                                                                                                                                                                                                                                                                       |     |
+| v2.35 | 极速模拟路由由 `/trade/simtrade` 迁移为**顶级独立路由 `/simtrade`**（与 `/trade`、`/dashboard` 平级）：页面文件移至 `app/simtrade/`，首页入口链接同步，边界代理（`proxy.ts`）保留段新增 `simtrade`；§3.13 标题同步                                                                                                                                                                                                                                                                                                                                                                                       |
 
 ## 7. AI 交付前检查清单
 

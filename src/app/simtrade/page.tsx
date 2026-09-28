@@ -8,7 +8,7 @@ export const metadata: Metadata = {
   description: '极速模拟交易（Sim Trading）：历史 K 线回放，15/30/60 秒一个交易日，T+1、涨跌停与费用仿真。'
 }
 
-/** 极速模拟页（/trade/simtrade）：模拟交易页的 1:1 复制基线，后续演进为历史行情回放加速模拟 */
+/** 极速模拟页（/simtrade）：历史行情回放的加速模拟交易（虚拟时钟 + 日原子推进） */
 export default function SimTradePage() {
   return <SimTrading />
 }
