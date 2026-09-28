@@ -13,6 +13,7 @@ import { symbolCode } from './types'
 import { fetchQuoteSnapshot } from './api'
 import {
   CN_DOWN_COLOR,
+  CN_FLAT_COLOR,
   CN_UP_COLOR,
   COMPACT_AXIS_STYLES,
   COMPACT_AXIS_STYLES_RESTORE,
@@ -117,6 +118,7 @@ export class ChartTerminal {
         applyTimeShareTransforms: () => this.applyTimeShareTransforms(),
         calibrateTimeShareFit: (count) => this.calibrateTimeShareFit(count),
         fitTimeShareBars: (count) => this.fitTimeShareBars(count),
+        syncTimeShareLastPriceMark: (lastClose) => this.syncTimeShareLastPriceMark(lastClose),
         initial:
           this.options.initialBars != null && this.options.initialBars.length > 0
             ? { code: symbolCode(this.options.symbol), bars: this.options.initialBars }
@@ -197,7 +199,8 @@ export class ChartTerminal {
         priceMark: {
           last: {
             upColor: CN_UP_COLOR,
-            downColor: CN_DOWN_COLOR
+            downColor: CN_DOWN_COLOR,
+            noChangeColor: CN_FLAT_COLOR
           }
         }
       },
@@ -473,6 +476,29 @@ export class ChartTerminal {
     this.applyTimeShareStyles()
   }
 
+  /**
+   * 分时最新价标线/标签着色：库的 compareRule 只有「今开 / 前一根收盘」两种，
+   * 分时下前一根收盘是上一分钟价格——下跌日末分钟回拉即整条线误显红色。
+   * 改按「现价 vs 全天昨收」定色（与左轴百分比、信息表涨跌同源）；
+   * 三色同置方向色后，库内部任一比较分支取到的都是同一颜色。
+   * lastClose 缺省取图上最新一根（主题切换重放时数据已在图上）。
+   */
+  private syncTimeShareLastPriceMark = (lastClose?: number): void => {
+    if (!timeShareState.active) {
+      return
+    }
+    const prevClose = timeShareState.prevClose
+    const dataList = this.chart?.getDataList() ?? []
+    const close = lastClose ?? dataList[dataList.length - 1]?.close
+    if (!Number.isFinite(prevClose) || prevClose <= 0 || close == null || !Number.isFinite(close)) {
+      return
+    }
+    const color = close > prevClose ? CN_UP_COLOR : close < prevClose ? CN_DOWN_COLOR : CN_FLAT_COLOR
+    this.chart?.setStyles({
+      candle: { priceMark: { last: { upColor: color, downColor: color, noChangeColor: color } } }
+    })
+  }
+
   private activateTimeShare = (): void => {
     timeShareState.active = true
     // 仅切换周期触发数据加载；指标/坐标轴/样式等形态变更延迟到数据就绪后
@@ -498,6 +524,8 @@ export class ChartTerminal {
     this.chart?.overrideYAxis({ paneId: 'candle_pane', createRange: this.identityAxisRange, gap: DEFAULT_AXIS_GAP })
     this.chart?.overrideXAxis({ createTicks: this.defaultXTicks })
     this.restoreCandleStyles()
+    // 最新价标线在分时下被置为「vs 昨收」单色，退出时恢复 K 线红涨绿跌语义
+    this.applyCnColorScheme()
     this.chart?.createIndicator({ name: 'MA', paneId: 'candle_pane' }, true)
     if (nextPeriod != null) {
       this.chart?.setPeriod(nextPeriod)
@@ -667,6 +695,8 @@ export class ChartTerminal {
     this.syncAxisCompactness(true)
     if (timeShareState.active) {
       this.applyTimeShareStyles()
+      // 主题样式整体替换后，分时最新价标线的「vs 昨收」单色需按当前数据重放
+      this.syncTimeShareLastPriceMark()
     }
     // 十字光标显隐同理，随主题样式整体替换后恢复
     this.setMouseSelect(this.mouseSelectEnabled)

@@ -12,6 +12,8 @@ export interface DataLoaderDeps {
   calibrateTimeShareFit: (dataCount: number) => void
   /** 轮询首次更新后的复校登记 */
   fitTimeShareBars: (dataCount: number) => void
+  /** 分时最新价标线着色同步（现价 vs 全天昨收，init 注入前与轮询发射后各一次） */
+  syncTimeShareLastPriceMark: (lastClose: number) => void
   /** SSR 注入的首屏日 K（仅初始标的 init 请求消费一次） */
   initial?: { code: string; bars: KLineData[] } | null
 }
@@ -91,6 +93,8 @@ export const createDataLoader = (deps: DataLoaderDeps): DataLoader => {
           // 旧图直接替换为最终分时布局（callback 前 prevClose 已就绪，
           // 百分比左轴首次布局即为最终宽度）
           deps.applyTimeShareTransforms()
+          // 注入前按最新价同步标线颜色，首帧即为「vs 昨收」方向色
+          deps.syncTimeShareLastPriceMark(snapshot.bars[snapshot.bars.length - 1].close)
           callback(snapshot.bars, false)
           deps.calibrateTimeShareFit(snapshot.bars.length)
           // 轮询首次更新后的复校仅作宽度变化兜底，宽度未变时为空操作
@@ -159,6 +163,10 @@ export const createDataLoader = (deps: DataLoaderDeps): DataLoader => {
         const isFirstEmit = lastPolled == null
         lastPolled = last
         callback(last)
+        if (pollTimeShare && timeShareState.active) {
+          // 现价穿越昨收时标线随之换色（emitIfChanged 已过滤无变化轮询）
+          deps.syncTimeShareLastPriceMark(last.close)
+        }
         if (isFirstEmit && pollTimeShare && timeShareState.active && pendingTimeShareFit > 0) {
           const count = pendingTimeShareFit
           pendingTimeShareFit = 0

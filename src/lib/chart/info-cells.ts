@@ -1,5 +1,6 @@
 import type { KLineData } from 'klinecharts'
 import { CN_DOWN_COLOR, CN_FLAT_COLOR, CN_UP_COLOR } from './constants'
+import { timeShareState } from './timeshare'
 import { buildFundamentalItems } from '../fundamental'
 import type { FundamentalData } from './types'
 import type { Locale } from '../i18n'
@@ -50,8 +51,12 @@ export const buildInfoCells = (source: InfoSnapshotSource, locale: Locale): Info
   const found = hovered != null ? dataList.indexOf(hovered) : -1
   const i = found >= 0 ? found : dataList.length - 1
   const current = dataList[i]
-  // 与图上一致：按昨收判定红涨绿跌
-  const prevClose = i > 0 ? dataList[i - 1].close : current.open
+  // 与图上一致：分时以全天昨收为涨跌基准（与左轴百分比/昨收基准虚线同源，
+  // 每分钟 bar 的「前一根收盘」只是上一分钟价格，不是昨收）；
+  // K 线取前一根收盘（日线即昨收），首根退回当日开盘
+  const baseClose = timeShareState.active ? timeShareState.prevClose : Number.NaN
+  const prevClose =
+    Number.isFinite(baseClose) && baseClose > 0 ? baseClose : i > 0 ? dataList[i - 1].close : current.open
   const change = current.close - prevClose
   const pct = prevClose !== 0 ? (change / prevClose) * 100 : 0
   const color = change > 0 ? CN_UP_COLOR : change < 0 ? CN_DOWN_COLOR : CN_FLAT_COLOR

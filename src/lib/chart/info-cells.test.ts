@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { buildInfoCells } from './info-cells'
+import { timeShareState } from './timeshare'
 import type { FundamentalData } from './types'
 
 const bar = (timestamp: number, close: number, prevClose: number) => ({
@@ -24,6 +25,11 @@ const fundamental: FundamentalData = {
 }
 
 describe('信息表格数据', () => {
+  beforeEach(() => {
+    timeShareState.active = false
+    timeShareState.prevClose = Number.NaN
+  })
+
   it('空数据返回 null（渲染加载占位）', () => {
     expect(buildInfoCells({ dataList: [], hovered: null, fundamental: {}, intraday: false }, 'zh-CN')).toBeNull()
   })
@@ -68,5 +74,33 @@ describe('信息表格数据', () => {
     )!
     expect(cells[0].value).toBe('2026-09-11')
     expect(cells[1].value).toBe('10.00')
+  })
+
+  it('分时模式涨跌以全天昨收为基准，而非上一分钟价格', () => {
+    timeShareState.active = true
+    timeShareState.prevClose = 10
+    // 分时 bar：开=前一分钟价，高=低=收=当分钟价（parseTimeShareDay 产物）
+    const minuteBar = (timestamp: number, price: number, prevPrice: number) => ({
+      timestamp,
+      open: prevPrice,
+      close: price,
+      high: price,
+      low: price,
+      volume: 100
+    })
+    const t1 = new Date('2026-09-14T09:31').getTime()
+    const t2 = new Date('2026-09-14T09:32').getTime()
+    const cells = buildInfoCells(
+      {
+        dataList: [minuteBar(t1, 10.02, 10), minuteBar(t2, 10.01, 10.02)],
+        hovered: null,
+        fundamental,
+        intraday: true
+      },
+      'zh-CN'
+    )!
+    // 10.01 - 昨收 10 = +0.01（修复前误为 10.01 - 10.02 = -0.01）
+    expect(cells[6].value).toBe('+0.01 (+0.10%)')
+    expect(cells[6].color).toBe('#ef2323')
   })
 })

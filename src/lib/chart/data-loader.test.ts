@@ -38,6 +38,7 @@ const makeLoader = (initial?: { code: string; bars: KLineData[] }) => {
     applyTimeShareTransforms: vi.fn(),
     calibrateTimeShareFit: vi.fn(),
     fitTimeShareBars: vi.fn(),
+    syncTimeShareLastPriceMark: vi.fn(),
     initial: initial ?? null
   }
   return { loader: createDataLoader(deps), deps, chart }
@@ -81,6 +82,8 @@ describe('数据加载器（BFF 版）', () => {
       expect(deps.applyTimeShareTransforms).toHaveBeenCalledTimes(1)
       expect(deps.calibrateTimeShareFit).toHaveBeenCalledWith(2)
       expect(deps.fitTimeShareBars).toHaveBeenCalledWith(2)
+      // 注入前同步最新价标线颜色（现价 vs 昨收）
+      expect(deps.syncTimeShareLastPriceMark).toHaveBeenCalledWith(1283.89)
       // 请求打到 BFF 分时口
       expect(fetchMock.mock.calls[0][0]).toContain('/api/timeshare?symbol=sh600519')
     } finally {
@@ -225,9 +228,12 @@ describe('数据加载器（BFF 版）', () => {
       })
       await vi.advanceTimersByTimeAsync(0)
       expect(callback).toHaveBeenCalledWith(expect.objectContaining({ close: 1283.89, volume: 556 }))
+      // 轮询发射后同步最新价标线颜色
+      expect(deps.syncTimeShareLastPriceMark).toHaveBeenCalledWith(1283.89)
       // 同数据第二次轮询不再发射
       await vi.advanceTimersByTimeAsync(3000)
       expect(callback).toHaveBeenCalledTimes(1)
+      expect(deps.syncTimeShareLastPriceMark).toHaveBeenCalledTimes(1)
       // 跨交易日：dayKey 变化触发 setPeriod 整体重载
       timeShareState.dayKey = '20260911'
       await vi.advanceTimersByTimeAsync(3000)
