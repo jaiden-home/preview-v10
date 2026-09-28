@@ -5,10 +5,13 @@ import { timeShareState } from './timeshare'
 
 const defaultSymbol = { ticker: '600519', pricePrecision: 2, volumePrecision: 0, market: 'sh' }
 
-// BFF 分时快照（服务端已解析）：最新交易日 2 根有效分钟点，昨收来自 qt[4]
+// BFF 分时快照（服务端已解析）：最新交易日 2 根有效分钟点，昨收/日开高低来自 qt
 const timeShareSnapshot = {
   date: '20260914',
   prevClose: 1275.16,
+  open: 1277.27,
+  high: 1284.5,
+  low: 1273.2,
   bars: [
     {
       timestamp: new Date('2026-09-14T09:30').getTime(),
@@ -58,6 +61,9 @@ describe('数据加载器（BFF 版）', () => {
     window.location.hash = ''
     timeShareState.active = false
     timeShareState.prevClose = Number.NaN
+    timeShareState.dayOpen = Number.NaN
+    timeShareState.dayHigh = Number.NaN
+    timeShareState.dayLow = Number.NaN
     timeShareState.dayKey = null
     timeShareState.lotSize = 100
     timeShareState.isIndex = false
@@ -79,6 +85,9 @@ describe('数据加载器（BFF 版）', () => {
       expect(callback).toHaveBeenCalledWith(timeShareSnapshot.bars, false)
       expect(timeShareState.dayKey).toBe('20260914')
       expect(timeShareState.prevClose).toBe(1275.16)
+      expect(timeShareState.dayOpen).toBe(1277.27)
+      expect(timeShareState.dayHigh).toBe(1284.5)
+      expect(timeShareState.dayLow).toBe(1273.2)
       expect(deps.applyTimeShareTransforms).toHaveBeenCalledTimes(1)
       expect(deps.calibrateTimeShareFit).toHaveBeenCalledWith(2)
       expect(deps.fitTimeShareBars).toHaveBeenCalledWith(2)

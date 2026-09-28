@@ -1,6 +1,6 @@
 import type { KLineData } from 'klinecharts'
 import { CN_DOWN_COLOR, CN_FLAT_COLOR, CN_UP_COLOR } from './constants'
-import { timeShareState } from './timeshare'
+import { timeShareDayExtremes, timeShareState } from './timeshare'
 import { buildFundamentalItems } from '../fundamental'
 import type { FundamentalData } from './types'
 import type { Locale } from '../i18n'
@@ -63,6 +63,18 @@ export const buildInfoCells = (source: InfoSnapshotSource, locale: Locale): Info
   const sign = change > 0 ? '+' : ''
   const fixed = (v: number) => v.toFixed(2)
   const neutral = 'var(--tb-text)'
+  // 分时 bar 不携带当日 OHLC 语义（high=low=当分钟价、open=上一分钟价），且分钟
+  // 快照取不到盘中瞬时极值：优先用官方日开/高/低（快照随轮询刷新）；
+  // 官方值缺失时退回分钟口径（今开=首分钟价，最高/最低=开盘至今累计极值）
+  let open = current.open
+  let high = current.high
+  let low = current.low
+  if (timeShareState.active) {
+    const fallback = timeShareDayExtremes(dataList, i)
+    open = Number.isFinite(timeShareState.dayOpen) ? timeShareState.dayOpen : dataList[0].close
+    high = Number.isFinite(timeShareState.dayHigh) ? timeShareState.dayHigh : fallback.high
+    low = Number.isFinite(timeShareState.dayLow) ? timeShareState.dayLow : fallback.low
+  }
   const ohlc: Record<string, InfoCell> = {
     time: {
       label: t('时间|Time'),
@@ -70,10 +82,10 @@ export const buildInfoCells = (source: InfoSnapshotSource, locale: Locale): Info
       color: neutral,
       cellClass: 'cell-time'
     },
-    open: { label: t('今开|Open'), value: fixed(current.open) },
+    open: { label: t('今开|Open'), value: fixed(open) },
     close: { label: t('今价|Close'), value: fixed(current.close) },
-    high: { label: t('最高|High'), value: fixed(current.high) },
-    low: { label: t('最低|Low'), value: fixed(current.low) },
+    high: { label: t('最高|High'), value: fixed(high) },
+    low: { label: t('最低|Low'), value: fixed(low) },
     chg: { label: t('涨跌|Chg'), value: `${sign}${fixed(change)} (${sign}${fixed(pct)}%)` },
     vol: { label: t('成交量|Vol'), value: formatVolumeText(current.volume ?? 0) }
   }

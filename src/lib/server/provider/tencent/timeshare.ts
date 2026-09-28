@@ -44,6 +44,11 @@ export const fetchTimeShare = async (
     const container = (result?.data as Record<string, Record<string, unknown>> | undefined)?.[code] ?? {}
     const qt = (container?.qt as Record<string, unknown> | undefined)?.[code]
     const prevCloseFromQt = Array.isArray(qt) ? Number(qt[4]) : Number.NaN
+    // qt 索引 5/33/34 为官方当日开/高/低：分时分钟快照（每分钟一个收盘快照点）
+    // 取不到盘中瞬时极值，当日 OHLC 以官方值为准
+    const dayOpenFromQt = Array.isArray(qt) ? Number(qt[5]) : Number.NaN
+    const dayHighFromQt = Array.isArray(qt) ? Number(qt[33]) : Number.NaN
+    const dayLowFromQt = Array.isArray(qt) ? Number(qt[34]) : Number.NaN
     const days = (container?.data ?? []) as unknown[]
     let best: { date: string; points: unknown[] } | null = null
     for (const day of days) {
@@ -69,6 +74,18 @@ export const fetchTimeShare = async (
     if (!Number.isFinite(prevClose) || prevClose <= 0) {
       prevClose = await fetchPrevClose(symbol, localDayKey(parseCnBarTime(`${best.date}0930`)), bars[0].close)
     }
-    return { date: best.date, prevClose, bars }
+    // 官方值缺失（qt 字段缺位/非法）或高低倒置时，退回分钟数据合成口径
+    const ok = (v: number): boolean => Number.isFinite(v) && v > 0
+    const barsOpen = bars[0].close
+    const barsHigh = Math.max(...bars.map((bar) => bar.high))
+    const barsLow = Math.min(...bars.map((bar) => bar.low))
+    const rawHigh = ok(dayHighFromQt) ? dayHighFromQt : barsHigh
+    const rawLow = ok(dayLowFromQt) ? dayLowFromQt : barsLow
+    // 高低倒置视为脏数据，整体退回分钟口径
+    const validRange = rawHigh >= rawLow
+    const open = ok(dayOpenFromQt) ? dayOpenFromQt : barsOpen
+    const high = validRange ? rawHigh : barsHigh
+    const low = validRange ? rawLow : barsLow
+    return { date: best.date, prevClose, open, high, low, bars }
   })
 }

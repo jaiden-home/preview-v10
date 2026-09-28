@@ -1,6 +1,6 @@
 import type { KLineData } from 'klinecharts'
 import type { FundamentalData } from './chart/types'
-import { timeShareState } from './chart/timeshare'
+import { timeShareDayExtremes, timeShareState } from './chart/timeshare'
 import type { Locale } from './i18n'
 
 // ==================== 信息表格渲染数据 ====================
@@ -54,18 +54,24 @@ export const buildFundamentalItems = (
     const last = dataList[dataList.length - 1]
     const priceRatio = last.close !== 0 ? hovered.close / last.close : 1
     const volumeRatio = (last.volume ?? 0) !== 0 ? (hovered.volume ?? 0) / (last.volume ?? 0) : 1
-    // 昨收：取前一根收盘；首根在分时下用基准昨收，否则用自身开盘
-    const prevClose =
-      idx > 0
-        ? dataList[idx - 1].close
-        : timeShareState.active && Number.isFinite(timeShareState.prevClose)
-          ? timeShareState.prevClose
-          : hovered.open
+    // 昨收：K 线取前一根收盘（日线即昨收）；分时下前一根只是上一分钟价格，
+    // 恒用全天昨收。振幅：K 线由当根 high/low 重算；分时优先官方日高/低
+    // （分钟快照取不到盘中瞬时极值），缺失时用开盘截至该分钟的累计极值
+    const tsActive = timeShareState.active && Number.isFinite(timeShareState.prevClose)
+    const prevClose = tsActive ? timeShareState.prevClose : idx > 0 ? dataList[idx - 1].close : hovered.open
+    let extremes = { high: hovered.high, low: hovered.low }
+    if (tsActive) {
+      const fallback = timeShareDayExtremes(dataList, idx)
+      extremes = {
+        high: Number.isFinite(timeShareState.dayHigh) ? timeShareState.dayHigh : fallback.high,
+        low: Number.isFinite(timeShareState.dayLow) ? timeShareState.dayLow : fallback.low
+      }
+    }
     const scale = (v?: number) => (v != null ? v * priceRatio : undefined)
     view = {
       ...data,
       turnoverRate: data.turnoverRate != null ? data.turnoverRate * volumeRatio : undefined,
-      amplitude: prevClose !== 0 ? Math.abs((hovered.high - hovered.low) / prevClose) * 100 : undefined,
+      amplitude: prevClose !== 0 ? Math.abs((extremes.high - extremes.low) / prevClose) * 100 : undefined,
       pe: scale(data.pe),
       peDynamic: scale(data.peDynamic),
       peStatic: scale(data.peStatic),

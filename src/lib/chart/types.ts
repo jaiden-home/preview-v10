@@ -39,6 +39,10 @@ export interface QuoteSnapshot {
 export interface TimeShareSnapshot {
   date: string
   prevClose: number
+  /** 官方当日开/高/低：分时分钟快照取不到盘中瞬时极值，信息表格以此为准 */
+  open: number
+  high: number
+  low: number
   bars: KLineData[]
 }
 

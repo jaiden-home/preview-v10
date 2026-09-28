@@ -1,6 +1,12 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { AxisRange, KLineData } from 'klinecharts'
-import { calcTimeShareAvg, symmetricRangeAround, timeShareAnchorIndex, timeShareState } from './timeshare'
+import {
+  calcTimeShareAvg,
+  symmetricRangeAround,
+  timeShareAnchorIndex,
+  timeShareDayExtremes,
+  timeShareState
+} from './timeshare'
 
 const minute = 60 * 1000
 
@@ -8,6 +14,9 @@ describe('分时图纯函数', () => {
   beforeEach(() => {
     timeShareState.active = false
     timeShareState.prevClose = Number.NaN
+    timeShareState.dayOpen = Number.NaN
+    timeShareState.dayHigh = Number.NaN
+    timeShareState.dayLow = Number.NaN
     timeShareState.dayKey = null
     timeShareState.lotSize = 100
     timeShareState.isIndex = false
@@ -48,6 +57,22 @@ describe('分时图纯函数', () => {
       { avg: (10 * 10 + 12 * 30) / 40 },
       { avg: (10 * 10 + 12 * 30) / 40 }
     ])
+  })
+
+  it('timeShareDayExtremes 返回开盘截至指定下标的累计极值，越界下标安全截断', () => {
+    // 分时 bar：high=low=当分钟价
+    const dataList: KLineData[] = [10, 10.2, 10.1, 9.95].map((price, i) => ({
+      timestamp: minute * i,
+      open: price,
+      close: price,
+      high: price,
+      low: price,
+      volume: 100
+    }))
+    expect(timeShareDayExtremes(dataList, 2)).toEqual({ high: 10.2, low: 10 })
+    expect(timeShareDayExtremes(dataList, dataList.length - 1)).toEqual({ high: 10.2, low: 9.95 })
+    // endIdx 超界按末根截断，不抛错
+    expect(timeShareDayExtremes(dataList, 99)).toEqual({ high: 10.2, low: 9.95 })
   })
 
   it('calcTimeShareAvg 指数改用按量加权的点位均值，忽略成交额口径', () => {

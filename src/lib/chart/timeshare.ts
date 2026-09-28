@@ -9,6 +9,10 @@ export interface TimeShareDatum {
 export interface TimeShareState {
   active: boolean
   prevClose: number
+  /** 官方当日开/高/低（来自分时快照，随轮询刷新；分时 bar 无当日 OHLC 语义） */
+  dayOpen: number
+  dayHigh: number
+  dayLow: number
   dayKey: string | null
   /** 每手股数：主板/创业板/北交所 100，科创板 200 */
   lotSize: number
@@ -19,6 +23,9 @@ export interface TimeShareState {
 export const timeShareState: TimeShareState = {
   active: false,
   prevClose: Number.NaN,
+  dayOpen: Number.NaN,
+  dayHigh: Number.NaN,
+  dayLow: Number.NaN,
   dayKey: null,
   lotSize: 100,
   isIndex: false
@@ -28,6 +35,9 @@ export const resetTimeShareState = (): void => {
   timeShareState.active = false
   timeShareState.dayKey = null
   timeShareState.prevClose = Number.NaN
+  timeShareState.dayOpen = Number.NaN
+  timeShareState.dayHigh = Number.NaN
+  timeShareState.dayLow = Number.NaN
   timeShareState.lotSize = 100
   timeShareState.isIndex = false
 }
@@ -82,6 +92,22 @@ export const symmetricRangeAround = (base: number, defaultRange: AxisRange): Axi
 }
 
 // ==================== 百分比左轴换算 ====================
+
+/**
+ * 分时当日累计极值：开盘起截至 endIdx（含）的最高/最低。
+ * 分时 bar 的 high=low=当分钟价、open=上一分钟价，单根不携带当日 OHLC 语义，
+ * 信息表格的今开/最高/最低与悬停振幅需按日累计口径重算。
+ */
+export const timeShareDayExtremes = (dataList: KLineData[], endIdx: number): { high: number; low: number } => {
+  let high = Number.NEGATIVE_INFINITY
+  let low = Number.POSITIVE_INFINITY
+  const last = Math.min(endIdx, dataList.length - 1)
+  for (let i = 0; i <= last; i++) {
+    high = Math.max(high, dataList[i].high)
+    low = Math.min(low, dataList[i].low)
+  }
+  return { high, low }
+}
 
 export const percentOfPrevClose = (value: number): number => {
   const prevClose = timeShareState.prevClose

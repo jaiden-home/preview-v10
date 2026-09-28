@@ -63,6 +63,10 @@ describe('market-service 能力降级', () => {
     const day = `${now.getDate()}`.padStart(2, '0')
     expect(snapshot.date).toBe(`${now.getFullYear()}${month}${day}`)
     expect(snapshot.prevClose).toBe(10.2)
+    // 降级合成：日开/高/低来自当日 1 分钟 K
+    expect(snapshot.open).toBe(10)
+    expect(snapshot.high).toBe(11)
+    expect(snapshot.low).toBe(9.9)
     expect(snapshot.bars).toHaveLength(2)
   })
 
@@ -97,11 +101,21 @@ describe('market-service 能力降级', () => {
   it('能力齐备时直接透传 provider 实现', async () => {
     makeFakeProvider({})
     await vi.mocked(asProvider().searchSymbols).mockResolvedValueOnce([{ ticker: '600519', name: 'Foo', market: 'sh' }])
-    await vi.mocked(asProvider().fetchTimeShare).mockResolvedValueOnce({ date: '20260918', prevClose: 10, bars: [] })
+    await vi.mocked(asProvider().fetchTimeShare).mockResolvedValueOnce({
+      date: '20260918',
+      prevClose: 10,
+      open: 10.1,
+      high: 10.5,
+      low: 9.8,
+      bars: []
+    })
     expect(await searchSymbols('maotai')).toEqual([{ ticker: '600519', name: 'Foo', market: 'sh' }])
     expect(await fetchTimeShare({ market: 'sh', ticker: '600519' })).toEqual({
       date: '20260918',
       prevClose: 10,
+      open: 10.1,
+      high: 10.5,
+      low: 9.8,
       bars: []
     })
   })

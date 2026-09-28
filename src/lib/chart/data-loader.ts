@@ -89,6 +89,9 @@ export const createDataLoader = (deps: DataLoaderDeps): DataLoader => {
           }
           timeShareState.dayKey = snapshot.date
           timeShareState.prevClose = snapshot.prevClose
+          timeShareState.dayOpen = snapshot.open
+          timeShareState.dayHigh = snapshot.high
+          timeShareState.dayLow = snapshot.low
           // 数据就绪：形态切换、数据注入、全天一屏校准在同一帧完成，
           // 旧图直接替换为最终分时布局（callback 前 prevClose 已就绪，
           // 百分比左轴首次布局即为最终宽度）
@@ -190,6 +193,10 @@ export const createDataLoader = (deps: DataLoaderDeps): DataLoader => {
               chart.setPeriod({ span: 1, type: 'minute' })
               return
             }
+            // 官方日开/高/低随轮询刷新（盘中瞬时极值不在分钟快照里）
+            timeShareState.dayOpen = snapshot.open
+            timeShareState.dayHigh = snapshot.high
+            timeShareState.dayLow = snapshot.low
             const last = snapshot.bars[snapshot.bars.length - 1]
             if (last != null) {
               emitIfChanged(last)

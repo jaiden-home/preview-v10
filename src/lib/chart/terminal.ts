@@ -510,6 +510,9 @@ export class ChartTerminal {
     timeShareState.active = false
     timeShareState.dayKey = null
     timeShareState.prevClose = Number.NaN
+    timeShareState.dayOpen = Number.NaN
+    timeShareState.dayHigh = Number.NaN
+    timeShareState.dayLow = Number.NaN
     timeShareState.lotSize = 100
     timeShareState.isIndex = false
     for (const timer of this.calibrateTimers) {

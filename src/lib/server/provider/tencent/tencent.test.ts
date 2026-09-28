@@ -439,7 +439,12 @@ describe('tencent provider 契约', () => {
             json: async () => ({
               data: {
                 sh600519: {
-                  qt: { sh600519: ['', 'Foo', '600519', '1700.00', '1675.00'] },
+                  // qt 索引：4 昨收 / 5 今开 / 33 最高 / 34 最低
+                  qt: {
+                    sh600519: Array.from({ length: 35 }, (_, i) =>
+                      i === 4 ? '1675.00' : i === 5 ? '1699.00' : i === 33 ? '1712.00' : i === 34 ? '1660.00' : ''
+                    )
+                  },
                   data: [{ date: '20260918', data: ['0930 1700.00 100 170000.00'] }]
                 }
               }
@@ -459,4 +464,12 @@ describe('tencent provider 契约', () => {
   })
 
   runProviderContractTests(() => createTencentProvider())
+
+  it('fetchTimeShare 快照携带官方日开/高/低（qt 5/33/34）', async () => {
+    const snapshot = await createTencentProvider().fetchTimeShare({ market: 'sh', ticker: '600519' })
+    expect(snapshot.prevClose).toBe(1675)
+    expect(snapshot.open).toBe(1699)
+    expect(snapshot.high).toBe(1712)
+    expect(snapshot.low).toBe(1660)
+  })
 })

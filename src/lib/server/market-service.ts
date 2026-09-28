@@ -33,6 +33,10 @@ export const fetchTimeShare = async (symbol: SymbolRef): Promise<TimeShareSnapsh
   return {
     date: `${now.getFullYear()}${month}${day}`,
     prevClose: quote.prevClose ?? bars[0].close,
+    // 降级路径无官方 OHLC：由当日 1 分钟 K（真实分钟高低）合成
+    open: bars[0].open,
+    high: Math.max(...bars.map((bar) => bar.high)),
+    low: Math.min(...bars.map((bar) => bar.low)),
     bars
   }
 }
