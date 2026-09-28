@@ -217,11 +217,11 @@
 
 ### 3.12 首页入口页（.home-page，v2.25）
 
-- 结构：`.home-page`（复用卡片化页面范式：`--page-tint` 画布 + 顶部工具栏）→ `.home-main`（唯一滚动容器，垂直水平居中，纵向 `gap: 18px`、`padding: 18px 12px`）→ `.home-hero`（Display-S `22/700` 标题 + Base 副文案，居中）+ `.home-grid`（双列等宽入口卡，`gap: 12px`、`max-width: 640px`；≤768px 转单列 `max-width: 360px` 窄幅、侧距 `8px`）。
+- 结构：`.home-page`（复用卡片化页面范式：`--page-tint` 画布 + 顶部工具栏）→ `.home-main`（唯一滚动容器，垂直水平居中，纵向 `gap: 18px`、`padding: 18px 12px`）→ `.home-hero`（Display-S `22/700` 标题 + Base 副文案，居中）+ `.home-grid`（双列等宽入口卡，`gap: 12px`、`max-width: 640px`；第三张卡 `.home-card.sim` 通栏占位 `grid-column: 1 / -1` 避免半空行；≤768px 转单列 `max-width: 360px` 窄幅、侧距 `8px`）。
 - 工具栏：品牌名 `.home-brand`（Title 级静态文本，非按钮）左锚点 + 主题开关推右；首页无图表，主题切换为独立实现（同款 `#app.dark` + `.theme-switching` 抑制过渡，不经 useChartTerminal）。
 - 入口卡 `.home-card`（整卡链接）：`.trade-card` 同款壳（`--tb-bg` + `1px --tb-border` + `--radius-lg` + `--shadow-card`，`padding: 16px 18px`、纵向 `gap: 8px`）；悬停描边换强调色 + 阴影升 `--shadow-pop`（仅 `border-color / box-shadow / color` 过渡）。
 - 卡内结构：头行 `.home-card-head`（左 `.home-card-icon` 40px 淡底圆角块 `--radius-md` + 内联 SVG 22px `stroke: currentColor`；右 `.home-card-arrow` 14px 次要色箭头，悬停随卡换强调色）→ 标题 Title `13/600` → 副文案 Secondary `11px` 次要色。
-- 语义色：行情看板卡 = 品牌蓝（icon `--tb-active` + `--tb-active-bg`）；模拟交易卡 = 买入红（icon `--up` + `--up-bg`，呼应 §0 买入动作色，绿不参与）；两卡悬停描边/箭头随各自语义色。
+- 语义色：行情看板卡 = 品牌蓝（icon `--tb-active` + `--tb-active-bg`）；模拟交易卡 = 买入红（icon `--up` + `--up-bg`，呼应 §0 买入动作色，绿不参与）；极速模拟卡 `.home-card.sim` = 品牌蓝（复用默认 `.home-card` 语义色，无专属色彩规则）；各卡悬停描边/箭头随各自语义色。
 
 ## 4. 响应式断点
 
@@ -270,6 +270,7 @@
 | v2.24 | 修复主题切换时快捷仓位等按钮底色闪烁：悬停补间 `transition` 会对 CSS 变量换值做 0.2s 渐变、与瞬时切换的表面错拍——`toggleTheme` 切换瞬间在 `#app` 挂 `.theme-switching` 全局抑制过渡（`transition: none !important`），50ms 后移除；§0.7 的 0.2s 交互过渡不受影响                                                                                                                                                                                           |
 | v2.25 | 信息架构调整：行情终端自首页整体迁出至 `/dashboard`（内容与行为不变），首页改为入口页（新增 §3.12：`.home-page` 淡底画布 + hero + 双入口卡——行情看板品牌蓝 / 模拟交易买入红）；交易页「返回行情」两处链接改指 `/dashboard`，边界代理（`proxy.ts`）保留段新增 `dashboard`                                                                                                                                                                                   |
 | v2.26 | 修复跨页主题不同步：客户端导航不重建根节点、`#app.dark` 随 DOM 带入下一页，但各页 `dark` state 恒从 `false` 起算且图表固定浅色初始化，导致看板/交易页首击开关无效（state 与 DOM 错位）、深色页面挂浅色画布（网格条纹错配）。修复：`#app.dark` 类为**唯一事实源**——`ChartTerminal` 新增 `dark` 初始主题选项（`init` 内 `setStyles('dark')` 后再应用 A 股配色等自定义样式），`useChartTerminal`/`HomeLanding` 的开关一律从 DOM 取反（移除本地 `dark` state） |
+| v2.27 | 新增极速模拟页 `/trade/simtrade`（`SimTrading` 组件 1:1 复制 `PaperTrading`，交互/样式/账户持久化完全一致，作为历史回放加速模拟的演进基线）；首页增第三张入口卡 `.home-card.sim`（极速模拟，品牌蓝语义、时钟图标，双列栅格下通栏占位）；§3.12 同步登记                                                                                                                                                                                                     |
 
 ## 7. AI 交付前检查清单
 

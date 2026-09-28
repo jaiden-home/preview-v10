@@ -4,7 +4,7 @@ import Link from 'next/link'
 import ThemeToggle from '@/components/terminal/ThemeToggle'
 import { useLocale } from '@/components/terminal/useLocale'
 
-/** 首页入口页：行情看板与模拟交易两张入口卡片；无图表，主题切换独立实现（与 useChartTerminal 同款 #app.dark 驱动） */
+/** 首页入口页：行情看板 / 模拟交易 / 极速模拟三张入口卡片；无图表，主题切换独立实现（与 useChartTerminal 同款 #app.dark 驱动） */
 export default function HomeLanding() {
   const { t } = useLocale()
 
@@ -102,6 +102,41 @@ export default function HomeLanding() {
             <span className="home-card-title">{t('模拟交易|Paper Trading')}</span>
             <span className="home-card-desc">
               {t('虚拟资金整手交易，T+1、涨跌停与费用仿真|Virtual account with T+1, price limits and fee simulation')}
+            </span>
+          </Link>
+          {/* 极速模拟（加速回放）入口：双列栅格下通栏占位（.home-card.sim），品牌蓝语义 */}
+          <Link className="home-card sim" href="/trade/simtrade">
+            <span className="home-card-head">
+              <span className="home-card-icon" aria-hidden="true">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <circle cx="12" cy="12" r="8.5" />
+                  <path d="M12 7.5V12l3 2" />
+                  <path d="M17.5 4.5l2 1.5-2 1.5" />
+                </svg>
+              </span>
+              <span className="home-card-arrow" aria-hidden="true">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M9 5l7 7-7 7" />
+                </svg>
+              </span>
+            </span>
+            <span className="home-card-title">{t('极速模拟|Sim Trading')}</span>
+            <span className="home-card-desc">
+              {t('历史 K 线回放，3 分钟一个交易日|Replay history, one trading day in minutes')}
             </span>
           </Link>
         </nav>

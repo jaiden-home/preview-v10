@@ -2293,3 +2293,10 @@ body {
     font-variant-numeric: tabular-nums;
   }
 }
+
+/* ---------------- 首页第三张入口卡（极速模拟 /trade/simtrade，UI_SPEC §3.12） ---------------- */
+
+/* 极速模拟卡：品牌蓝（默认 .home-card 语义色），双列栅格下通栏占位避免半空行 */
+#app .home-card.sim {
+  grid-column: 1 / -1;
+}
