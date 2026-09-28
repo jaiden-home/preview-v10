@@ -4,6 +4,7 @@ import type {
   AxisTick,
   CandleTooltipLegendsCustomCallback,
   Chart,
+  DataLoader,
   KLineData,
   Period,
   TooltipLegend
@@ -53,6 +54,10 @@ export interface ChartTerminalOptions {
   locale: Locale
   /** 初始深色主题：客户端导航保留 #app.dark 时，画布须以当前主题初始化（默认浅色） */
   dark?: boolean
+  /** 自定义数据加载器（极速模拟回放页注入；缺省走 BFF 实时加载器） */
+  dataLoader?: DataLoader
+  /** 是否拉取真实行情快照补充基本面（回放页传 false，信息表格基本面显示 --） */
+  pollQuote?: boolean
   /** 信息表格数据变更（十字光标 / 数据刷新 / 基本面到达） */
   onInfoUpdate: (snapshot: InfoSnapshot) => void
   /** 切换标的后行情快照到达（更新按钮文案等） */
@@ -113,17 +118,18 @@ export class ChartTerminal {
     }
 
     chart.setDataLoader(
-      createDataLoader({
-        chart,
-        applyTimeShareTransforms: () => this.applyTimeShareTransforms(),
-        calibrateTimeShareFit: (count) => this.calibrateTimeShareFit(count),
-        fitTimeShareBars: (count) => this.fitTimeShareBars(count),
-        syncTimeShareLastPriceMark: (lastClose) => this.syncTimeShareLastPriceMark(lastClose),
-        initial:
-          this.options.initialBars != null && this.options.initialBars.length > 0
-            ? { code: symbolCode(this.options.symbol), bars: this.options.initialBars }
-            : null
-      })
+      this.options.dataLoader ??
+        createDataLoader({
+          chart,
+          applyTimeShareTransforms: () => this.applyTimeShareTransforms(),
+          calibrateTimeShareFit: (count) => this.calibrateTimeShareFit(count),
+          fitTimeShareBars: (count) => this.fitTimeShareBars(count),
+          syncTimeShareLastPriceMark: (lastClose) => this.syncTimeShareLastPriceMark(lastClose),
+          initial:
+            this.options.initialBars != null && this.options.initialBars.length > 0
+              ? { code: symbolCode(this.options.symbol), bars: this.options.initialBars }
+              : null
+        })
     )
     this.setSymbol(this.options.symbol)
     this.applyCnColorScheme()
@@ -136,8 +142,8 @@ export class ChartTerminal {
     this.bindCrosshairBridge()
     this.applyTouchPassthrough()
     this.emitInfo()
-    // SSR 未提供基本面（上游超时/失败）时客户端补拉
-    if (this.options.initialQuote == null) {
+    // SSR 未提供基本面（上游超时/失败）时客户端补拉（回放页跳过：不混入实时行情）
+    if (this.options.initialQuote == null && this.options.pollQuote !== false) {
       void this.refreshQuote(this.options.symbol)
     }
   }
@@ -166,7 +172,9 @@ export class ChartTerminal {
 
   setSymbol(symbol: { market: string; ticker: string }): void {
     this.chart?.setSymbol({ ticker: symbol.ticker, pricePrecision: 2, volumePrecision: 0, market: symbol.market })
-    void this.refreshQuote(symbol)
+    if (this.options.pollQuote !== false) {
+      void this.refreshQuote(symbol)
+    }
   }
 
   private refreshQuote = async (symbol: { market: string; ticker: string }): Promise<void> => {

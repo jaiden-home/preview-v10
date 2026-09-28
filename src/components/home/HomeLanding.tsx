@@ -136,7 +136,7 @@ export default function HomeLanding() {
             </span>
             <span className="home-card-title">{t('极速模拟|Sim Trading')}</span>
             <span className="home-card-desc">
-              {t('历史 K 线回放，3 分钟一个交易日|Replay history, one trading day in minutes')}
+              {t('历史 K 线回放，30 秒一个交易日|Replay history, one trading day in 30 seconds')}
             </span>
           </Link>
         </nav>

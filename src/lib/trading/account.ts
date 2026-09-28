@@ -22,6 +22,10 @@ export const MAX_TRADE_RECORDS = 200
 const ACCOUNT_STORAGE_KEY = 'klinecharts-paper-account'
 const SYMBOL_STORAGE_KEY = 'klinecharts-paper-symbol'
 
+/** 极速模拟（/trade/simtrade）独立存储 key：账户与选中标的两页互不干扰 */
+export const REPLAY_ACCOUNT_STORAGE_KEY = 'klinecharts-paper-account-replay'
+export const REPLAY_SYMBOL_STORAGE_KEY = 'klinecharts-paper-symbol-replay'
+
 export const round2 = (n: number): number => Math.round(n * 100) / 100
 
 // ==================== 类型 ====================
@@ -367,12 +371,12 @@ interface StoredAccount {
   account: TradingAccount
 }
 
-export const loadAccount = (): TradingAccount | null => {
+export const loadAccount = (key: string = ACCOUNT_STORAGE_KEY): TradingAccount | null => {
   if (typeof window === 'undefined') {
     return null
   }
   try {
-    const raw = window.localStorage.getItem(ACCOUNT_STORAGE_KEY)
+    const raw = window.localStorage.getItem(key)
     if (raw == null) {
       return null
     }
@@ -386,24 +390,24 @@ export const loadAccount = (): TradingAccount | null => {
   }
 }
 
-export const saveAccount = (account: TradingAccount): void => {
+export const saveAccount = (account: TradingAccount, key: string = ACCOUNT_STORAGE_KEY): void => {
   if (typeof window === 'undefined') {
     return
   }
   try {
     const stored: StoredAccount = { version: 1, account }
-    window.localStorage.setItem(ACCOUNT_STORAGE_KEY, JSON.stringify(stored))
+    window.localStorage.setItem(key, JSON.stringify(stored))
   } catch {
     // 存储写满等异常不阻断交易流程
   }
 }
 
-export const loadSelectedSymbol = (): (SymbolRef & { name?: string }) | null => {
+export const loadSelectedSymbol = (key: string = SYMBOL_STORAGE_KEY): (SymbolRef & { name?: string }) | null => {
   if (typeof window === 'undefined') {
     return null
   }
   try {
-    const raw = window.localStorage.getItem(SYMBOL_STORAGE_KEY)
+    const raw = window.localStorage.getItem(key)
     if (raw == null) {
       return null
     }
@@ -417,12 +421,12 @@ export const loadSelectedSymbol = (): (SymbolRef & { name?: string }) | null => 
   }
 }
 
-export const saveSelectedSymbol = (symbol: SymbolRef & { name?: string }): void => {
+export const saveSelectedSymbol = (symbol: SymbolRef & { name?: string }, key: string = SYMBOL_STORAGE_KEY): void => {
   if (typeof window === 'undefined') {
     return
   }
   try {
-    window.localStorage.setItem(SYMBOL_STORAGE_KEY, JSON.stringify(symbol))
+    window.localStorage.setItem(key, JSON.stringify(symbol))
   } catch {
     // 忽略持久化异常
   }

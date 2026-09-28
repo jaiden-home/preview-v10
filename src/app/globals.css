@@ -2300,3 +2300,278 @@ body {
 #app .home-card.sim {
   grid-column: 1 / -1;
 }
+
+/* ---------------- 极速模拟页（/trade/simtrade，UI_SPEC §3.13） ---------------- */
+
+/* 模拟时钟（两行控制卡）：淡底整带（复用 .order-estimate 容器语言），置于委托面板首段 */
+#app .sim-clock {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  background-color: var(--tb-hover);
+  border-radius: var(--radius-md);
+}
+
+/* 行 1：时间锚点 + 主操作（窄屏允许换行） */
+#app .sim-clock-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* live：虚拟日期大字（Display-S 级，与 .summary-total 同范式）+ 第 x/N 天 */
+#app .sim-clock-day {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+#app .sim-day-value {
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--tb-text);
+}
+
+#app .sim-day-meta {
+  font-size: 10px;
+  color: var(--tb-text-sub);
+}
+
+/* setup：起始日标签 + 日期输入 */
+#app .sim-clock-start {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+#app .sim-start-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--tb-text);
+  white-space: nowrap;
+}
+
+/* 行 2：整行计时进度 + 倒计时文案（setup：可模拟天数提示）；
+   进度条宽度为数据驱动内联值（同涨跌色例外），禁过渡宽高 */
+#app .sim-clock-track {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#app .sim-progress {
+  flex: 1;
+  min-width: 40px;
+  height: 6px;
+  overflow: hidden;
+  background-color: var(--tb-border);
+  border-radius: 999px;
+}
+
+#app .sim-progress-fill {
+  display: block;
+  height: 100%;
+  background-color: var(--tb-active);
+}
+
+#app .sim-countdown {
+  font-size: 10px;
+  color: var(--tb-text-sub);
+  white-space: nowrap;
+}
+
+#app .sim-clock-hint {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--tb-text-sub);
+}
+
+/* 倍速分段：复用 §3.3 分段范式（容器底换 --tb-bg 与时钟条带区分层） */
+#app .sim-speed-group {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  background-color: var(--tb-bg);
+  border-radius: var(--radius-sm);
+}
+
+#app .sim-speed-btn {
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--tb-text-sub);
+  background-color: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition:
+    color 0.2s ease,
+    background-color 0.2s ease;
+}
+
+#app .sim-speed-btn:hover {
+  color: var(--tb-text);
+}
+
+#app .sim-speed-btn.active {
+  color: var(--tb-active);
+  background-color: var(--tb-active-bg);
+}
+
+/* 开始/暂停：品牌蓝实底主操作（复用卖出 CTA 范式与 §2.3 品牌蓝投影） */
+#app .sim-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--on-solid);
+  white-space: nowrap;
+  background-color: var(--tb-active);
+  border: none;
+  border-radius: var(--radius-sm);
+  box-shadow: 0 2px 8px rgba(22, 119, 255, 0.28);
+  cursor: pointer;
+  transition:
+    filter 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+#app .sim-toggle-btn:hover {
+  filter: brightness(1.06);
+}
+
+#app .sim-toggle-btn svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* 已结束胶囊（结算卡另由 .sim-settle 承载） */
+#app .sim-ended-tag {
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--tb-text-sub);
+  white-space: nowrap;
+  background-color: var(--tb-bg);
+  border: 1px solid var(--tb-border);
+  border-radius: 999px;
+}
+
+/* 本局结算：遮罩 + 弹窗（层序：遮罩 1090 / 弹层 1100 < 结算 1150 < Toast 1200） */
+#app .sim-settle {
+  position: fixed;
+  inset: 0;
+  z-index: 1150;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background-color: rgba(0, 0, 0, 0.3);
+}
+
+#app .sim-settle-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(320px, 100%);
+  padding: 16px 18px;
+  background-color: var(--dropdown-bg);
+  border: 1px solid var(--tb-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-pop);
+}
+
+#app .sim-settle-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--tb-text);
+}
+
+#app .sim-settle-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 12px;
+}
+
+#app .sim-settle-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+#app .sim-settle-label {
+  font-size: 10px;
+  color: var(--tb-text-sub);
+}
+
+#app .sim-settle-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--tb-text);
+}
+
+#app .sim-settle-btn {
+  height: 36px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--on-solid);
+  background-color: var(--tb-active);
+  border: none;
+  border-radius: var(--radius-md);
+  box-shadow: 0 2px 8px rgba(22, 119, 255, 0.28);
+  cursor: pointer;
+  transition: filter 0.2s ease;
+}
+
+#app .sim-settle-btn:hover {
+  filter: brightness(1.06);
+}
+
+/* 引导失败重试按钮（嵌于加载文案行内） */
+#app .sim-retry-btn {
+  margin-left: 8px;
+  background-color: var(--tb-bg);
+  border: 1px solid var(--tb-border);
+}
+
+/* 时钟条内起始日输入（setup 阶段）：紧凑规格，点击弹原生日期选择 */
+#app .sim-date-input {
+  height: 26px;
+  padding: 0 6px;
+  font-family: var(--font-num);
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--tb-text);
+  background-color: var(--tb-bg);
+  border: 1px solid var(--tb-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+#app .sim-date-input:focus {
+  outline: none;
+  border-color: var(--tb-active);
+  box-shadow: 0 0 0 3px var(--tb-active-bg);
+}
+
+/* 开始模拟（setup）：复用主操作样式，禁用态 §2.8 */
+#app .sim-toggle-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

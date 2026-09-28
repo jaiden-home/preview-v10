@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState, type RefObject } from 'react'
-import type { KLineData } from 'klinecharts'
+import type { DataLoader, KLineData } from 'klinecharts'
 import { ChartTerminal, type InfoSnapshot } from '@/lib/chart/terminal'
 import { DEFAULT_PERIOD_KEY, type PeriodKey } from '@/lib/chart/constants'
 import type { QuoteSnapshot } from '@/lib/chart/types'
@@ -20,6 +20,10 @@ interface UseChartTerminalOptions {
   initialQuote?: QuoteSnapshot | null
   /** 图表挂载前置条件（交易页需等待账户就绪后才渲染容器），默认 true */
   enabled?: boolean
+  /** 自定义数据加载器（回放页注入，见 ChartTerminalOptions.dataLoader） */
+  dataLoader?: DataLoader
+  /** 是否拉取真实行情快照（回放页传 false） */
+  pollQuote?: boolean
   onInfoUpdate?: (info: InfoSnapshot) => void
   onQuoteArrived?: (quote: QuoteSnapshot) => void
 }
@@ -58,7 +62,8 @@ export function useChartTerminal(options: UseChartTerminalOptions) {
     if (container == null) {
       return
     }
-    const { symbol, initialBars, initialQuote, onInfoUpdate, onQuoteArrived } = latestOptions.current
+    const { symbol, initialBars, initialQuote, dataLoader, pollQuote, onInfoUpdate, onQuoteArrived } =
+      latestOptions.current
     const terminal = new ChartTerminal({
       container,
       symbol,
@@ -66,6 +71,8 @@ export function useChartTerminal(options: UseChartTerminalOptions) {
       initialQuote: initialQuote ?? null,
       dark: readAppDark(),
       locale: readLocaleFromHash(),
+      dataLoader,
+      pollQuote,
       onInfoUpdate: onInfoUpdate ?? (() => {}),
       onQuoteArrived,
       onDrawingEnd: () => setActiveTool(null)

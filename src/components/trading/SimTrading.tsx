@@ -8,22 +8,31 @@ import ChartTools from '@/components/terminal/ChartTools'
 import InfoTable from '@/components/terminal/InfoTable'
 import { useLocale } from '@/components/terminal/useLocale'
 import { useChartTerminal } from '@/components/terminal/useChartTerminal'
-import { POLL_INTERVAL_MS } from '@/lib/chart/constants'
-import type { InfoSnapshot } from '@/lib/chart/terminal'
 import { fetchQuoteSnapshot } from '@/lib/chart/api'
+import { POLL_INTERVAL_MS } from '@/lib/chart/constants'
+import { createReplayFeed } from '@/lib/chart/replay-loader'
+import type { InfoSnapshot } from '@/lib/chart/terminal'
 import type { QuoteSnapshot } from '@/lib/chart/types'
+import SimClockBar from '@/components/simtrade/SimClockBar'
+import { useReplay } from '@/components/simtrade/useReplay'
+import { REPLAY_SPEEDS, releaseAllFrozen, virtualTsOf, type ReplaySpeedMs } from '@/lib/trading/replay'
 import OrderPanel from './OrderPanel'
 import PositionsTable from './PositionsTable'
 import TradesTable from './TradesTable'
 import TradeSummary from './TradeSummary'
 import {
+  REPLAY_ACCOUNT_STORAGE_KEY,
+  REPLAY_SYMBOL_STORAGE_KEY,
   calcEquity,
   createInitialAccount,
-  dayKeyOf,
   executeBuy,
   executeSell,
+  fmtMoney,
+  fmtPct,
+  fmtSignedMoney,
   loadAccount,
   loadSelectedSymbol,
+  dayKeyOf,
   round2,
   saveAccount,
   unfreezePositions,
@@ -32,7 +41,7 @@ import {
   type TradingAccount
 } from '@/lib/trading/account'
 
-/** 模拟交易默认标的（首页默认为上证指数，不可交易） */
+/** 极速模拟默认标的（锚定共享交易日历；不可交易标的会被下单校验拦截） */
 const DEFAULT_TRADING_SYMBOL = { market: 'sh', ticker: '600519' }
 
 interface TradeNotice {
@@ -41,15 +50,25 @@ interface TradeNotice {
 }
 
 /**
- * 极速模拟页（/trade/simtrade）：当前为模拟交易页（PaperTrading）的 1:1 复制基线，
- * 交互、样式与账户持久化完全一致；后续在此基础上演进为历史行情回放的加速模拟。
+ * 极速模拟页（/trade/simtrade）：虚拟时钟 + 历史 K 线回放（UI_SPEC §3.13）。
+ * 日原子模型：开局选定起始日后第 1 个交易日立即完成（整根 K 线出现），
+ * 每过倍速时长（15/30/60 秒）推进下一交易日，走满即本局结束。
+ * 行情分两段：**未开局 = 与 /trade 完全一致（图表实时完整日 K + order-head 实时行情，
+ * 可按实时价交易、记真实日期）**；
+ * **开局后 = 回放（图表切为起始日前历史 + 逐日推进，order-head 现价 = 最新完成日收盘，
+ * 与图表一致，仅随虚拟日推进变化）**，
+ * T+1/涨跌停按虚拟日结算；开局时真实日期建仓视为历史持仓直接解冻。
+ * 账户与选中标的使用独立 localStorage key，与 /trade 互不干扰；恢复一律暂停态。
  */
 export default function SimTrading() {
   const { locale, t } = useLocale()
 
   const [account, setAccount] = useState<TradingAccount | null>(null)
   const [selected, setSelected] = useState(DEFAULT_TRADING_SYMBOL)
-  const [quotes, setQuotes] = useState<Record<string, QuoteSnapshot>>({})
+  const [names, setNames] = useState<Record<string, string | null>>({})
+  const [realQuotes, setRealQuotes] = useState<Record<string, QuoteSnapshot>>({})
+  const [setupDate, setSetupDate] = useState('')
+  const [setupSpeed, setSetupSpeed] = useState<ReplaySpeedMs>(REPLAY_SPEEDS[1])
   const [side, setSide] = useState<TradeSide>('buy')
   const [tab, setTab] = useState<'positions' | 'trades'>('positions')
   const [notice, setNotice] = useState<TradeNotice | null>(null)
@@ -62,39 +81,153 @@ export default function SimTrading() {
     intraday: false
   }))
 
-  const accountRef = useRef<TradingAccount | null>(null)
   const quotesRef = useRef<Record<string, QuoteSnapshot>>({})
+  const namesTriedRef = useRef<Set<string>>(new Set())
+  const feedRef = useRef<{ code: string | null; startDate: string | null; dayIndex: number }>({
+    code: null,
+    startDate: null,
+    dayIndex: -1
+  })
   const chartContainerRef = useRef<HTMLDivElement>(null)
   const selectedCode = `${selected.market}${selected.ticker}`
 
-  // 行情图表：账户就绪（DOM 渲染）后初始化（默认日 K），标的切换由钩子自动同步
+  // 回放引擎：虚拟时钟（日原子）+ 各标的回放行情（选中 + 持仓按需拉取）
+  const positionKey = useMemo(
+    () =>
+      (account?.positions ?? [])
+        .map((p) => p.code)
+        .sort()
+        .join(','),
+    [account]
+  )
+  const replayCodes = useMemo(
+    () => [selectedCode, ...positionKey.split(',').filter(Boolean)],
+    [selectedCode, positionKey]
+  )
+  const replay = useReplay({ anchorCode: selectedCode, codes: replayCodes })
+  const simState = replay.state
+
+  // 回放图表：注入式数据源（周期/指标/画线全功能复用），不拉实时行情
+  const feed = useMemo(() => createReplayFeed(), [])
   const chart = useChartTerminal({
     containerRef: chartContainerRef,
     symbol: selected,
-    enabled: account != null,
+    enabled: account != null && replay.phase !== 'boot' && !replay.error,
+    dataLoader: feed.loader,
+    pollQuote: false,
     onInfoUpdate: setInfo
   })
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setAccount(loadAccount() ?? createInitialAccount())
-    setSelected(loadSelectedSymbol() ?? DEFAULT_TRADING_SYMBOL)
+    setAccount(loadAccount(REPLAY_ACCOUNT_STORAGE_KEY) ?? createInitialAccount())
+    setSelected(loadSelectedSymbol(REPLAY_SYMBOL_STORAGE_KEY) ?? DEFAULT_TRADING_SYMBOL)
   }, [])
 
-  // refs 供轮询闭包读取最新值
+  // setup 默认起始日：恒为当日——非交易日/当日 K 线未生成时由天数校验提示（可模拟 0 天、按钮禁用），不自动回退
   useEffect(() => {
-    accountRef.current = account
-  }, [account])
-  useEffect(() => {
-    quotesRef.current = quotes
-  }, [quotes])
+    if (replay.phase === 'setup' && setupDate === '') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setSetupDate(dayKeyOf(Date.now()))
+    }
+  }, [replay.phase, setupDate])
 
-  // 账户变更即持久化
+  // 账户变更即持久化（独立 key）
   useEffect(() => {
     if (account != null) {
-      saveAccount(account)
+      saveAccount(account, REPLAY_ACCOUNT_STORAGE_KEY)
     }
   }, [account])
+
+  // 标的名称：每标的一次性拉取（开局后回放行情展示用；未开局用实时行情自带名称）。
+  // 注意：成功后才标记 tried——StrictMode 双挂载下首跑被取消，若先标记会永久跳过重试
+  useEffect(() => {
+    const missing = replayCodes.filter((code) => !namesTriedRef.current.has(code))
+    if (missing.length === 0) {
+      return
+    }
+    let cancelled = false
+    void (async () => {
+      const snapshots = await Promise.all(missing.map((code) => fetchQuoteSnapshot(code)))
+      if (cancelled) {
+        return
+      }
+      missing.forEach((code) => namesTriedRef.current.add(code))
+      setNames((prev) => {
+        const next = { ...prev }
+        snapshots.forEach((snapshot, i) => {
+          next[missing[i]!] = snapshot?.name ?? null
+        })
+        return next
+      })
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [replayCodes])
+
+  // 未开局（setup）：真实行情轮询（与 /trade 一致）；点「开始模拟」后停止，切换为回放行情
+  useEffect(() => {
+    if (replay.phase !== 'setup') {
+      return
+    }
+    const codes = Array.from(new Set([selectedCode, ...positionKey.split(',').filter(Boolean)]))
+    if (codes.length === 0) {
+      return
+    }
+    let cancelled = false
+    const poll = async () => {
+      const snapshots = await Promise.all(codes.map((code) => fetchQuoteSnapshot(code)))
+      if (cancelled) {
+        return
+      }
+      const next: Record<string, QuoteSnapshot> = {}
+      snapshots.forEach((snapshot, i) => {
+        if (snapshot != null) {
+          next[codes[i]!] = snapshot
+        }
+      })
+      if (Object.keys(next).length > 0) {
+        setRealQuotes((prev) => ({ ...prev, ...next }))
+      }
+    }
+    void poll()
+    const timer = setInterval(() => void poll(), POLL_INTERVAL_MS)
+    return () => {
+      cancelled = true
+      clearInterval(timer)
+    }
+  }, [replay.phase, selectedCode, positionKey])
+
+  // 委托面板行情：setup = 实时行情（与 /trade 一致）；live = 回放行情
+  // （现价 = 最新完成日收盘、昨收 = 回放前收，与图表一致，仅随虚拟日推进变化）
+  const syntheticQuotes = useMemo(() => {
+    if (replay.phase === 'setup') {
+      return realQuotes
+    }
+    const map: Record<string, QuoteSnapshot> = {}
+    for (const code of replayCodes) {
+      const quote = replay.quoteOf(code)
+      if (quote == null) {
+        continue
+      }
+      map[code] = {
+        market: code.slice(0, 2),
+        ticker: code.slice(2),
+        // 名称兜底：一次性拉取 → setup 阶段实时行情缓存 → 代码
+        name: names[code] ?? realQuotes[code]?.name ?? code,
+        price: quote.price,
+        prevClose: quote.prevClose,
+        fundamental: {}
+      }
+    }
+    return map
+  }, [replay, replayCodes, names, realQuotes])
+
+  // 最新委托面板行情供结算闭包读取
+  useEffect(() => {
+    quotesRef.current = syntheticQuotes
+  }, [syntheticQuotes])
 
   // 成交提示 3s 自动消隐
   useEffect(() => {
@@ -119,60 +252,65 @@ export default function SimTrading() {
     return () => window.removeEventListener('keydown', onKey)
   }, [panelOpen])
 
-  const positionKey = useMemo(
-    () =>
-      (account?.positions ?? [])
-        .map((p) => p.code)
-        .sort()
-        .join(','),
-    [account]
-  )
-
-  // 行情轮询：当前标的 + 持仓标的，3s 一次（与终端一致）；跨交易日滚动当日盈亏基准
+  // 图表喂数（setup）：实时完整日 K（含当日，与 /trade 一致）；
+  // 随标的/数据到达重载；换起始日不影响（预览逻辑已取消，开局后才切回放图表）
   useEffect(() => {
-    const codes = Array.from(new Set([selectedCode, ...positionKey.split(',').filter(Boolean)]))
-    if (codes.length === 0) {
+    if (replay.phase !== 'setup' || replay.error) {
       return
     }
-    let cancelled = false
-    const tick = async () => {
-      const snapshots = await Promise.all(codes.map((code) => fetchQuoteSnapshot(code)))
-      if (cancelled) {
-        return
-      }
-      const next: Record<string, QuoteSnapshot> = {}
-      snapshots.forEach((snapshot, i) => {
-        if (snapshot != null) {
-          next[codes[i]] = snapshot
-        }
-      })
-      if (Object.keys(next).length === 0) {
-        return
-      }
-      quotesRef.current = { ...quotesRef.current, ...next }
-      setQuotes((prev) => ({ ...prev, ...next }))
-
-      const acc = accountRef.current
-      const today = dayKeyOf(Date.now())
-      if (acc != null && acc.dayKey !== today) {
-        const rolled = unfreezePositions(acc, today)
-        const { totalAssets } = calcEquity(rolled, priceMapOf(rolled, quotesRef.current))
-        setAccount({ ...rolled, dayKey: today, dayStartEquity: totalAssets })
-      }
+    const bars = replay.allBarsOf(selectedCode)
+    if (bars.length === 0) {
+      return
     }
-    void tick()
-    const timer = setInterval(() => void tick(), POLL_INTERVAL_MS)
-    return () => {
-      cancelled = true
-      clearInterval(timer)
-    }
-  }, [selectedCode, positionKey])
+    feed.setBars(selectedCode, bars)
+    // 同 symbol setSymbol 也会 resetData 重载
+    chart.setSymbol(selected)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- chart/feed/replay 方法逐渲染重建，入依赖会每帧重跑
+  }, [replay.phase, replay.error, replay.barsVersion, selectedCode])
 
-  const priceMap = useMemo(() => priceMapOf(account, quotes), [account, quotes])
+  // 图表喂数（live）：开局/换标的/恢复 → 全量替换 + 重载；逐日推进 → 增量推送当日 bar
+  useEffect(() => {
+    if (replay.phase !== 'live' || replay.error || simState == null) {
+      return
+    }
+    const bars = replay.visibleBarsOf(selectedCode)
+    if (bars.length === 0) {
+      return
+    }
+    feed.setBars(selectedCode, bars)
+    const prev = feedRef.current
+    const incremental =
+      prev.code === selectedCode && prev.startDate === simState.startDate && simState.dayIndex === prev.dayIndex + 1
+    if (incremental) {
+      feed.pushDay(selectedCode)
+    } else {
+      // 开局/换标的/恢复：同 symbol setSymbol 也会 resetData 全量重载
+      chart.setSymbol(selected)
+    }
+    feedRef.current = { code: selectedCode, startDate: simState.startDate, dayIndex: simState.dayIndex }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- chart/feed/replay 方法逐渲染重建，入依赖会每帧重跑
+  }, [replay.phase, replay.error, replay.state, replay.barsVersion, selectedCode])
+
+  // 虚拟日界结算：滚动当日盈亏基准 + T+1 解冻；
+  // 账户 dayKey 晚于虚拟日（开局前按真实日期交易的仓位）视为历史持仓，全部解冻
+  useEffect(() => {
+    if (replay.phase !== 'live' || simState == null || account == null) {
+      return
+    }
+    const virtualDay = replay.calendar[simState.dayIndex - 1] ?? simState.startDate
+    if (account.dayKey === virtualDay) {
+      return
+    }
+    const rolled = account.dayKey > virtualDay ? releaseAllFrozen(account) : unfreezePositions(account, virtualDay)
+    const { totalAssets } = calcEquity(rolled, priceMapOf(rolled, quotesRef.current))
+    setAccount({ ...rolled, dayKey: virtualDay, dayStartEquity: totalAssets })
+  }, [replay.phase, replay.calendar, simState, account])
+
+  const priceMap = useMemo(() => priceMapOf(account, syntheticQuotes), [account, syntheticQuotes])
   const equity = account != null ? calcEquity(account, priceMap) : null
 
-  // 交易坞摘要（§3.11）：当前标的现价与涨跌
-  const dockQuote = quotes[selectedCode] ?? null
+  // 交易坞摘要（§3.11）：当前标的现价与涨跌（随行情阶段：实时 / 回放）
+  const dockQuote = syntheticQuotes[selectedCode] ?? null
   const dockPrice = dockQuote?.price ?? null
   const dockChange =
     dockQuote != null && dockPrice != null && dockQuote.prevClose != null && dockQuote.prevClose > 0
@@ -187,21 +325,43 @@ export default function SimTrading() {
     if (account == null) {
       return
     }
-    const quote = quotes[selectedCode]
-    const name = quote?.name ?? selectedCode
+    const quote = syntheticQuotes[selectedCode]
+    if (quote == null) {
+      setNotice({ kind: 'err', text: t('行情加载中，请稍候|Quotes loading, please wait') })
+      return
+    }
+    if (simState != null && simState.status !== 'running') {
+      setNotice({
+        kind: 'err',
+        text:
+          simState.status === 'ended'
+            ? t('本局已结束，点「再来一局」重开|Session ended, press Play again to restart')
+            : t('已暂停，点「继续」后才能下单|Paused, press Resume to trade')
+      })
+      return
+    }
     const error = validateOrder({
       account,
       side: orderSide,
       code: selectedCode,
       price,
       qty,
-      prevClose: quote?.prevClose ?? null
+      prevClose: quote.prevClose ?? null
     })
     if (error != null) {
       setNotice({ kind: 'err', text: t(error) })
       return
     }
-    const order = { code: selectedCode, name, price, qty, ts: Date.now() }
+    // 成交时间戳：live = 最新完成模拟日 15:00（虚拟日期，T+1 按虚拟日结算）；
+    // setup = 真实当前时间（与 /trade 一致）
+    const dayKey = simState != null ? replay.calendar[simState.dayIndex - 1] : null
+    const order = {
+      code: selectedCode,
+      name: quote.name ?? selectedCode,
+      price,
+      qty,
+      ts: dayKey != null ? virtualTsOf(dayKey) : Date.now()
+    }
     setAccount(orderSide === 'buy' ? executeBuy(account, order) : executeSell(account, order))
     setNotice({
       kind: 'ok',
@@ -209,19 +369,30 @@ export default function SimTrading() {
     })
   }
 
+  const handleStart = () => {
+    if (setupDate !== '') {
+      replay.start(setupDate, setupSpeed)
+    }
+  }
+
   const handleReset = () => {
     if (
       !window.confirm(
         t(
-          '确定重置模拟账户？将清空全部持仓与记录。|Reset the paper account? All positions and records will be cleared.'
+          '确定重开一局？将清空全部持仓、记录与本局进度。|Restart the session? All positions, records and replay progress will be cleared.'
         )
       )
     ) {
       return
     }
+    setSetupDate('')
     setAccount(createInitialAccount())
-    setNotice({ kind: 'ok', text: t('账户已重置|Account reset') })
+    replay.restart()
+    setNotice({ kind: 'ok', text: t('已重开一局|Session restarted') })
   }
+
+  const setupForwardDays =
+    replay.phase === 'setup' && setupDate !== '' ? replay.forwardCountOn(selectedCode, setupDate) : 0
 
   return (
     <div className={`trade-page${panelOpen ? ' sheet-open' : ''}`}>
@@ -234,7 +405,14 @@ export default function SimTrading() {
         <ThemeToggle t={t} onToggle={chart.toggleTheme} id="theme-btn-top" itemClassName="theme-at-top" />
       </div>
 
-      {account == null || equity == null ? (
+      {replay.error ? (
+        <div className="trade-loading">
+          {t('回放数据加载失败|Failed to load replay data')}
+          <button type="button" className="tb-btn sim-retry-btn" onClick={replay.retry}>
+            {t('重试|Retry')}
+          </button>
+        </div>
+      ) : account == null || equity == null || replay.phase === 'boot' ? (
         <div className="trade-loading">{t('加载中|Loading')}…</div>
       ) : (
         /* 单一滚动容器：工具栏固定，主区整体滚动（避免嵌套滚动导致面板内容被裁剪） */
@@ -249,7 +427,7 @@ export default function SimTrading() {
                     <path d="M15 5l-7 7 7 7" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                 </Link>
-                {/* 精简周期组：仅日/周/月 */}
+                {/* 精简周期组：仅日/周/月（周/月由日 K 本地聚合） */}
                 <PeriodGroup simple activeKey={chart.periodKey} t={t} onChange={chart.changePeriod} />
                 <div className="tb-divider" />
                 {/* 移动端（§3.11）：强制换行——行 1 = 返回 + 周期 + 主题，行 2 = 功能按钮；桌面隐藏 */}
@@ -269,10 +447,11 @@ export default function SimTrading() {
                 <ThemeToggle t={t} onToggle={chart.toggleTheme} id="theme-btn-chart" itemClassName="theme-in-chart" />
               </div>
               <InfoTable info={info} locale={locale} />
-              {/* klinecharts 画布容器（客户端初始化，不参与 SSR） */}
+              {/* klinecharts 画布容器（客户端初始化，不参与 SSR）：回放数据 */}
               <div className="trade-chart-body" ref={chartContainerRef} />
             </section>
-            {/* 委托面板：桌面为右列单卡三段式（行情 → 交易 → 资产）；
+            {/* 委托面板：桌面为右列单卡三段式（时钟 → 行情 → 交易 → 资产）；
+               setup 阶段时钟条承载开局，委托表单以起始日前收盘预览（提交提示先开始）；
                移动端转悬浮交易坞（收合仅露坞条）+ 底部弹层（§3.11） */}
             <section
               id="trade-order-panel"
@@ -316,12 +495,33 @@ export default function SimTrading() {
                 )}
               </button>
               <div className="trade-panel-body">
+                <SimClockBar
+                  t={t}
+                  mode={replay.phase === 'setup' ? 'setup' : 'live'}
+                  state={simState}
+                  calendar={replay.calendar}
+                  progress={replay.progress}
+                  date={
+                    replay.phase === 'setup'
+                      ? setupDate
+                      : simState != null
+                        ? (replay.calendar[simState.dayIndex - 1] ?? simState.startDate)
+                        : setupDate
+                  }
+                  range={replay.startRange}
+                  forwardDays={setupForwardDays}
+                  speedMs={replay.phase === 'setup' ? setupSpeed : (simState?.speedMs ?? setupSpeed)}
+                  onDateChange={setSetupDate}
+                  onStart={handleStart}
+                  onToggle={replay.togglePause}
+                  onSpeedChange={replay.phase === 'setup' ? setSetupSpeed : replay.setSpeed}
+                />
                 <OrderPanel
                   t={t}
                   side={side}
                   onSideChange={setSide}
                   code={selectedCode}
-                  quote={quotes[selectedCode] ?? null}
+                  quote={syntheticQuotes[selectedCode] ?? null}
                   account={account}
                   onSubmit={handleSubmit}
                 />
@@ -348,11 +548,45 @@ export default function SimTrading() {
                 </button>
               </div>
               {tab === 'positions' ? (
-                <PositionsTable t={t} positions={account.positions} quotes={quotes} />
+                <PositionsTable t={t} positions={account.positions} quotes={syntheticQuotes} />
               ) : (
                 <TradesTable t={t} trades={account.trades} locale={locale} />
               )}
             </section>
+          </div>
+        </div>
+      )}
+
+      {/* 本局结束：简版结算卡（数字汇总 + 再来一局） */}
+      {simState?.status === 'ended' && equity != null && account != null && (
+        <div className="sim-settle" role="dialog" aria-modal="true" aria-label={t('本局结算|Session summary')}>
+          <div className="sim-settle-card">
+            <h3 className="sim-settle-title">{t('本局结束|Session ended')}</h3>
+            <div className="sim-settle-grid">
+              <span className="sim-settle-cell">
+                <span className="sim-settle-label">{t('总资产|Total assets')}</span>
+                <span className="sim-settle-value num">{fmtMoney(equity.totalAssets)}</span>
+              </span>
+              <span className="sim-settle-cell">
+                <span className="sim-settle-label">{t('总盈亏|Total P&L')}</span>
+                <span className={`sim-settle-value num ${pnlClass(equity.totalPnl)}`}>
+                  {fmtSignedMoney(equity.totalPnl)}
+                </span>
+              </span>
+              <span className="sim-settle-cell">
+                <span className="sim-settle-label">{t('总收益率|Return')}</span>
+                <span className={`sim-settle-value num ${pnlClass(equity.totalPnl)}`}>
+                  {fmtPct(equity.totalPnlPct)}
+                </span>
+              </span>
+              <span className="sim-settle-cell">
+                <span className="sim-settle-label">{t('成交笔数|Trades')}</span>
+                <span className="sim-settle-value num">{account.trades.length}</span>
+              </span>
+            </div>
+            <button type="button" className="sim-settle-btn" onClick={handleReset}>
+              {t('再来一局|Play again')}
+            </button>
           </div>
         </div>
       )}
@@ -387,3 +621,5 @@ const priceMapOf = (account: TradingAccount | null, quotes: Record<string, Quote
   }
   return map
 }
+
+const pnlClass = (n: number): string => (n > 0 ? 'up' : n < 0 ? 'down' : '')
