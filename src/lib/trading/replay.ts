@@ -13,9 +13,6 @@ import { dayKeyOf, type TradingAccount } from './account'
 export const REPLAY_SPEEDS = [15_000, 30_000, 60_000] as const
 export type ReplaySpeedMs = (typeof REPLAY_SPEEDS)[number]
 
-/** 回放窗口上限：模拟交易日数（受单次拉取 640 根与历史覆盖约束） */
-export const REPLAY_BAR_COUNT = 500
-
 export type ReplayStatus = 'running' | 'paused' | 'ended'
 
 export interface ReplayState {
@@ -48,7 +45,8 @@ export const calendarFrom = (bars: KLineData[], startDate: string): string[] =>
 export const forwardCountOf = (bars: KLineData[], startDate: string): number =>
   bars.filter((bar) => dateKeyOfBar(bar) >= startDate).length
 
-/** 可选起始日范围：min 保证选后仍可模拟满 500 个交易日，max = 最新一根日 K（选它仍有 1 天） */
+/** 可选起始日范围：数据集内任意可选（能模拟几天由数据决定）；
+ *  min 取第二根（首根无昨收上下文），max = 最新一根日 K（选它仍有 1 天，由"≥2 天"开局校验拦截） */
 export interface ReplayStartRange {
   min: string
   max: string
@@ -59,8 +57,8 @@ export const startRangeOf = (bars: KLineData[]): ReplayStartRange | null => {
     return null
   }
   return {
-    min: dateKeyOfBar(bars[Math.max(0, bars.length - 1 - REPLAY_BAR_COUNT)]),
-    max: dateKeyOfBar(bars[bars.length - 1])
+    min: dateKeyOfBar(bars[1]!),
+    max: dateKeyOfBar(bars[bars.length - 1]!)
   }
 }
 

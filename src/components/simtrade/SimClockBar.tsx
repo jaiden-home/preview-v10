@@ -61,7 +61,7 @@ export default function SimClockBar({
   const running = state?.status === 'running'
   const ended = state?.status === 'ended'
   const liveDay = live ? (calendar[state!.dayIndex - 1] ?? state!.startDate) : date
-  const days = forwardDays > 0 ? Math.min(forwardDays, 500) : 0
+  const days = forwardDays
   // 至少 2 个交易日（大于 1 日）才能开始模拟
   const startDisabled = setup && (date === '' || days <= 1)
   const clamped = Math.min(1, Math.max(0, progress))

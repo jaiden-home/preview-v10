@@ -4,7 +4,6 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { KLineData } from 'klinecharts'
 import { fetchReplayBars } from '@/lib/chart/api'
 import {
-  REPLAY_BAR_COUNT,
   advanceDay,
   calendarFrom,
   clearReplaySession,
@@ -21,8 +20,9 @@ import {
   type ReplayState
 } from '@/lib/trading/replay'
 
-/** 回放数据集：向 BFF 拉取的日 K 根数（窗口 500 + 历史预览余量） */
-const REPLAY_FETCH_BARS = 800
+/** 回放数据集：向 BFF 拉取全量历史日 K（按页回溯至上市/数据尽头，上限 5000 根 ≈ 20 年）；
+ *  起始日任意可选，可模拟天数由数据决定 */
+const REPLAY_FETCH_BARS = 5000
 
 /** boot = 引导中；setup = 选起始日开局；live = 模拟进行/暂停/结束 */
 export type ReplayPhase = 'boot' | 'setup' | 'live'
@@ -232,7 +232,7 @@ export const useReplay = (options: UseReplayOptions): UseReplayResult => {
     }
     setDayStartedAt(Date.now())
     setCalendar(cal)
-    setState(createReplaySession(anchorRef.current, startDate, Math.min(REPLAY_BAR_COUNT, cal.length), speedMs))
+    setState(createReplaySession(anchorRef.current, startDate, cal.length, speedMs))
     setPhase('live')
   }, [])
 

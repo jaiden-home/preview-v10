@@ -95,11 +95,14 @@ describe('窗口与起始日范围', () => {
     expect(forwardCountOf(bars, dates[502])).toBe(1)
   })
 
-  it('可选起始日范围：min 保证满 500 天、max 至少留 1 天', () => {
+  it('可选起始日范围：数据集内任意可选（min=第二根，max=最新一根）', () => {
     const range = startRangeOf(bars)!
     expect(range).not.toBeNull()
-    expect(forwardCountOf(bars, range.min)).toBeGreaterThanOrEqual(500)
-    expect(forwardCountOf(bars, range.max)).toBeGreaterThanOrEqual(1)
+    expect(range.min).toBe(dates[1])
+    expect(range.max).toBe(dates[502])
+    // 任意起始日的可模拟天数由数据决定，无固定窗口上限
+    expect(forwardCountOf(bars, range.min)).toBe(502)
+    expect(forwardCountOf(bars, range.max)).toBe(1)
     expect(startRangeOf(bars.slice(0, 2))).toBeNull()
   })
 })

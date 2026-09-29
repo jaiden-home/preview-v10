@@ -21,10 +21,10 @@ export const searchQuerySchema = z.object({
   q: z.string().trim().min(1, 'query is required').max(40, 'query is too long')
 })
 
-/** 回放数据：目标根数（2~1200，默认 800；BFF 分页拼接突破上游单页上限） */
+/** 回放数据：目标根数（2~5000，默认 800；BFF 按页回溯至上市/数据尽头） */
 export const replayQuerySchema = z.object({
   symbol: symbolField,
-  bars: z.coerce.number().int().min(2).max(1200).default(800)
+  bars: z.coerce.number().int().min(2).max(5000).default(800)
 })
 
 export type KlineQuery = z.infer<typeof klineQuerySchema>
