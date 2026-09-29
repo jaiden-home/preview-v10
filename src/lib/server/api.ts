@@ -12,10 +12,21 @@ export const jsonError = (status: number, code: string, message: string): NextRe
 /** 进程级共享限流器（按 IP 滑动窗口） */
 const apiLimiter = new SlidingWindowRateLimiter(getEnv().RATE_LIMIT_PER_MINUTE, 60_000)
 
+/** 模拟交易口独立限流器（/api/sim 轮询密集，不挤占聚合口配额） */
+const simLimiter = new SlidingWindowRateLimiter(getEnv().RATE_LIMIT_SIM_PER_MINUTE, 60_000)
+
 export const allowRequest = (request: Request): boolean => {
   const allowed = apiLimiter.check(clientKeyFrom(request))
   if (allowed) {
     apiLimiter.sweep()
+  }
+  return allowed
+}
+
+export const allowSimRequest = (request: Request): boolean => {
+  const allowed = simLimiter.check(clientKeyFrom(request))
+  if (allowed) {
+    simLimiter.sweep()
   }
   return allowed
 }

@@ -22,5 +22,8 @@ npm-debug.log*
 .env*.local
 .idea/
 
+# runtime data (sim trading sqlite)
+data
+
 # typescript
 *.tsbuildinfo

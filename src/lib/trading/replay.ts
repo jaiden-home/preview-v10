@@ -4,7 +4,7 @@
 // 走满 dayCount 个交易日即本局结束。
 // 成交时间戳 = 已完成虚拟日 15:00（本地时），dayKeyOf 反解回虚拟日期，
 // account.ts 的 T+1 冻结/解冻与当日盈亏滚动零改动复用。
-// 全部为环境无关纯函数（持久化函数仅客户端调用），K 线数据不落盘。
+// 全部为环境无关纯函数（服务端结算与客户端展示共用）；会话权威状态由 BFF 持久化，K 线数据不落盘。
 
 import type { KLineData } from 'klinecharts'
 import { dayKeyOf, type TradingAccount } from './account'
@@ -141,57 +141,5 @@ export const releaseAllFrozen = (account: TradingAccount): TradingAccount => {
     positions: account.positions.map((p) =>
       p.frozenQty > 0 ? { ...p, availableQty: p.qty, frozenQty: 0, frozenDate: '' } : p
     )
-  }
-}
-
-// ==================== 持久化（仅客户端） ====================
-
-const REPLAY_SESSION_STORAGE_KEY = 'klinecharts-paper-replay-session'
-
-interface StoredReplaySession {
-  version: 2
-  state: ReplayState
-}
-
-export const loadReplaySession = (): ReplayState | null => {
-  if (typeof window === 'undefined') {
-    return null
-  }
-  try {
-    const raw = window.localStorage.getItem(REPLAY_SESSION_STORAGE_KEY)
-    if (raw == null) {
-      return null
-    }
-    const parsed = JSON.parse(raw) as StoredReplaySession
-    if (parsed?.version !== 2 || typeof parsed.state?.dayCount !== 'number') {
-      return null
-    }
-    // 恢复一律暂停：不按真实流逝时间追帧（ended 保持结束态）
-    return parsed.state.status === 'ended' ? parsed.state : { ...parsed.state, status: 'paused' }
-  } catch {
-    return null
-  }
-}
-
-export const saveReplaySession = (state: ReplayState): void => {
-  if (typeof window === 'undefined') {
-    return
-  }
-  try {
-    const stored: StoredReplaySession = { version: 2, state }
-    window.localStorage.setItem(REPLAY_SESSION_STORAGE_KEY, JSON.stringify(stored))
-  } catch {
-    // 存储写满等异常不阻断回放流程
-  }
-}
-
-export const clearReplaySession = (): void => {
-  if (typeof window === 'undefined') {
-    return
-  }
-  try {
-    window.localStorage.removeItem(REPLAY_SESSION_STORAGE_KEY)
-  } catch {
-    // 忽略持久化异常
   }
 }

@@ -18,7 +18,13 @@ const envSchema = z.object({
   /** 标的搜索缓存 TTL */
   CACHE_SEARCH_TTL_MS: z.coerce.number().int().min(1_000).default(300_000),
   /** 每 IP 每分钟最大请求数（BFF 聚合口） */
-  RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(10).default(240)
+  RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(10).default(240),
+  /** 每 IP 每分钟最大请求数（模拟交易口，轮询密集，独立于聚合口配额） */
+  RATE_LIMIT_SIM_PER_MINUTE: z.coerce.number().int().min(10).default(240),
+  /** 模拟交易服务实现（trading/registry.ts 登记的 id；接真实交易接口时扩展枚举） */
+  SIM_TRADING_PROVIDER: z.enum(['local']).default('local'),
+  /** 模拟交易 SQLite 数据库文件路径（相对进程工作目录） */
+  SIM_TRADING_DB_PATH: z.string().default('./data/sim-trading.db')
 })
 
 export type Env = z.infer<typeof envSchema>

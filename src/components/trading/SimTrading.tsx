@@ -15,28 +15,21 @@ import type { InfoSnapshot } from '@/lib/chart/terminal'
 import type { QuoteSnapshot } from '@/lib/chart/types'
 import SimClockBar from '@/components/simtrade/SimClockBar'
 import { useReplay } from '@/components/simtrade/useReplay'
-import { REPLAY_SPEEDS, releaseAllFrozen, virtualTsOf, type ReplaySpeedMs } from '@/lib/trading/replay'
+import { REPLAY_SPEEDS, type ReplaySpeedMs } from '@/lib/trading/replay'
+import { postSimOrder } from '@/lib/trading/sim-api'
 import OrderPanel from './OrderPanel'
 import PositionsTable from './PositionsTable'
 import TradesTable from './TradesTable'
 import TradeSummary from './TradeSummary'
 import {
-  REPLAY_ACCOUNT_STORAGE_KEY,
   REPLAY_SYMBOL_STORAGE_KEY,
   calcEquity,
-  createInitialAccount,
-  executeBuy,
-  executeSell,
   fmtMoney,
   fmtPct,
   fmtSignedMoney,
-  loadAccount,
   loadSelectedSymbol,
   dayKeyOf,
   round2,
-  saveAccount,
-  unfreezePositions,
-  validateOrder,
   type TradeSide,
   type TradingAccount
 } from '@/lib/trading/account'
@@ -53,12 +46,15 @@ interface TradeNotice {
  * 极速模拟页（/simtrade）：虚拟时钟 + 历史 K 线回放（UI_SPEC §3.13）。
  * 日原子模型：开局选定起始日后第 1 个交易日立即完成（整根 K 线出现），
  * 每过倍速时长（15/30/60 秒）推进下一交易日，走满即本局结束。
+ * **交易账务（账户/持仓/成交/回放会话/虚拟时钟）全部由 BFF 权威结算（node:sqlite 持久化）**：
+ * 本组件只做展示与请求——下单走 /api/sim/orders，会话控制走 /api/sim/session，
+ * live running 时 ~1s 轮询 /api/sim/state 校准权威状态（进度条本地插值）。
  * 行情分两段：**未开局 = 与 /trade 完全一致（图表实时完整日 K + order-head 实时行情，
  * 可按实时价交易、记真实日期）**；
  * **开局后 = 回放（图表切为起始日前历史 + 逐日推进，order-head 现价 = 最新完成日收盘，
  * 与图表一致，仅随虚拟日推进变化）**，
- * T+1/涨跌停按虚拟日结算；开局时真实日期建仓视为历史持仓直接解冻。
- * 账户与选中标的使用独立 localStorage key，与 /trade 互不干扰；恢复一律暂停态。
+ * T+1/涨跌停按虚拟日结算（服务端）；开局时真实日期建仓视为历史持仓直接解冻。
+ * 选中标的仍用独立 localStorage key，与 /trade 互不干扰。
  */
 export default function SimTrading() {
   const { locale, t } = useLocale()
@@ -81,7 +77,8 @@ export default function SimTrading() {
     intraday: false
   }))
 
-  const quotesRef = useRef<Record<string, QuoteSnapshot>>({})
+  // 下单提交中（服务端权威成交期间防重复提交）
+  const submittingRef = useRef(false)
   const namesTriedRef = useRef<Set<string>>(new Set())
   const feedRef = useRef<{ code: string | null; startDate: string | null; dayIndex: number }>({
     code: null,
@@ -104,7 +101,7 @@ export default function SimTrading() {
     () => [selectedCode, ...positionKey.split(',').filter(Boolean)],
     [selectedCode, positionKey]
   )
-  const replay = useReplay({ anchorCode: selectedCode, codes: replayCodes })
+  const replay = useReplay({ anchorCode: selectedCode, codes: replayCodes, onAccountSync: setAccount })
   const simState = replay.state
 
   // 回放图表：注入式数据源（周期/指标/画线全功能复用），不拉实时行情
@@ -120,7 +117,6 @@ export default function SimTrading() {
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setAccount(loadAccount(REPLAY_ACCOUNT_STORAGE_KEY) ?? createInitialAccount())
     setSelected(loadSelectedSymbol(REPLAY_SYMBOL_STORAGE_KEY) ?? DEFAULT_TRADING_SYMBOL)
   }, [])
 
@@ -131,13 +127,6 @@ export default function SimTrading() {
       setSetupDate(dayKeyOf(Date.now()))
     }
   }, [replay.phase, setupDate])
-
-  // 账户变更即持久化（独立 key）
-  useEffect(() => {
-    if (account != null) {
-      saveAccount(account, REPLAY_ACCOUNT_STORAGE_KEY)
-    }
-  }, [account])
 
   // 标的名称：每标的一次性拉取（开局后回放行情展示用；未开局用实时行情自带名称）。
   // 注意：成功后才标记 tried——StrictMode 双挂载下首跑被取消，若先标记会永久跳过重试
@@ -224,11 +213,6 @@ export default function SimTrading() {
     return map
   }, [replay, replayCodes, names, realQuotes])
 
-  // 最新委托面板行情供结算闭包读取
-  useEffect(() => {
-    quotesRef.current = syntheticQuotes
-  }, [syntheticQuotes])
-
   // 成交提示 3s 自动消隐
   useEffect(() => {
     if (notice == null) {
@@ -291,21 +275,6 @@ export default function SimTrading() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- chart/feed/replay 方法逐渲染重建，入依赖会每帧重跑
   }, [replay.phase, replay.error, replay.state, replay.barsVersion, selectedCode])
 
-  // 虚拟日界结算：滚动当日盈亏基准 + T+1 解冻；
-  // 账户 dayKey 晚于虚拟日（开局前按真实日期交易的仓位）视为历史持仓，全部解冻
-  useEffect(() => {
-    if (replay.phase !== 'live' || simState == null || account == null) {
-      return
-    }
-    const virtualDay = replay.calendar[simState.dayIndex - 1] ?? simState.startDate
-    if (account.dayKey === virtualDay) {
-      return
-    }
-    const rolled = account.dayKey > virtualDay ? releaseAllFrozen(account) : unfreezePositions(account, virtualDay)
-    const { totalAssets } = calcEquity(rolled, priceMapOf(rolled, quotesRef.current))
-    setAccount({ ...rolled, dayKey: virtualDay, dayStartEquity: totalAssets })
-  }, [replay.phase, replay.calendar, simState, account])
-
   const priceMap = useMemo(() => priceMapOf(account, syntheticQuotes), [account, syntheticQuotes])
   const equity = account != null ? calcEquity(account, priceMap) : null
 
@@ -321,8 +290,9 @@ export default function SimTrading() {
       : null
   const dockClass = dockChange == null || dockChange.abs === 0 ? 'flat' : dockChange.abs > 0 ? 'up' : 'down'
 
-  const handleSubmit = (orderSide: TradeSide, price: number, qty: number) => {
-    if (account == null) {
+  /** 下单：服务端权威校验与成交（涨跌停/整手/资金/T+1/虚拟时间戳均由 BFF 结算） */
+  const handleSubmit = async (orderSide: TradeSide, price: number, qty: number) => {
+    if (account == null || submittingRef.current) {
       return
     }
     const quote = syntheticQuotes[selectedCode]
@@ -340,42 +310,40 @@ export default function SimTrading() {
       })
       return
     }
-    const error = validateOrder({
-      account,
+    submittingRef.current = true
+    const result = await postSimOrder({
       side: orderSide,
       code: selectedCode,
       price,
       qty,
-      prevClose: quote.prevClose ?? null
+      name: quote.name ?? undefined
     })
-    if (error != null) {
-      setNotice({ kind: 'err', text: t(error) })
+    submittingRef.current = false
+    if (result == null) {
+      setNotice({ kind: 'err', text: t('网络异常，请稍候重试|Network error, please retry') })
       return
     }
-    // 成交时间戳：live = 最新完成模拟日 15:00（虚拟日期，T+1 按虚拟日结算）；
-    // setup = 真实当前时间（与 /trade 一致）
-    const dayKey = simState != null ? replay.calendar[simState.dayIndex - 1] : null
-    const order = {
-      code: selectedCode,
-      name: quote.name ?? selectedCode,
-      price,
-      qty,
-      ts: dayKey != null ? virtualTsOf(dayKey) : Date.now()
+    if (!result.ok) {
+      setNotice({ kind: 'err', text: t(result.message) })
+      return
     }
-    setAccount(orderSide === 'buy' ? executeBuy(account, order) : executeSell(account, order))
+    replay.applySimState(result.state)
     setNotice({
       kind: 'ok',
       text: `${orderSide === 'buy' ? t('买入|Buy') : t('卖出|Sell')} ${selectedCode} ${qty}${t('股|shares')} @ ${price.toFixed(2)} ${t('已成交|filled')}`
     })
   }
 
-  const handleStart = () => {
+  const handleStart = async () => {
     if (setupDate !== '') {
-      replay.start(setupDate, setupSpeed)
+      const ok = await replay.start(setupDate, setupSpeed)
+      if (!ok) {
+        setNotice({ kind: 'err', text: t('开局失败，请稍候重试|Failed to start, please retry') })
+      }
     }
   }
 
-  const handleReset = () => {
+  const handleReset = async () => {
     if (
       !window.confirm(
         t(
@@ -386,8 +354,11 @@ export default function SimTrading() {
       return
     }
     setSetupDate('')
-    setAccount(createInitialAccount())
-    replay.restart()
+    const ok = await replay.restart()
+    if (!ok) {
+      setNotice({ kind: 'err', text: t('重开失败，请稍候重试|Restart failed, please retry') })
+      return
+    }
     setNotice({ kind: 'ok', text: t('已重开一局|Session restarted') })
   }
 

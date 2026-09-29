@@ -267,42 +267,64 @@ export interface OrderValidationInput {
   prevClose: number | null
 }
 
+/** 下单校验拒绝码（服务端错误响应与前端提示共用） */
+export type OrderRejectCode =
+  | 'not_tradable'
+  | 'invalid_price'
+  | 'price_limit'
+  | 'invalid_qty'
+  | 'lot_size'
+  | 'insufficient_cash'
+  | 'insufficient_qty'
+
+export interface OrderRejection {
+  code: OrderRejectCode
+  /** 双语文案键（zh|en），前端 t() 直出 */
+  message: string
+}
+
 /**
- * 下单校验，返回双语文案键（zh|en）或 null（通过）。
+ * 下单校验，返回拒绝原因（code + 双语文案键）或 null（通过）。
  * 买入：可交易标的 / 价格有效且在涨跌停内 / 整手 / 资金充足。
  * 卖出：另校验可卖数量。
  */
-export const validateOrder = (input: OrderValidationInput): string | null => {
+export const validateOrder = (input: OrderValidationInput): OrderRejection | null => {
   const { account, side, code, price, qty, prevClose } = input
   if (!isTradableCode(code)) {
-    return '指数与该类标的暂不支持模拟交易|Indexes are not tradable in paper trading'
+    return { code: 'not_tradable', message: '指数与该类标的暂不支持模拟交易|Indexes are not tradable in paper trading' }
   }
   if (!Number.isFinite(price) || price <= 0) {
-    return '请输入有效价格|Invalid price'
+    return { code: 'invalid_price', message: '请输入有效价格|Invalid price' }
   }
   if (prevClose != null && prevClose > 0) {
     const { upper, lower } = limitPricesOf(prevClose, code)
     if (price > upper || price < lower) {
-      return `超出涨跌停范围（${lower.toFixed(2)} ~ ${upper.toFixed(2)}）|Out of price limit range (${lower.toFixed(2)} ~ ${upper.toFixed(2)})`
+      return {
+        code: 'price_limit',
+        message: `超出涨跌停范围（${lower.toFixed(2)} ~ ${upper.toFixed(2)}）|Out of price limit range (${lower.toFixed(2)} ~ ${upper.toFixed(2)})`
+      }
     }
   }
   if (!Number.isInteger(qty) || qty <= 0) {
-    return '请输入有效数量|Invalid quantity'
+    return { code: 'invalid_qty', message: '请输入有效数量|Invalid quantity' }
   }
   if (side === 'buy') {
     if (qty % 100 !== 0) {
-      return '买入数量须为 100 股的整数倍|Buy quantity must be in multiples of 100'
+      return { code: 'lot_size', message: '买入数量须为 100 股的整数倍|Buy quantity must be in multiples of 100' }
     }
     const amount = round2(price * qty)
     const fee = calcFees('buy', amount)
     if (amount + fee > account.cash + 1e-6) {
-      return '可用资金不足|Insufficient cash'
+      return { code: 'insufficient_cash', message: '可用资金不足|Insufficient cash' }
     }
     return null
   }
   const held = account.positions.find((p) => p.code === code)
   if (held == null || held.availableQty < qty) {
-    return '可卖数量不足（当日买入 T+1 可卖）|Insufficient available quantity (T+1 rule)'
+    return {
+      code: 'insufficient_qty',
+      message: '可卖数量不足（当日买入 T+1 可卖）|Insufficient available quantity (T+1 rule)'
+    }
   }
   return null
 }

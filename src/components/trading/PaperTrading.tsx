@@ -200,7 +200,7 @@ export default function PaperTrading() {
       prevClose: quote?.prevClose ?? null
     })
     if (error != null) {
-      setNotice({ kind: 'err', text: t(error) })
+      setNotice({ kind: 'err', text: t(error.message) })
       return
     }
     const order = { code: selectedCode, name, price, qty, ts: Date.now() }

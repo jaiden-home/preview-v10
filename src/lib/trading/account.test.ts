@@ -115,9 +115,9 @@ describe('买入执行', () => {
 describe('T+1 与卖出执行', () => {
   it('当日买入不可卖，次日解冻后可卖', () => {
     let account = executeBuy(createInitialAccount(DAY1), order({ price: 100, qty: 200 }))
-    expect(validateOrder({ account, side: 'sell', code: 'sh600519', price: 100, qty: 100, prevClose: null })).toContain(
-      'T+1'
-    )
+    expect(
+      validateOrder({ account, side: 'sell', code: 'sh600519', price: 100, qty: 100, prevClose: null })?.message
+    ).toContain('T+1')
 
     const unfrozen = unfreezePositions(account, dayKeyOf(DAY2))
     expect(unfrozen.positions[0].availableQty).toBe(200)
@@ -159,26 +159,32 @@ describe('下单校验', () => {
         qty: 100,
         prevClose: null
       })
-    ).toContain('不支持模拟交易')
+    ).toMatchObject({ code: 'not_tradable', message: expect.stringContaining('不支持模拟交易') })
   })
 
   it('涨跌停边界校验', () => {
     const account = createInitialAccount(DAY1)
     const input = { account, side: 'buy' as const, code: 'sh600519', qty: 100, prevClose: 100 }
-    expect(validateOrder({ ...input, price: 110.01 })).toContain('涨跌停')
-    expect(validateOrder({ ...input, price: 89.99 })).toContain('涨跌停')
+    expect(validateOrder({ ...input, price: 110.01 })).toMatchObject({
+      code: 'price_limit',
+      message: expect.stringContaining('涨跌停')
+    })
+    expect(validateOrder({ ...input, price: 89.99 })).toMatchObject({ code: 'price_limit' })
     expect(validateOrder({ ...input, price: 110 })).toBeNull()
     expect(validateOrder({ ...input, price: 90 })).toBeNull()
   })
 
   it('买入整手与资金校验', () => {
     const account = createInitialAccount(DAY1)
-    expect(validateOrder({ account, side: 'buy', code: 'sh600519', price: 100, qty: 150, prevClose: null })).toContain(
-      '100 股'
-    )
-    expect(validateOrder({ account, side: 'buy', code: 'sh600519', price: 9999, qty: 100, prevClose: null })).toContain(
-      '资金不足'
-    )
+    expect(
+      validateOrder({ account, side: 'buy', code: 'sh600519', price: 100, qty: 150, prevClose: null })?.message
+    ).toContain('100 股')
+    expect(
+      validateOrder({ account, side: 'buy', code: 'sh600519', price: 9999, qty: 100, prevClose: null })?.message
+    ).toContain('资金不足')
+    expect(
+      validateOrder({ account, side: 'buy', code: 'sh600519', price: 100, qty: -100, prevClose: null })
+    ).toMatchObject({ code: 'invalid_qty' })
     expect(validateOrder({ account, side: 'buy', code: 'sh600519', price: 100, qty: 100, prevClose: null })).toBeNull()
   })
 
