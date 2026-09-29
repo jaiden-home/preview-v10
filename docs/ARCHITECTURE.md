@@ -162,7 +162,7 @@ flowchart TD
 | `page.tsx`                                    | 首页（默认上证指数 sh000001），`dynamic = 'force-dynamic'`；`fetchInitialTerminalData` 服务端并行拉取快照与初始日 K 直出首屏 |
 | `trade/page.tsx`                              | 模拟交易页，`dynamic = 'force-dynamic'` + 静态 `metadata`；页面只做壳，虚拟账户与轮询全在客户端（见 4.6）                    |
 | `loading.tsx` / `error.tsx` / `not-found.tsx` | 骨架屏 / 客户端错误边界（含 Sentry 挂点）/ 404 提示                                                                          |
-| `api/*/route.ts`                              | BFF 五接口（见第 6 节）                                                                                                      |
+| `api/*/route.ts`                              | BFF 六接口（见第 6 节）                                                                                                      |
 
 ### 4.2 边界代理与启动钩子
 
@@ -465,7 +465,7 @@ sequenceDiagram
 │   ├── page.tsx              # 首页（默认上证指数 sh000001）
 │   ├── trade/page.tsx        # 模拟交易页（静态 metadata + 客户端虚拟账户壳）
 │   ├── loading/error/not-found.tsx
-│   └── api/                  # BFF：kline / timeshare / quote / search / healthz
+│   └── api/                  # BFF：kline / timeshare / quote / search / replay / healthz
 ├── components/
 │   ├── terminal/             # TradingTerminal 及工具栏 / 信息表格 / 弹窗组件
 │   └── trading/              # PaperTrading / OrderPanel / PositionsTable / TradesTable

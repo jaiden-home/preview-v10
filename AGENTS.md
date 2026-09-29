@@ -21,7 +21,7 @@ A 股行情预览 + 模拟交易的 Web 终端：Next.js 16（App Router，stand
 
 ## 代码结构（src/）
 
-- `app/`：路由层。`page.tsx` 首页（看板与模拟交易两个页面入口）、`dashboard/` 行情看板页（原首页终端，默认上证指数）、`trade/` 模拟交易页、`api/` BFF 五接口（kline / timeshare / quote / search / healthz）、`globals.css` **唯一样式文件**。
+- `app/`：路由层。`page.tsx` 首页（看板与模拟交易两个页面入口）、`dashboard/` 行情看板页（原首页终端，默认上证指数）、`trade/` 模拟交易页、`simtrade/` 极速模拟页、`api/` BFF 六接口（kline / timeshare / quote / search / replay / healthz）、`globals.css` **唯一样式文件**。
 - `components/terminal/`：行情终端组件（`TradingTerminal` 及工具栏 / 信息表格 / 指标弹窗，图表生命周期统一在 `useChartTerminal`）。
 - `components/trading/`：模拟交易组件（`PaperTrading` / `TradeSummary` / `OrderPanel` / `PositionsTable` / `TradesTable`）。
 - `components/home/`：首页入口组件（`HomeLanding`：看板 / 交易两张入口卡片）。

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { KLineData } from 'klinecharts'
-import { fetchDailyBars } from '@/lib/chart/api'
+import { fetchReplayBars } from '@/lib/chart/api'
 import {
   REPLAY_BAR_COUNT,
   advanceDay,
@@ -21,9 +21,8 @@ import {
   type ReplayState
 } from '@/lib/trading/replay'
 
-const DAY_MS = 86_400_000
-/** 拉取跨度：约 640 根日 K 的自然日范围（含节假日；单次请求上限 640 根） */
-const FETCH_SPAN_DAYS = Math.ceil(640 * 1.6)
+/** 回放数据集：向 BFF 拉取的日 K 根数（窗口 500 + 历史预览余量） */
+const REPLAY_FETCH_BARS = 800
 
 /** boot = 引导中；setup = 选起始日开局；live = 模拟进行/暂停/结束 */
 export type ReplayPhase = 'boot' | 'setup' | 'live'
@@ -106,7 +105,7 @@ export const useReplay = (options: UseReplayOptions): UseReplayResult => {
       pendingRef.current.clear()
       const session = loadReplaySession()
       const anchor = session?.anchorCode ?? anchorRef.current
-      const bars = await fetchDailyBars(anchor, Date.now() - FETCH_SPAN_DAYS * DAY_MS, Date.now())
+      const bars = await fetchReplayBars(anchor, REPLAY_FETCH_BARS)
       if (cancelled) {
         return
       }
@@ -156,9 +155,7 @@ export const useReplay = (options: UseReplayOptions): UseReplayResult => {
     }
     missing.forEach((code) => pendingRef.current.add(code))
     void (async () => {
-      const results = await Promise.all(
-        missing.map((code) => fetchDailyBars(code, Date.now() - FETCH_SPAN_DAYS * DAY_MS, Date.now()))
-      )
+      const results = await Promise.all(missing.map((code) => fetchReplayBars(code, REPLAY_FETCH_BARS)))
       if (cancelled) {
         return
       }
