@@ -95,7 +95,7 @@ describe('窗口与日历', () => {
     expect(calendarFrom(bars, dates[3], dates[2])).toEqual([])
   })
 
-  it('回放视图切分：history 取起始日前末尾 500 根；simDays = [startDate, endDay]（含两端）', () => {
+  it('回放视图切分：history 取起始日前末尾 200 根；simDays = [startDate, endDay]（含两端）', () => {
     const { history, simDays } = splitReplayView(bars, dates[3], dates[52])
     expect(simDays).toHaveLength(50)
     expect(simDays[0]).toEqual(bars[3])
@@ -104,10 +104,10 @@ describe('窗口与日历', () => {
     expect(history[0]).toEqual(bars[0])
   })
 
-  it('回放视图切分：历史超过 500 根时截末尾 500', () => {
+  it('回放视图切分：历史超过 200 根时截末尾 200', () => {
     const { history, simDays } = splitReplayView(bars, dates[502], dates[502])
-    expect(history).toHaveLength(500) // 502 根历史 → 末尾 500
-    expect(history[0]).toEqual(bars[2])
+    expect(history).toHaveLength(200) // 502 根历史 → 末尾 200
+    expect(history[0]).toEqual(bars[302])
     expect(simDays).toHaveLength(1)
   })
 })

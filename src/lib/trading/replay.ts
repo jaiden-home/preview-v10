@@ -9,8 +9,8 @@
 import type { KLineData } from 'klinecharts'
 import { dayKeyOf, type TradingAccount } from './account'
 
-/** 起始日前历史窗口根数（与 /trade 首次加载 BAR_LIMIT 对齐；起始日前不足则拉全量） */
-export const PRE_START_WINDOW_BARS = 500
+/** 起始日前历史窗口根数（起始日前不足则拉全量） */
+export const PRE_START_WINDOW_BARS = 200
 
 /** 回放单次拉取根数上限（/api/sim/replay zod max 的护栏值；正常会话远小于此） */
 export const REPLAY_FETCH_MAX_BARS = 5000
