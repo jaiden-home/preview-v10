@@ -7,6 +7,7 @@ import type { TradingAccount } from '@/lib/trading/account'
 import { advanceSessionBy, type SimSession, type SimState } from '@/lib/trading/protocol'
 import {
   PRE_START_WINDOW_BARS,
+  REPLAY_FETCH_MAX_BARS,
   REPLAY_SPEEDS,
   calendarFrom,
   dateKeyOfBar,
@@ -55,7 +56,7 @@ export interface UseReplayResult {
   quoteOf: (code: string) => ReplayQuote | null
   /** 图表可见日 K（起始日前历史 + 已完成模拟日） */
   visibleBarsOf: (code: string) => KLineData[]
-  /** 全量日 K（未开局阶段图表展示实时完整 K 线，与 /trade 一致） */
+  /** 已加载窗口日 K（未开局阶段图表展示实时完整 K 线，与 /trade 一致） */
   allBarsOf: (code: string) => KLineData[]
   /** setup 预览：自某日期起可模拟的交易日数 */
   forwardCountOn: (code: string, date: string) => number
@@ -75,7 +76,7 @@ export interface UseReplayResult {
  * 虚拟时钟钩子（服务端权威 + 本地派生，无轮询）：
  * 会话状态（dayIndex/status/lastTickAt）与账户账务由 BFF 结算持久化（node:sqlite），
  * boot 拉取一次权威状态后，running 期间由本地时钟（serverNow + lastTickAt + speedMs）
- * 派生虚拟日推进——回放数据不可变且前端已全量持有，无需轮询；
+ * 派生虚拟日推进——回放数据不可变且前端已完整持有（历史窗口 + 模拟日），无需轮询；
  * 任何服务端交互（下单/暂停/继续/倍速/重开）的响应都会校准权威值。
  * K 线数据按需拉取内存缓存（图表与委托面板展示）。
  * 服务端时钟语义：页面关闭期间 running 照走；刷新后继续（不暂停追帧）。
@@ -115,7 +116,7 @@ export const useReplay = (options: UseReplayOptions): UseReplayResult => {
     onAccountSyncRef.current?.(simState.account)
   }, [])
 
-  // 引导：拉取服务端权威状态 + 锚定标的全量日 K；有会话恢复 live，否则进 setup 选日期
+  // 引导：拉取服务端权威状态 + 锚定标的窗口日 K（500 根）；有会话恢复 live，否则进 setup 选日期
   useEffect(() => {
     let cancelled = false
     const boot = async () => {
@@ -144,9 +145,11 @@ export const useReplay = (options: UseReplayOptions): UseReplayResult => {
       if (cancelled) {
         return
       }
-      // 恢复会话：按「起始日前 500 历史 + 全部模拟日」口径补拉（与 start() 一致；新股数据尽头即止）
+      // 恢复会话：按「起始日前 500 历史 + 全部模拟日」口径补拉（与 start() 一致；新股数据尽头即止）；
+      // 目标钳制到 API 上限，防异常 dayCount 构造出超限请求（正常会话 ≤999，不会触发）
       if (session != null && anchorBars.length < PRE_START_WINDOW_BARS + session.dayCount) {
-        const fetched = await fetchReplayBars(anchor, PRE_START_WINDOW_BARS + session.dayCount)
+        const target = Math.min(PRE_START_WINDOW_BARS + session.dayCount, REPLAY_FETCH_MAX_BARS)
+        const fetched = await fetchReplayBars(anchor, target)
         if (!cancelled && fetched.length > anchorBars.length) {
           anchorBars = fetched
         }
@@ -173,7 +176,7 @@ export const useReplay = (options: UseReplayOptions): UseReplayResult => {
 
   const codesKey = Array.from(new Set(codes)).sort().join(',')
 
-  // 按需拉取：选中/持仓标的与锚定同跨度全量日 K（失败缓存空数组，重进页面再试）
+  // 按需拉取：选中/持仓标的窗口日 K（500 根；失败缓存空数组，重进页面再试）
   useEffect(() => {
     if (phase === 'boot' || error || codesKey.length === 0) {
       return
@@ -211,7 +214,7 @@ export const useReplay = (options: UseReplayOptions): UseReplayResult => {
   }, [phase, state?.status])
 
   // 展示态 = 服务端权威 session + 本地时钟派生推进（与服务端 settle 同一函数，零口径漂移）。
-  // 回放数据不可变且前端已全量持有，无需轮询；任何服务端交互（下单/暂停/继续/倍速）响应都会校准权威值
+  // 回放数据不可变且前端已完整持有（历史窗口 + 模拟日），无需轮询；服务端交互响应校准权威值
   const serverNowEst = sync.serverNow + (nowTick - sync.localAt)
   const simState = state == null ? null : advanceSessionBy(state, serverNowEst)
   const dayIndex = simState?.dayIndex ?? 0
@@ -249,9 +252,9 @@ export const useReplay = (options: UseReplayOptions): UseReplayResult => {
           if (historyLoaded >= PRE_START_WINDOW_BARS) {
             break
           }
-          const target = Math.max(
-            bars.length + (PRE_START_WINDOW_BARS - historyLoaded),
-            PRE_START_WINDOW_BARS + forwardCount
+          const target = Math.min(
+            Math.max(bars.length + (PRE_START_WINDOW_BARS - historyLoaded), PRE_START_WINDOW_BARS + forwardCount),
+            REPLAY_FETCH_MAX_BARS
           )
           const fetched = await fetchReplayBars(anchor, target)
           if (fetched.length <= bars.length) {

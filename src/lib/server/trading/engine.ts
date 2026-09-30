@@ -30,7 +30,7 @@ import { SimTradingError } from './contract'
 export interface MarketSource {
   /** 实时行情（setup 阶段交易与名称兜底） */
   liveQuote(code: string): Promise<{ name: string | null; price: number | null; prevClose: number | null } | null>
-  /** 全量历史日 K（升序；回放阶段校验与结算） */
+  /** 历史日 K（升序，上限 REPLAY_BARS_LIMIT；回放阶段校验与结算） */
   replayBars(code: string): Promise<KLineData[]>
 }
 
@@ -239,7 +239,7 @@ const settleAccountDay = (
   return { ...rolled, dayKey: virtualDay, dayStartEquity: totalAssets }
 }
 
-/** 并行拉取一组标的的全量日 K（去重；失败不阻断——结算价格回退成本价） */
+/** 并行拉取一组标的的历史日 K（去重；失败不阻断——结算价格回退成本价） */
 const barsForCodes = async (codes: string[], source: MarketSource): Promise<Map<string, KLineData[]>> => {
   const unique = Array.from(new Set(codes.filter((code) => code.length > 0)))
   const entries = await Promise.all(
