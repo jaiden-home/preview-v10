@@ -7,6 +7,7 @@ import {
   applySessionControl,
   closePricesAt,
   placeOrderEngine,
+  replayViewOf,
   settleSim,
   startSessionEngine,
   type MarketSource
@@ -133,29 +134,17 @@ describe('placeOrderEngine（下单编排）', () => {
     }
   })
 
-  it('setup 阶段（无会话）：实时行情成交，时间 = 服务端当日', async () => {
+  it('无会话拒单（no_active_session，不按实时行情成交）', async () => {
     const now = new Date(2024, 5, 3, 14, 30).getTime()
-    const exec = await placeOrderEngine(
-      createInitialAccount(D1),
-      null,
-      { side: 'buy', code: 'sh600519', price: 100, qty: 100 },
-      now,
-      liveSource
-    )
-    expect(exec.account.positions[0]!.qty).toBe(100)
-    expect(exec.account.trades[0]!.ts).toBe(D1 - 10 * 3_600_000) // 截断至当日 00:00
-  })
-
-  it('实时行情不可用拒单（quote_unavailable）', async () => {
     await expect(
       placeOrderEngine(
         createInitialAccount(D1),
         null,
         { side: 'buy', code: 'sh600519', price: 100, qty: 100 },
-        0,
-        replaySource // liveQuote 恒 null
+        now,
+        liveSource
       )
-    ).rejects.toMatchObject({ simCode: 'quote_unavailable' })
+    ).rejects.toMatchObject({ simCode: 'no_active_session' })
   })
 })
 
@@ -174,6 +163,16 @@ describe('startSessionEngine（开局编排）', () => {
       replaySource
     )
     expect(started.session).toMatchObject({ dayIndex: 1, dayCount: 3, status: 'running' })
+  })
+
+  it('开局即暂停：第 1 天完成但停住计时（paused）', async () => {
+    const started = await startSessionEngine(
+      createInitialAccount(D1),
+      { anchorCode: 'sh600519', startDate: '2024-06-03', paused: true },
+      0,
+      replaySource
+    )
+    expect(started.session).toMatchObject({ dayIndex: 1, dayCount: 5, status: 'paused', lastTickAt: 0 })
   })
 
   it('结束日早于起始日拒绝开局（区间为空）', async () => {
@@ -213,6 +212,26 @@ describe('startSessionEngine（开局编排）', () => {
     expect(started.account.positions[0]!.availableQty).toBe(100)
     expect(started.account.dayKey).toBe('2024-06-03')
     expect(started.account.dayStartEquity).toBe(Math.round((account.cash + 100 * 100) * 100) / 100)
+  })
+})
+
+describe('replayViewOf（回放视图，服务端算好）', () => {
+  it('history = 起始日前历史；simDays = 模拟区间全量（按 dayCount 截止）', async () => {
+    const view = await replayViewOf('sh600519', session(), replaySource)
+    expect(view.code).toBe('sh600519')
+    expect(view.name).toBeNull() // stub 的 replaySource liveQuote 恒 null
+    expect(view.history).toEqual([]) // stub 数据自起始日起，无更早历史
+    expect(view.simDays).toHaveLength(5) // dayCount=5：06-03..06-07
+  })
+
+  it('dayCount 超出数据时 simDays 为可得全量（数据尽头兜底）', async () => {
+    const view = await replayViewOf('sh600519', session({ dayCount: 99 }), replaySource)
+    expect(view.simDays).toHaveLength(5)
+  })
+
+  it('非锚定标的按锚定区间对齐切分；名称取实时行情', async () => {
+    const view = await replayViewOf('sh600519', session(), liveSource) // liveSource：无日 K、有名称
+    expect(view).toEqual({ code: 'sh600519', name: '贵州茅台', history: [], simDays: [] })
   })
 })
 

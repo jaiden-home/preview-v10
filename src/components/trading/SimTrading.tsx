@@ -8,14 +8,12 @@ import ChartTools from '@/components/terminal/ChartTools'
 import InfoTable from '@/components/terminal/InfoTable'
 import { useLocale } from '@/components/terminal/useLocale'
 import { useChartTerminal } from '@/components/terminal/useChartTerminal'
-import { fetchQuoteSnapshot } from '@/lib/chart/api'
-import { POLL_INTERVAL_MS } from '@/lib/chart/constants'
 import { createReplayFeed } from '@/lib/chart/replay-loader'
 import type { InfoSnapshot } from '@/lib/chart/terminal'
 import type { QuoteSnapshot } from '@/lib/chart/types'
 import SimClockBar from '@/components/simtrade/SimClockBar'
 import { useReplay } from '@/components/simtrade/useReplay'
-import { estimateTradingBars, releaseAllFrozen, yearBeforeKey } from '@/lib/trading/replay'
+import { releaseAllFrozen } from '@/lib/trading/replay'
 import { postSimOrder } from '@/lib/trading/sim-api'
 import OrderPanel from './OrderPanel'
 import PositionsTable from './PositionsTable'
@@ -44,17 +42,15 @@ interface TradeNotice {
 
 /**
  * 极速模拟页（/simtrade）：虚拟时钟 + 历史 K 线回放（UI_SPEC §3.13）。
- * 日原子模型：开局选定起始日后第 1 个交易日立即完成（整根 K 线出现），
- * 每过固定 10 秒推进下一交易日，走满即本局结束。
+ * 日原子模型：进入页面即以固定区间（AUTO_START_DATE ~ AUTO_END_DATE，2024-01-01 ~ 2025-01-01）
+ * 自动开局并停在第 1 天（开局即暂停，点「继续」起走），每过固定 10 秒推进下一交易日，
+ * 走满即本局结束；重开一局 = 清账后按同区间重新自动开局（同为暂停态）。
  * **交易账务（账户/持仓/成交/回放会话/虚拟时钟）全部由 BFF 权威结算（node:sqlite 持久化）**：
  * 本组件只做展示与请求——下单走 /api/sim/orders，会话控制走 /api/sim/session；
  * running 期间虚拟日推进由本地时钟派生（回放数据不可变，无需轮询），
  * 任何服务端交互的响应都会校准权威状态（跨日账务先本地推导展示，服务端结算覆盖校准）。
- * 行情分两段：**未开局 = 与 /trade 完全一致（图表实时完整日 K + order-head 实时行情，
- * 可按实时价交易、记真实日期）**；
- * **开局后 = 回放（图表切为起始日前历史 + 逐日推进，order-head 现价 = 最新完成日收盘，
- * 与图表一致，仅随虚拟日推进变化）**，
- * T+1/涨跌停按虚拟日结算（服务端）；开局时真实日期建仓视为历史持仓直接解冻。
+ * 行情恒为回放：图表 = 起始日前历史 + 已完成模拟日，order-head 现价 = 最新完成日收盘
+ * （与图表一致，仅随虚拟日推进变化）；T+1/涨跌停按虚拟日结算（服务端）。
  * 选中标的仍用独立 localStorage key，与 /trade 互不干扰。
  */
 export default function SimTrading() {
@@ -62,10 +58,6 @@ export default function SimTrading() {
 
   const [account, setAccount] = useState<TradingAccount | null>(null)
   const [selected, setSelected] = useState(DEFAULT_TRADING_SYMBOL)
-  const [names, setNames] = useState<Record<string, string | null>>({})
-  const [realQuotes, setRealQuotes] = useState<Record<string, QuoteSnapshot>>({})
-  const [setupDate, setSetupDate] = useState('')
-  const [setupEndDate, setSetupEndDate] = useState('')
   const [side, setSide] = useState<TradeSide>('buy')
   const [tab, setTab] = useState<'positions' | 'trades'>('positions')
   const [notice, setNotice] = useState<TradeNotice | null>(null)
@@ -80,7 +72,6 @@ export default function SimTrading() {
 
   // 下单提交中（服务端权威成交期间防重复提交）
   const submittingRef = useRef(false)
-  const namesTriedRef = useRef<Set<string>>(new Set())
   const feedRef = useRef<{ code: string | null; startDate: string | null; dayIndex: number }>({
     code: null,
     startDate: null,
@@ -121,88 +112,10 @@ export default function SimTrading() {
     setSelected(loadSelectedSymbol(REPLAY_SYMBOL_STORAGE_KEY) ?? DEFAULT_TRADING_SYMBOL)
   }, [])
 
-  // setup 默认日期区间（相差 1 年）：结束日 = 可选范围上限（最新一根日 K）= 回放至数据尽头，
-  // 起始日 = 结束日前推 1 年（yearBeforeKey）——新股上市不足 1 年自然从上市日起算，
-  // 可模拟天数由「≥2 交易日」开局校验兜底，均不自动回退
-  useEffect(() => {
-    if (replay.phase !== 'setup' || replay.startRange == null) {
-      return
-    }
-    if (setupEndDate === '') {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- 初始化默认值（与下方起始日同一豁免模式）
-      setSetupEndDate(replay.startRange.max)
-    }
-    if (setupDate === '') {
-      setSetupDate(yearBeforeKey(replay.startRange.max))
-    }
-  }, [replay.phase, replay.startRange, setupDate, setupEndDate])
-
-  // 标的名称：每标的一次性拉取（开局后回放行情展示用；未开局用实时行情自带名称）。
-  // 注意：成功后才标记 tried——StrictMode 双挂载下首跑被取消，若先标记会永久跳过重试
-  useEffect(() => {
-    const missing = replayCodes.filter((code) => !namesTriedRef.current.has(code))
-    if (missing.length === 0) {
-      return
-    }
-    let cancelled = false
-    void (async () => {
-      const snapshots = await Promise.all(missing.map((code) => fetchQuoteSnapshot(code)))
-      if (cancelled) {
-        return
-      }
-      missing.forEach((code) => namesTriedRef.current.add(code))
-      setNames((prev) => {
-        const next = { ...prev }
-        snapshots.forEach((snapshot, i) => {
-          next[missing[i]!] = snapshot?.name ?? null
-        })
-        return next
-      })
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [replayCodes])
-
-  // 未开局（setup）：真实行情轮询（与 /trade 一致）；点「开始模拟」后停止，切换为回放行情
-  useEffect(() => {
-    if (replay.phase !== 'setup') {
-      return
-    }
-    const codes = Array.from(new Set([selectedCode, ...positionKey.split(',').filter(Boolean)]))
-    if (codes.length === 0) {
-      return
-    }
-    let cancelled = false
-    const poll = async () => {
-      const snapshots = await Promise.all(codes.map((code) => fetchQuoteSnapshot(code)))
-      if (cancelled) {
-        return
-      }
-      const next: Record<string, QuoteSnapshot> = {}
-      snapshots.forEach((snapshot, i) => {
-        if (snapshot != null) {
-          next[codes[i]!] = snapshot
-        }
-      })
-      if (Object.keys(next).length > 0) {
-        setRealQuotes((prev) => ({ ...prev, ...next }))
-      }
-    }
-    void poll()
-    const timer = setInterval(() => void poll(), POLL_INTERVAL_MS)
-    return () => {
-      cancelled = true
-      clearInterval(timer)
-    }
-  }, [replay.phase, selectedCode, positionKey])
-
-  // 委托面板行情：setup = 实时行情（与 /trade 一致）；live = 回放行情
-  // （现价 = 最新完成日收盘、昨收 = 回放前收，与图表一致，仅随虚拟日推进变化）
+  // 委托面板行情 = 回放行情
+  // （现价 = 最新完成日收盘、昨收 = 回放前收，与图表一致，仅随虚拟日推进变化；
+  //   名称随回放视图由服务端带回，无则回退代码）
   const syntheticQuotes = useMemo(() => {
-    if (replay.phase === 'setup') {
-      return realQuotes
-    }
     const map: Record<string, QuoteSnapshot> = {}
     for (const code of replayCodes) {
       const quote = replay.quoteOf(code)
@@ -212,15 +125,14 @@ export default function SimTrading() {
       map[code] = {
         market: code.slice(0, 2),
         ticker: code.slice(2),
-        // 名称兜底：一次性拉取 → setup 阶段实时行情缓存 → 代码
-        name: names[code] ?? realQuotes[code]?.name ?? code,
+        name: replay.nameOf(code) ?? code,
         price: quote.price,
         prevClose: quote.prevClose,
         fundamental: {}
       }
     }
     return map
-  }, [replay, replayCodes, names, realQuotes])
+  }, [replay, replayCodes])
 
   // 成交提示 3s 自动消隐
   useEffect(() => {
@@ -245,23 +157,7 @@ export default function SimTrading() {
     return () => window.removeEventListener('keydown', onKey)
   }, [panelOpen])
 
-  // 图表喂数（setup）：实时完整日 K（含当日，与 /trade 一致）；
-  // 随标的/数据到达重载；换起始日不影响（预览逻辑已取消，开局后才切回放图表）
-  useEffect(() => {
-    if (replay.phase !== 'setup' || replay.error) {
-      return
-    }
-    const bars = replay.allBarsOf(selectedCode)
-    if (bars.length === 0) {
-      return
-    }
-    feed.setBars(selectedCode, bars)
-    // 同 symbol setSymbol 也会 resetData 重载
-    chart.setSymbol(selected)
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- chart/feed/replay 方法逐渲染重建，入依赖会每帧重跑
-  }, [replay.phase, replay.error, replay.barsVersion, selectedCode])
-
-  // 图表喂数（live）：开局/换标的/恢复 → 全量替换 + 重载；逐日推进 → 增量推送当日 bar
+  // 图表喂数：开局/换标的/恢复 → 全量替换 + 重载；逐日推进 → 增量推送当日 bar
   useEffect(() => {
     if (replay.phase !== 'live' || replay.error || simState == null) {
       return
@@ -362,16 +258,7 @@ export default function SimTrading() {
     })
   }
 
-  const handleStart = async () => {
-    if (setupDate !== '' && setupEndDate !== '') {
-      // 失败文案来自服务端业务拒绝（交易日不足/数据不足等），网络异常由 start 兜底
-      const error = await replay.start(setupDate, setupEndDate)
-      if (error != null) {
-        setNotice({ kind: 'err', text: t(error) })
-      }
-    }
-  }
-
+  /** 重开一局：服务端清账，boot 按固定区间（AUTO_START_DATE ~ AUTO_END_DATE）重新自动开局（暂停态） */
   const handleReset = async () => {
     if (
       !window.confirm(
@@ -382,8 +269,6 @@ export default function SimTrading() {
     ) {
       return
     }
-    setSetupDate('')
-    setSetupEndDate('')
     const ok = await replay.restart()
     if (!ok) {
       setNotice({ kind: 'err', text: t('重开失败，请稍候重试|Restart failed, please retry') })
@@ -391,22 +276,6 @@ export default function SimTrading() {
     }
     setNotice({ kind: 'ok', text: t('已重开一局|Session restarted') })
   }
-
-  // 起始日早于已加载窗口（最近 500 根）时本地无法精确计数区间交易日：
-  // 用自然日估算（过冲无害，服务端开局权威校准 dayCount）；其余情形用已加载数据精确计数
-  const setupBeforeWindow =
-    replay.phase === 'setup' &&
-    setupDate !== '' &&
-    replay.loadedWindowFirst !== '' &&
-    setupDate < replay.loadedWindowFirst
-  const setupForwardDays =
-    replay.phase === 'setup' && setupDate !== '' && setupEndDate !== ''
-      ? setupBeforeWindow
-        ? estimateTradingBars(setupDate, new Date(`${setupEndDate}T00:00:00`).getTime())
-        : replay.forwardCountOn(selectedCode, setupDate, setupEndDate)
-      : 0
-  // 所选日早于已加载窗口 → 本地只能算下界（追拉后由服务端校准精确 dayCount）
-  const setupDaysLowerBound = setupBeforeWindow
 
   return (
     <div className={`trade-page${panelOpen ? ' sheet-open' : ''}`}>
@@ -421,7 +290,7 @@ export default function SimTrading() {
 
       {replay.error ? (
         <div className="trade-loading">
-          {t('回放数据加载失败|Failed to load replay data')}
+          {t('回放开局失败|Failed to start replay')}
           <button type="button" className="tb-btn sim-retry-btn" onClick={replay.retry}>
             {t('重试|Retry')}
           </button>
@@ -511,30 +380,9 @@ export default function SimTrading() {
               <div className="trade-panel-body">
                 <SimClockBar
                   t={t}
-                  mode={replay.phase === 'setup' ? 'setup' : 'live'}
                   state={simState}
                   calendar={replay.calendar}
                   progress={replay.progress}
-                  date={
-                    replay.phase === 'setup'
-                      ? setupDate
-                      : simState != null
-                        ? (replay.calendar[simState.dayIndex - 1] ?? simState.startDate)
-                        : setupDate
-                  }
-                  range={replay.startRange}
-                  forwardDays={setupForwardDays}
-                  forwardDaysLowerBound={setupDaysLowerBound}
-                  endDate={
-                    replay.phase === 'setup'
-                      ? setupEndDate
-                      : simState != null
-                        ? (replay.calendar[simState.dayCount - 1] ?? setupEndDate)
-                        : setupEndDate
-                  }
-                  onDateChange={setSetupDate}
-                  onEndDateChange={setSetupEndDate}
-                  onStart={handleStart}
                   onToggle={replay.togglePause}
                 />
                 <OrderPanel

@@ -3,7 +3,7 @@ import type { SymbolRef } from '../chart/types'
 import { fetchKLines } from './market-service'
 
 // ==================== 回放数据编排（BFF） ====================
-// 腾讯上游单次上限 640 根日 K：按页回溯拼接，供 /api/replay 一次性返回足量历史，
+// 腾讯上游单次上限 640 根日 K：按页回溯拼接，供 /api/sim/replay 一次性返回足量历史，
 // 客户端（/simtrade）不再自行拉取与裁剪，且窗口不再受单页上限约束。
 // 回溯到上市日/数据尽头即停（短页或上游不再前移），保证"有数据就任意可选"。
 
@@ -30,12 +30,13 @@ export const mergeAndTrimBars = (pages: KLineData[][], targetBars: number): KLin
     .slice(-targetBars)
 }
 
-/** 拉取某标的日 K（升序）：目标 targetBars 根，不足时按页回溯直至上市/数据尽头 */
-export const fetchReplayBars = async (symbol: SymbolRef, targetBars: number): Promise<KLineData[]> => {
+/** 拉取某标的日 K（升序）：目标 targetBars 根，不足时按页回溯直至上市/数据尽头；
+ *  toDay（可选 yyyy-mm-dd，含当日）= 窗口截止日，缺省拉到当下 */
+export const fetchReplayBars = async (symbol: SymbolRef, targetBars: number, toDay?: string): Promise<KLineData[]> => {
   const dayPeriod: Period = { span: 1, type: 'day' }
   const pages: KLineData[][] = []
   let total = 0
-  let to = Date.now()
+  let to = dayEndOf(toDay)
   let oldest = Number.POSITIVE_INFINITY
   for (let page = 0; page < MAX_PAGES; page += 1) {
     const bars = await fetchKLines(symbol, dayPeriod, to - PAGE_SPAN_DAYS * DAY_MS, to)
@@ -57,4 +58,13 @@ export const fetchReplayBars = async (symbol: SymbolRef, targetBars: number): Pr
     to = pageOldest - 1
   }
   return mergeAndTrimBars(pages, targetBars)
+}
+
+/** 截止日（含当日）→ 当日最后一毫秒；缺省 = 当下 */
+const dayEndOf = (toDay?: string): number => {
+  if (toDay == null) {
+    return Date.now()
+  }
+  const [y, m, d] = toDay.split('-').map(Number)
+  return new Date(y, m - 1, d, 23, 59, 59, 999).getTime()
 }

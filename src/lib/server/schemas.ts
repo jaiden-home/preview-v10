@@ -1,5 +1,4 @@
 import { z } from 'zod'
-import { REPLAY_FETCH_MAX_BARS } from '@/lib/trading/replay'
 
 const symbolField = z.string().regex(/^(sh|sz|bj)\d{6}$/, 'symbol must be market prefix (sh/sz/bj) + 6-digit code')
 
@@ -22,10 +21,9 @@ export const searchQuerySchema = z.object({
   q: z.string().trim().min(1, 'query is required').max(40, 'query is too long')
 })
 
-/** 回放数据：目标根数（2~上限，默认 500；BFF 按页回溯至上市/数据尽头） */
+/** 回放视图（/api/sim/replay）：symbol 之外无参数——窗口（起始日/结束日/根数）由服务端从当前会话解析 */
 export const replayQuerySchema = z.object({
-  symbol: symbolField,
-  bars: z.coerce.number().int().min(2).max(REPLAY_FETCH_MAX_BARS).default(500)
+  symbol: symbolField
 })
 
 /** 模拟交易下单（/api/sim/orders）：价格/数量由服务端权威校验（涨跌停/整手/资金/T+1） */
@@ -46,7 +44,8 @@ export const simSessionSchema = z.discriminatedUnion('action', [
     endDate: z
       .string()
       .regex(/^\d{4}-\d{2}-\d{2}$/, 'endDate must be yyyy-mm-dd')
-      .optional()
+      .optional(),
+    paused: z.boolean().optional()
   }),
   z.object({ action: z.literal('pause') }),
   z.object({ action: z.literal('resume') }),

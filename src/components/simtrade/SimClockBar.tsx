@@ -1,28 +1,14 @@
 'use client'
 
-import type { ReplayStartRange, ReplayState } from '@/lib/trading/replay'
+import type { ReplayState } from '@/lib/trading/replay'
 
 interface SimClockBarProps {
   t: (key: string) => string
-  /** setup = 未开局（日期可改 + 开始模拟）；live = 模拟进行/暂停/结束 */
-  mode: 'setup' | 'live'
+  /** 回放会话（live 形态恒有会话；null = 引导中，由调用方遮蔽） */
   state: ReplayState | null
   calendar: string[]
   /** 距下一交易日的计时进度 0..1（暂停/结束为 0） */
   progress: number
-  /** setup：当前所选起始日（可改）；live：最新完成交易日（展示） */
-  date: string
-  /** setup：当前所选结束日（可改，含当日，缺省 = 数据尽头） */
-  endDate: string
-  /** setup：可选起始日范围（min/max 对两个输入同界） */
-  range: ReplayStartRange | null
-  /** setup：自起始日（含）至结束日（含）可模拟的交易日数 */
-  forwardDays: number
-  /** setup：所选日早于已加载窗口时，forwardDays 仅为下界（显示 ≥N） */
-  forwardDaysLowerBound?: boolean
-  onDateChange: (date: string) => void
-  onEndDateChange: (date: string) => void
-  onStart: () => void
   onToggle: () => void
 }
 
@@ -33,90 +19,33 @@ const PlayIcon = () => (
 )
 
 /**
- * 模拟时钟（UI_SPEC §3.13，两行控制卡）：
- * 行 1 = 时间锚点 + 主操作（setup：起始/结束日期区间输入 + 「开始模拟」；live：虚拟日期大字 + 第 x/N 天 + 暂停/继续）；
- * 行 2 = 整行计时进度 + 倒计时文案（setup：区间可模拟天数提示）。
+ * 模拟时钟（UI_SPEC §3.13，两行控制卡，恒为 live 形态——进入页面即自动开局，无选日期表单）：
+ * 行 1 = 虚拟日期大字 + 第 x/N 天 + 暂停/继续（ended 态换「已结束」胶囊）；
+ * 行 2 = 整行计时进度 + 倒计时文案。
  * 倍速固定 10 秒 = 1 交易日（REPLAY_SPEED_MS），不提供选择。
  */
-export default function SimClockBar({
-  t,
-  mode,
-  state,
-  calendar,
-  progress,
-  date,
-  endDate,
-  range,
-  forwardDays,
-  forwardDaysLowerBound = false,
-  onDateChange,
-  onEndDateChange,
-  onStart,
-  onToggle
-}: SimClockBarProps) {
-  const setup = mode === 'setup'
-  const live = !setup && state != null
+export default function SimClockBar({ t, state, calendar, progress, onToggle }: SimClockBarProps) {
+  const live = state != null
   const running = state?.status === 'running'
   const ended = state?.status === 'ended'
-  const liveDay = live ? (calendar[state!.dayIndex - 1] ?? state!.startDate) : date
-  const days = forwardDays
-  const endBeforeStart = setup && endDate !== '' && date !== '' && endDate < date
-  // 至少 2 个交易日（大于 1 日）且结束日不早于起始日才能开始模拟
-  const startDisabled = setup && (date === '' || endDate === '' || endBeforeStart || days <= 1)
+  const liveDay = live ? (calendar[state!.dayIndex - 1] ?? state!.startDate) : ''
   const clamped = Math.min(1, Math.max(0, progress))
   const pct = Math.round(clamped * 100)
   const remainSec = state != null ? Math.max(0, Math.ceil(((1 - clamped) * state.speedMs) / 1000)) : 0
-  // 起始日上限：不越过结束日；结束日下限：不早于起始日（已选值参与约束）
-  const startMax = endBeforeStart || (endDate !== '' && endDate < (range?.max ?? '')) ? endDate : range?.max
-  const endMin = date !== '' && date > (range?.min ?? '') ? date : range?.min
 
   return (
     <div className="sim-clock" role="group" aria-label={t('模拟时钟|Replay clock')}>
-      {/* 行 1：时间锚点 + 主操作 */}
+      {/* 行 1：虚拟日期 + 主操作 */}
       <div className="sim-clock-head">
-        {setup ? (
-          <div className="sim-clock-start">
-            <label className="sim-clock-field">
-              <span className="sim-start-label">{t('起始日期|Start date')}</span>
-              <input
-                className="sim-date-input"
-                type="date"
-                value={date}
-                min={range?.min}
-                max={startMax}
-                aria-label={t('选择起始日期|Pick a start date')}
-                onChange={(e) => onDateChange(e.target.value)}
-              />
-            </label>
-            <label className="sim-clock-field">
-              <span className="sim-start-label">{t('结束日期|End date')}</span>
-              <input
-                className="sim-date-input"
-                type="date"
-                value={endDate}
-                min={endMin}
-                max={range?.max}
-                aria-label={t('选择结束日期|Pick an end date')}
-                onChange={(e) => onEndDateChange(e.target.value)}
-              />
-            </label>
-          </div>
-        ) : (
-          <div className="sim-clock-day">
-            <span className="sim-day-value num">{liveDay}</span>
-            {live && (
-              <span className="sim-day-meta num">
-                {t(`第 ${state!.dayIndex}/${state!.dayCount} 个交易日|Day ${state!.dayIndex} of ${state!.dayCount}`)}
-              </span>
-            )}
-          </div>
-        )}
-        {setup ? (
-          <button type="button" className="sim-toggle-btn" disabled={startDisabled} onClick={onStart}>
-            <PlayIcon />
-            <span>{t('开始模拟|Start')}</span>
-          </button>
-        ) : ended ? (
+        <div className="sim-clock-day">
+          <span className="sim-day-value num">{liveDay}</span>
+          {live && (
+            <span className="sim-day-meta num">
+              {t(`第 ${state!.dayIndex}/${state!.dayCount} 个交易日|Day ${state!.dayIndex} of ${state!.dayCount}`)}
+            </span>
+          )}
+        </div>
+        {ended ? (
           <span className="sim-ended-tag">{t('已结束|Ended')}</span>
         ) : (
           <button type="button" className="sim-toggle-btn" onClick={onToggle}>
@@ -133,42 +62,26 @@ export default function SimClockBar({
         )}
       </div>
 
-      {/* 行 2：计时进度 / 可模拟天数 */}
+      {/* 行 2：计时进度 */}
       <div className="sim-clock-track">
-        {live ? (
-          <>
-            <span
-              className="sim-progress"
-              role="progressbar"
-              aria-label={t('距下一交易日|Time to next day')}
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-valuenow={pct}
-            >
-              {/* 数据驱动的动态宽度（同涨跌色例外，非样式硬编码） */}
-              <span className="sim-progress-fill" style={{ width: `${pct}%` }} />
-            </span>
-            <span className="sim-countdown num">
-              {ended
-                ? t('已结束|Ended')
-                : running
-                  ? t(`交易时间还剩余 ${remainSec} 秒|${remainSec}s left in this trading day`)
-                  : t('已暂停|Paused')}
-            </span>
-          </>
-        ) : (
-          <span className="sim-clock-hint">
-            {date === ''
-              ? t('请选择起始日期|Pick a start date')
-              : endBeforeStart
-                ? t('结束日期不能早于起始日期|End date must not be earlier than the start date')
-                : days > 1
-                  ? forwardDaysLowerBound
-                    ? t(`自该日起超过 ${days} 个交易日|More than ${days} trading days`)
-                    : t(`区间内共 ${days} 个交易日|${days} trading days in range`)
-                  : t('交易日不足，请调整起始/结束日期|Not enough trading days; adjust the dates')}
-          </span>
-        )}
+        <span
+          className="sim-progress"
+          role="progressbar"
+          aria-label={t('距下一交易日|Time to next day')}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={pct}
+        >
+          {/* 数据驱动的动态宽度（同涨跌色例外，非样式硬编码） */}
+          <span className="sim-progress-fill" style={{ width: `${pct}%` }} />
+        </span>
+        <span className="sim-countdown num">
+          {ended
+            ? t('已结束|Ended')
+            : running
+              ? t(`交易时间还剩余 ${remainSec} 秒|${remainSec}s left in this trading day`)
+              : t('已暂停|Paused')}
+        </span>
       </div>
     </div>
   )

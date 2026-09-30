@@ -1,19 +1,18 @@
-import type { KLineData } from 'klinecharts'
+import type { SimReplayView } from '@/lib/trading/protocol'
 import type { SymbolSearchItem, QuoteSnapshot } from './types'
 
 /** 客户端 BFF 请求封装（失败返回 null / 空数组，由调用方兜底） */
 
-/** 回放数据源：最近 bars 根升序日 K（BFF 分页拼接，突破上游单页上限） */
-export const fetchReplayBars = async (code: string, bars: number = 800): Promise<KLineData[]> => {
+/** 回放视图：某标的在当前会话窗口的「历史 + 模拟日」日 K（/api/sim/replay，窗口由服务端从会话解析，仅 symbol 参数） */
+export const fetchReplayView = async (code: string): Promise<SimReplayView | null> => {
   try {
-    const response = await fetch(`/api/replay?symbol=${code}&bars=${bars}`)
+    const response = await fetch(`/api/sim/replay?symbol=${code}`)
     if (!response.ok) {
-      return []
+      return null
     }
-    const data = (await response.json()) as { bars: KLineData[] }
-    return data.bars ?? []
+    return (await response.json()) as SimReplayView
   } catch {
-    return []
+    return null
   }
 }
 

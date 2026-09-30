@@ -465,7 +465,7 @@ sequenceDiagram
 │   ├── page.tsx              # 首页（默认上证指数 sh000001）
 │   ├── trade/page.tsx        # 模拟交易页（静态 metadata + 客户端虚拟账户壳）
 │   ├── loading/error/not-found.tsx
-│   └── api/                  # BFF：kline / timeshare / quote / search / replay / healthz
+│   └── api/                  # BFF：kline / timeshare / quote / search / sim（state/orders/session/replay）/ healthz
 ├── components/
 │   ├── terminal/             # TradingTerminal 及工具栏 / 信息表格 / 弹窗组件
 │   └── trading/              # PaperTrading / OrderPanel / PositionsTable / TradesTable

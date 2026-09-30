@@ -12,18 +12,8 @@ import { dayKeyOf, type TradingAccount } from './account'
 /** 起始日前历史窗口根数（与 /trade 首次加载 BAR_LIMIT 对齐；起始日前不足则拉全量） */
 export const PRE_START_WINDOW_BARS = 500
 
-/** 回放单次拉取根数上限（/api/replay zod max 与客户端追拉目标的公共钳制值；纯护栏，正常会话远小于此） */
+/** 回放单次拉取根数上限（/api/sim/replay zod max 的护栏值；正常会话远小于此） */
 export const REPLAY_FETCH_MAX_BARS = 5000
-
-/** 起始日最早可选日期（A 股上交所开市日；早于标的上市日时自然落到数据首日开局） */
-export const EARLIEST_START_DATE = '1990-12-19'
-
-/** 自然日 → 交易日估算（≈ 5/7，含节假日余量上取整）：追拉目标一步到位用，过冲无害 */
-export const estimateTradingBars = (startDate: string, now: number = Date.now()): number => {
-  const start = new Date(`${startDate}T00:00:00`).getTime()
-  const calendarDays = Math.max(0, Math.ceil((now - start) / 86_400_000))
-  return Math.ceil(calendarDays * (5 / 7)) + 10
-}
 
 /** 固定倍速：完成一个交易日的真实毫秒数（写死 10 秒，不提供档位选择） */
 export const REPLAY_SPEED_MS = 10_000
@@ -46,17 +36,6 @@ export interface ReplayState {
 /** bar 时间戳 -> yyyy-mm-dd */
 export const dateKeyOfBar = (bar: KLineData): string => dayKeyOf(bar.timestamp)
 
-/** 日期键前推 1 年（闰日 2/29 回退 2/28；setup 默认起始日 = 结束日 - 1 年） */
-export const yearBeforeKey = (dayKey: string): string => {
-  const [y, m, d] = dayKey.split('-').map(Number)
-  const date = new Date(y - 1, m - 1, d)
-  if (date.getMonth() !== m - 1) {
-    // 非闰年 2/29 滚到 3 月，回退到 2 月末
-    date.setDate(0)
-  }
-  return dayKeyOf(date.getTime())
-}
-
 /** 虚拟成交时间戳：虚拟日 15:00（本地时）；dayKeyOf(virtualTsOf(k)) === k */
 export const virtualTsOf = (dayKey: string): number => {
   const [y, m, d] = dayKey.split('-').map(Number)
@@ -72,29 +51,25 @@ export const calendarFrom = (bars: KLineData[], startDate: string, endDate?: str
     })
     .map(dateKeyOfBar)
 
-/** 自 startDate 起可模拟的交易日数（endDate（含）截断；缺省 = 到数据尽头） */
-export const forwardCountOf = (bars: KLineData[], startDate: string, endDate?: string): number =>
-  bars.filter((bar) => {
+/** 回放视图切分（服务端视图构建与前端共用口径）：
+ *  history = 起始日之前的历史（升序，取末尾 PRE_START_WINDOW_BARS 根）；
+ *  simDays = 模拟日区间 [startDate, endDay]（含两端，升序） */
+export const splitReplayView = (
+  bars: KLineData[],
+  startDate: string,
+  endDay: string
+): { history: KLineData[]; simDays: KLineData[] } => {
+  const history: KLineData[] = []
+  const simDays: KLineData[] = []
+  for (const bar of bars) {
     const d = dateKeyOfBar(bar)
-    return d >= startDate && (endDate == null || d <= endDate)
-  }).length
-
-/** 可选起始日范围：全历史任意可选（min = A 股开市日，早于上市日时落到数据首日开局）；
- *  max = 最新一根日 K（选它仍有 1 天，由"≥2 天"开局校验拦截）。
- *  选早于已加载窗口的日期时，可模拟天数本地只能算下界（追拉后由服务端权威校准） */
-export interface ReplayStartRange {
-  min: string
-  max: string
-}
-
-export const startRangeOf = (bars: KLineData[]): ReplayStartRange | null => {
-  if (bars.length < 3) {
-    return null
+    if (d < startDate) {
+      history.push(bar)
+    } else if (d <= endDay) {
+      simDays.push(bar)
+    }
   }
-  return {
-    min: EARLIEST_START_DATE,
-    max: dateKeyOfBar(bars[bars.length - 1]!)
-  }
+  return { history: history.slice(-PRE_START_WINDOW_BARS), simDays }
 }
 
 /** 开局：第 1 个交易日立即完成（整根出现） */
@@ -106,17 +81,6 @@ export const createReplaySession = (anchorCode: string, startDate: string, dayCo
   dayCount: Math.max(1, dayCount),
   dayIndex: 1
 })
-
-/** 完成下一个交易日；走满 dayCount 置 ended */
-export const advanceDay = (state: ReplayState): ReplayState => {
-  if (state.status !== 'running') {
-    return state
-  }
-  if (state.dayIndex >= state.dayCount) {
-    return { ...state, status: 'ended' }
-  }
-  return { ...state, dayIndex: state.dayIndex + 1 }
-}
 
 /** 市场基准日：第 dayIndex 个模拟日（含）；dayIndex=0（未开始）= 起始日之前 */
 const lastIndexOf = (bars: KLineData[], dayIndex: number, calendar: string[]): number => {

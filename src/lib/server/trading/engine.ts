@@ -18,9 +18,16 @@ import {
   createReplaySession,
   releaseAllFrozen,
   replayQuoteOf,
+  splitReplayView,
   virtualTsOf
 } from '@/lib/trading/replay'
-import { advanceSessionBy, type SimOrderInput, type SimSession, type SimSessionAction } from '@/lib/trading/protocol'
+import {
+  advanceSessionBy,
+  type SimOrderInput,
+  type SimReplayView,
+  type SimSession,
+  type SimSessionAction
+} from '@/lib/trading/protocol'
 import { fetchQuote } from '../market-service'
 import { fetchReplayBars } from '../replay-service'
 import { SimTradingError } from './contract'
@@ -101,7 +108,7 @@ export interface OrderExecution {
   sessionChanged: boolean
 }
 
-/** 下单编排：先结算时钟，再按阶段（setup 实时 / live 回放）解析行情权威，校验后成交 */
+/** 下单编排：先结算时钟，再按回放行情解析权威（无会话/非 running 拒单），校验后成交 */
 export const placeOrderEngine = async (
   account: TradingAccount,
   session: SimSession | null,
@@ -111,7 +118,11 @@ export const placeOrderEngine = async (
 ): Promise<OrderExecution> => {
   const settled = await settleSim(account, session, now, source)
   const { account: base, session: sess } = settled
-  if (sess != null && sess.status !== 'running') {
+  if (sess == null) {
+    // 无会话 = 自动开局在途（或开局失败），不可按实时价交易
+    throw new SimTradingError('no_active_session', '正在开局，请稍候|Session is starting, please wait')
+  }
+  if (sess.status !== 'running') {
     throw new SimTradingError(
       'session_not_running',
       sess.status === 'ended'
@@ -120,31 +131,17 @@ export const placeOrderEngine = async (
     )
   }
 
-  let prevClose: number | null
-  let name: string
-  let ts: number
-  if (sess != null) {
-    // live：现价/前收 = 回放行情（最新完成日收盘 + 前收），成交时间戳 = 虚拟日 15:00
-    const anchorBars = await source.replayBars(sess.anchorCode)
-    const calendar = calendarFrom(anchorBars, sess.startDate)
-    const bars = sess.anchorCode === order.code ? anchorBars : await source.replayBars(order.code)
-    const quote = replayQuoteOf(bars, sess.dayIndex, calendar)
-    if (quote == null) {
-      throw new SimTradingError('quote_unavailable', '行情加载中，请稍候|Quotes loading, please wait')
-    }
-    prevClose = quote.prevClose
-    name = order.name ?? (await source.liveQuote(order.code))?.name ?? order.code
-    ts = virtualTsOf(calendar[sess.dayIndex - 1] ?? sess.startDate)
-  } else {
-    // setup：实时行情（与 /trade 一致），成交时间戳 = 服务端当前时间
-    const quote = await source.liveQuote(order.code)
-    if (quote?.price == null || quote.prevClose == null) {
-      throw new SimTradingError('quote_unavailable', '行情加载中，请稍候|Quotes loading, please wait')
-    }
-    prevClose = quote.prevClose
-    name = order.name ?? quote.name ?? order.code
-    ts = now
+  // 现价/前收 = 回放行情（最新完成日收盘 + 前收），成交时间戳 = 虚拟日 15:00
+  const anchorBars = await source.replayBars(sess.anchorCode)
+  const calendar = calendarFrom(anchorBars, sess.startDate)
+  const bars = sess.anchorCode === order.code ? anchorBars : await source.replayBars(order.code)
+  const quote = replayQuoteOf(bars, sess.dayIndex, calendar)
+  if (quote == null) {
+    throw new SimTradingError('quote_unavailable', '行情加载中，请稍候|Quotes loading, please wait')
   }
+  const prevClose = quote.prevClose
+  const name = order.name ?? (await source.liveQuote(order.code))?.name ?? order.code
+  const ts = virtualTsOf(calendar[sess.dayIndex - 1] ?? sess.startDate)
 
   const rejection = validateOrder({
     account: base,
@@ -164,11 +161,28 @@ export const placeOrderEngine = async (
 
 // ==================== 会话控制 ====================
 
+/**
+ * 回放视图数据（服务端算好、前端直接渲染）：起始日前 ≤500 根历史 + 全部模拟日
+ * （含未完成日，前端按 dayIndex 逐日揭示）+ 标的名称（实时行情兜底）——
+ * 前端零参数拿全展示数据，无窗口/名称计算。
+ * 窗口右边界 = 锚定日历的第 dayCount 个模拟日（任意标的按锚定区间对齐切分）。
+ */
+export const replayViewOf = async (code: string, session: SimSession, source: MarketSource): Promise<SimReplayView> => {
+  const anchorBars = await source.replayBars(session.anchorCode)
+  const calendar = calendarFrom(anchorBars, session.startDate)
+  // 异常 dayCount 超出数据时取数据尽头（日历最后一日）兜底
+  const endDay = calendar[Math.min(session.dayCount, calendar.length) - 1] ?? session.startDate
+  const [bars, quote] = await Promise.all([source.replayBars(code), source.liveQuote(code)])
+  return { code, name: quote?.name ?? null, ...splitReplayView(bars, session.startDate, endDay) }
+}
+
 export interface StartSessionParams {
   anchorCode: string
   startDate: string
   /** 结束日（含）；缺省 = 回放至数据尽头（dayCount = 截断后日历长度） */
   endDate?: string
+  /** 开局即暂停：第 1 天完成但停住计时（自动开局用，点「继续」起走） */
+  paused?: boolean
 }
 
 /** 开局：校验数据可行性（≥2 个交易日），建立会话并把账户结算到第 1 个虚拟日（历史建仓全部解冻） */
@@ -191,6 +205,7 @@ export const startSessionEngine = async (
   }
   const session: SimSession = {
     ...createReplaySession(params.anchorCode, params.startDate, calendar.length),
+    ...(params.paused ? { status: 'paused' as const } : {}),
     lastTickAt: now
   }
   const barsByCode = await barsForCodes([params.anchorCode, ...account.positions.map((p) => p.code)], source)
@@ -245,7 +260,7 @@ const barsForCodes = async (codes: string[], source: MarketSource): Promise<Map<
 
 /** bars 进程内缓存 TTL（与 CACHE_KLINE_HIST_TTL_MS 对齐：历史不可变，除权后定时全量刷新） */
 const REPLAY_BARS_CACHE_TTL_MS = 600_000
-/** 回放/结算所需日 K 根数上限（与 /api/replay 上限同口径；正常会话远小于此，选早期起始日时按需触达） */
+/** 回放/结算所需日 K 根数上限（与 /api/sim/replay 上限同口径；正常会话远小于此，选早期起始日时按需触达） */
 const REPLAY_BARS_LIMIT = REPLAY_FETCH_MAX_BARS
 
 /** 默认行情源：实时行情走 market-service（上游有 TTL 缓存），历史日 K 走 replay-service */

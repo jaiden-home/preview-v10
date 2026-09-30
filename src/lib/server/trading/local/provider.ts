@@ -6,6 +6,7 @@ import {
   applySessionControl,
   createMarketSource,
   placeOrderEngine,
+  replayViewOf,
   settleSim,
   startSessionEngine,
   type MarketSource
@@ -45,7 +46,7 @@ export const createLocalTradingProvider = (deps: LocalTradingDeps = {}): SimTrad
     }
   }
 
-  /** 读取（未开户自动建立初始账户），并按服务端时钟结算后持久化 */
+  /** 读取（未开户自动建立初始账户），并按服务端时钟结算后持久化；有会话附带回放视图（锚定标的） */
   const loadSettled = async (sid: string): Promise<SimState> => {
     const existing = repo.loadAccount(sid)
     const account: TradingAccount = existing ?? createInitialAccount(now())
@@ -57,7 +58,13 @@ export const createLocalTradingProvider = (deps: LocalTradingDeps = {}): SimTrad
         repo.saveSession(sid, settled.session, now())
       }
     }
-    return { account: settled.account, session: settled.session, serverNow: now() }
+    return {
+      account: settled.account,
+      session: settled.session,
+      serverNow: now(),
+      replay:
+        settled.session != null ? await replayViewOf(settled.session.anchorCode, settled.session, source) : undefined
+    }
   }
 
   return {
@@ -97,7 +104,12 @@ export const createLocalTradingProvider = (deps: LocalTradingDeps = {}): SimTrad
           const started = await startSessionEngine(base.account, action, now(), source)
           repo.saveAccount(sid, started.account, now())
           repo.saveSession(sid, started.session, now())
-          return { account: started.account, session: started.session, serverNow: now() }
+          return {
+            account: started.account,
+            session: started.session,
+            serverNow: now(),
+            replay: await replayViewOf(started.session.anchorCode, started.session, source)
+          }
         }
         const base = await loadSettled(sid)
         const next = applySessionControl(base.session, action, now())

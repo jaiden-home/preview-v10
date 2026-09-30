@@ -2,7 +2,7 @@ import { DatabaseSync } from 'node:sqlite'
 import { describe, expect, it } from 'vitest'
 import type { KLineData } from 'klinecharts'
 import { INITIAL_CASH } from '@/lib/trading/account'
-import { runSimTradingContractTests } from '../contract'
+import { runSimTradingContractTests } from '../contract-suite'
 import type { MarketSource } from '../engine'
 import { createLocalTradingProvider } from './provider'
 

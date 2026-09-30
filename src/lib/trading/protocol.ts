@@ -3,6 +3,7 @@
 // 只依赖 account.ts / replay.ts 的环境无关类型，可被 SSR、客户端与 lib/server 共同引用。
 // 日后接入真实交易接口时，替换的是服务端 provider 实现，本协议与前端展示层不动。
 
+import type { KLineData } from 'klinecharts'
 import type { OrderRejectCode, TradeSide, TradingAccount } from './account'
 import type { ReplayState } from './replay'
 
@@ -34,13 +35,26 @@ export const advanceSessionBy = (session: SimSession, serverNow: number): SimSes
   }
 }
 
+/** 回放视图数据（服务端算好、前端直接渲染）：
+ *  name = 标的名称（服务端实时行情兜底，无则 null，前端回退代码）；
+ *  history = 起始日之前的 历史 日 K（升序，≤ PRE_START_WINDOW_BARS）；
+ *  simDays = 模拟日日 K（升序，全量 dayCount 根，含未完成日——前端按 dayIndex 逐日揭示） */
+export interface SimReplayView {
+  code: string
+  name: string | null
+  history: KLineData[]
+  simDays: KLineData[]
+}
+
 /** /api/sim/state 与各写操作的成功响应体 */
 export interface SimState {
   account: TradingAccount
-  /** null = 未开局（setup 阶段，按实时行情交易） */
+  /** null = 未开局（自动开局在途/失败） */
   session: SimSession | null
   /** 服务端当前时间（客户端进度条时钟校准） */
   serverNow: number
+  /** 锚定标的回放视图（有会话时随 state/start 返回；前端零参数一次拿全展示数据） */
+  replay?: SimReplayView
 }
 
 /** 下单请求体（/api/sim/orders） */
@@ -65,6 +79,8 @@ export type SimSessionAction =
       startDate: string
       /** 结束日（含）；缺省 = 回放至数据尽头。仅用于开局圈定 dayCount，会话内以 dayCount 为权威 */
       endDate?: string
+      /** 开局即暂停（自动开局用：第 1 天停住，点「继续」才开始计时） */
+      paused?: boolean
     }
   | { action: 'pause' }
   | { action: 'resume' }

@@ -2,53 +2,40 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { KLineData } from 'klinecharts'
-import { fetchReplayBars } from '@/lib/chart/api'
+import { fetchReplayView } from '@/lib/chart/api'
 import type { TradingAccount } from '@/lib/trading/account'
 import { advanceSessionBy, type SimSession, type SimState } from '@/lib/trading/protocol'
-import {
-  PRE_START_WINDOW_BARS,
-  REPLAY_FETCH_MAX_BARS,
-  calendarFrom,
-  dateKeyOfBar,
-  estimateTradingBars,
-  forwardCountOf,
-  replayQuoteOf,
-  startRangeOf,
-  visibleDailyBarsOf,
-  type ReplayQuote,
-  type ReplayStartRange
-} from '@/lib/trading/replay'
+import { dateKeyOfBar, replayQuoteOf, visibleDailyBarsOf, type ReplayQuote } from '@/lib/trading/replay'
 import { fetchSimState, postSimSession } from '@/lib/trading/sim-api'
 
-/** 回放数据两阶段加载：setup 拉 PRE_START_WINDOW_BARS(500) 根用于选日期（起始日可选全历史）；
- *  start 时按所选起始日追拉——交易日估算一步到位，补齐起始日前 500 根历史窗口 + 全部模拟日，
- *  上限 REPLAY_FETCH_MAX_BARS（纯护栏；新股/超早日期回溯到上市全量即止；与服务端结算口径一致） */
+/** 回放数据 = 服务端算好的视图（SimState.replay / /api/sim/replay?symbol=）：
+ *  history（起始日前历史）+ simDays（全部模拟日，含未完成），前端按 dayIndex 揭示，不做窗口计算 */
 
 /** 本地时钟节拍（running 时 1s 一拍：本地派生虚拟日推进 + 进度条插值，无网络轮询） */
 const LOCAL_TICK_MS = 1_000
 
-/** boot = 引导中；setup = 选起始日开局；live = 模拟进行/暂停/结束 */
-export type ReplayPhase = 'boot' | 'setup' | 'live'
+/** 自动开局固定区间（含两端；交易日不足/区间为空由服务端开局校验拒绝并整页报错重试） */
+const AUTO_START_DATE = '2024-01-01'
+const AUTO_END_DATE = '2025-01-01'
+
+/** boot = 引导（拉状态 + 无会话时自动开局）；live = 模拟进行/暂停/结束 */
+export type ReplayPhase = 'boot' | 'live'
 
 export interface UseReplayOptions {
   /** 新局锚定标的（开局时的选中标的，提供共享交易日历） */
   anchorCode: string
   /** 需要回放行情的标的（选中 + 持仓），按需拉取并内存缓存 */
   codes: string[]
-  /** 服务端权威账户同步（boot/轮询/会话操作后回调） */
+  /** 服务端权威账户同步（boot/会话操作后回调） */
   onAccountSync?: (account: TradingAccount) => void
 }
 
 export interface UseReplayResult {
   phase: ReplayPhase
-  /** 引导失败（状态或数据源不可用），提示重试 */
+  /** 引导失败（状态或数据源不可用/自动开局被拒），提示重试 */
   error: boolean
   state: SimSession | null
   calendar: string[]
-  /** setup 阶段：可选起始日范围 */
-  startRange: ReplayStartRange | null
-  /** setup 阶段：已加载窗口首根日期（所选日期早于此 → 可模拟天数仅为下界） */
-  loadedWindowFirst: string
   /** 当前日计时进度 0..1（running 时；暂停/结束为 0） */
   progress: number
   /** bars 缓存版本号（任一标的拉取完成后 +1，驱动依赖方重算） */
@@ -57,14 +44,10 @@ export interface UseReplayResult {
   quoteOf: (code: string) => ReplayQuote | null
   /** 图表可见日 K（起始日前历史 + 已完成模拟日） */
   visibleBarsOf: (code: string) => KLineData[]
-  /** 已加载窗口日 K（未开局阶段图表展示实时完整 K 线，与 /trade 一致） */
-  allBarsOf: (code: string) => KLineData[]
-  /** setup 预览：自某日期起可模拟的交易日数（endDate（含）截断） */
-  forwardCountOn: (code: string, date: string, endDate?: string) => number
-  /** 开局（服务端建立会话；endDate 缺省 = 回放至数据尽头）；null = 成功，否则为双语错误文案 */
-  start: (startDate: string, endDate?: string) => Promise<string | null>
+  /** 标的名称（随视图由服务端带回；无则 null，调用方回退代码） */
+  nameOf: (code: string) => string | null
   togglePause: () => void
-  /** 重开一局（服务端清会话与账户，回到选日期）；返回是否成功 */
+  /** 重开一局（服务端清会话与账户，boot 以默认区间重新自动开局）；返回是否成功 */
   restart: () => Promise<boolean>
   /** 引导失败后重试 */
   retry: () => void
@@ -75,8 +58,10 @@ export interface UseReplayResult {
 /**
  * 虚拟时钟钩子（服务端权威 + 本地派生，无轮询）：
  * 会话状态（dayIndex/status/lastTickAt）与账户账务由 BFF 结算持久化（node:sqlite），
- * boot 拉取一次权威状态后，running 期间由本地时钟（serverNow + lastTickAt + speedMs）
- * 派生虚拟日推进——回放数据不可变且前端已完整持有（历史窗口 + 模拟日），无需轮询；
+ * boot 拉取一次权威状态——已有会话直接恢复；无会话则以固定区间
+ * （AUTO_START_DATE ~ AUTO_END_DATE，开局即暂停）自动开局。
+ * running 期间由本地时钟（serverNow + lastTickAt + speedMs）派生虚拟日推进——
+ * 回放数据不可变且前端已完整持有（历史窗口 + 模拟日），无需轮询；
  * 任何服务端交互（下单/暂停/继续/重开）的响应都会校准权威值。
  * K 线数据按需拉取内存缓存（图表与委托面板展示）。
  * 服务端时钟语义：页面关闭期间 running 照走；刷新后继续（不暂停追帧）。
@@ -87,14 +72,14 @@ export const useReplay = (options: UseReplayOptions): UseReplayResult => {
   const [phase, setPhase] = useState<ReplayPhase>('boot')
   const [state, setState] = useState<SimSession | null>(null)
   const [calendar, setCalendar] = useState<string[]>([])
-  const [startRange, setStartRange] = useState<ReplayStartRange | null>(null)
-  const [loadedWindowFirst, setLoadedWindowFirst] = useState('')
   const [error, setError] = useState(false)
   const [barsVersion, setBarsVersion] = useState(0)
   const [bootId, setBootId] = useState(0)
   const [nowTick, setNowTick] = useState(() => Date.now())
 
   const barsRef = useRef<Map<string, KLineData[]>>(new Map())
+  /** 标的名称（随视图由服务端带回：boot 锚定 + 按需拉取） */
+  const namesRef = useRef<Map<string, string | null>>(new Map())
   const pendingRef = useRef<Set<string>>(new Set())
   const anchorRef = useRef(anchorCode)
   const onAccountSyncRef = useRef(onAccountSync)
@@ -117,7 +102,7 @@ export const useReplay = (options: UseReplayOptions): UseReplayResult => {
     onAccountSyncRef.current?.(simState.account)
   }, [])
 
-  // 引导：拉取服务端权威状态 + 锚定标的窗口日 K（500 根）；有会话恢复 live，否则进 setup 选日期
+  // 引导：零参数拉权威状态（含锚定标的回放视图；无会话则固定区间自动开局），视图直接渲染
   useEffect(() => {
     let cancelled = false
     const boot = async () => {
@@ -125,55 +110,51 @@ export const useReplay = (options: UseReplayOptions): UseReplayResult => {
       setError(false)
       setState(null)
       setCalendar([])
-      setStartRange(null)
-      setLoadedWindowFirst('')
       barsRef.current = new Map()
+      namesRef.current = new Map()
       pendingRef.current.clear()
-      const [simState, bars] = await Promise.all([
-        fetchSimState(),
-        fetchReplayBars(anchorRef.current, PRE_START_WINDOW_BARS)
-      ])
+      const simState = await fetchSimState()
       if (cancelled) {
         return
       }
-      if (simState == null || bars.length < 3) {
+      if (simState == null) {
         setError(true)
         return
       }
       syncState(simState)
-      const session = simState.session
-      const anchor = session?.anchorCode ?? anchorRef.current
-      let anchorBars = anchor === anchorRef.current ? bars : await fetchReplayBars(anchor, PRE_START_WINDOW_BARS)
-      if (cancelled) {
-        return
-      }
-      // 恢复会话：按「起始日前 500 历史 + 全部模拟日」口径补拉（与 start() 一致；新股数据尽头即止）；
-      // 带结束日的会话 dayCount 仅区间天数，但「最新 N 根」回溯须覆盖到起始日 → 与 estimate 取大；
-      // 目标钳制到 API 上限，防异常 dayCount 构造出超限请求（正常会话 ≤999，不会触发）
-      if (session != null && anchorBars.length < PRE_START_WINDOW_BARS + session.dayCount) {
-        const target = Math.min(
-          PRE_START_WINDOW_BARS + Math.max(session.dayCount, estimateTradingBars(session.startDate)),
-          REPLAY_FETCH_MAX_BARS
-        )
-        const fetched = await fetchReplayBars(anchor, target)
-        if (!cancelled && fetched.length > anchorBars.length) {
-          anchorBars = fetched
+      const anchor = simState.session?.anchorCode ?? anchorRef.current
+      let view = simState.replay ?? null
+      if (simState.session == null) {
+        // 无会话：固定区间自动开局（开局即暂停——第 1 天停住等「继续」，刷新/重进不误伤 running 会话）
+        const result = await postSimSession({
+          action: 'start',
+          anchorCode: anchor,
+          startDate: AUTO_START_DATE,
+          endDate: AUTO_END_DATE,
+          paused: true
+        })
+        if (cancelled) {
+          return
         }
+        if (result == null || !result.ok || result.state.session == null) {
+          setError(true)
+          return
+        }
+        view = result.state.replay ?? null
+        syncState(result.state)
       }
-      if (cancelled) {
+      if (view == null || view.simDays.length < 2) {
+        // 无视图/模拟日不足 = 服务端数据源不可用
+        setError(true)
         return
       }
-      barsRef.current = new Map([[anchor, anchorBars]])
+      // 视图即数据：历史 + 全部模拟日（含未完成，按 dayIndex 逐日揭示）+ 名称；
+      // 服务端时钟：恢复不暂停（running 继续走，ended 保持结束态；新局由 start(paused) 决定）
+      barsRef.current = new Map([[anchor, [...view.history, ...view.simDays]]])
+      namesRef.current = new Map([[anchor, view.name]])
       setBarsVersion((v) => v + 1)
-      if (session != null) {
-        // 服务端时钟：恢复不暂停（running 继续走，ended 保持结束态）
-        setCalendar(calendarFrom(anchorBars, session.startDate))
-        setPhase('live')
-        return
-      }
-      setStartRange(startRangeOf(anchorBars))
-      setLoadedWindowFirst(dateKeyOfBar(anchorBars[1]!))
-      setPhase('setup')
+      setCalendar(view.simDays.map(dateKeyOfBar))
+      setPhase('live')
     }
     void boot()
     return () => {
@@ -183,9 +164,9 @@ export const useReplay = (options: UseReplayOptions): UseReplayResult => {
 
   const codesKey = Array.from(new Set(codes)).sort().join(',')
 
-  // 按需拉取：选中/持仓标的窗口日 K（500 根；失败缓存空数组，重进页面再试）
+  // 按需拉取：选中/持仓标的的回放视图（窗口由服务端从会话解析，仅 symbol 参数；失败缓存空数组，重进页面再试）
   useEffect(() => {
-    if (phase === 'boot' || error || codesKey.length === 0) {
+    if (phase !== 'live' || error || codesKey.length === 0) {
       return
     }
     let cancelled = false
@@ -197,12 +178,13 @@ export const useReplay = (options: UseReplayOptions): UseReplayResult => {
     }
     missing.forEach((code) => pendingRef.current.add(code))
     void (async () => {
-      const results = await Promise.all(missing.map((code) => fetchReplayBars(code, PRE_START_WINDOW_BARS)))
+      const views = await Promise.all(missing.map((code) => fetchReplayView(code)))
       if (cancelled) {
         return
       }
-      results.forEach((bars, i) => {
-        barsRef.current.set(missing[i]!, bars)
+      views.forEach((view, i) => {
+        barsRef.current.set(missing[i]!, view == null ? [] : [...view.history, ...view.simDays])
+        namesRef.current.set(missing[i]!, view?.name ?? null)
       })
       setBarsVersion((v) => v + 1)
     })()
@@ -242,66 +224,8 @@ export const useReplay = (options: UseReplayOptions): UseReplayResult => {
     return visibleDailyBarsOf(bars, dayIndex, calendar)
   }
 
-  const allBarsOf = (code: string): KLineData[] => barsRef.current.get(code) ?? []
-
-  const forwardCountOn = (code: string, date: string, endDate?: string): number =>
-    forwardCountOf(barsRef.current.get(code) ?? [], date, endDate)
-
-  const start = useCallback(
-    async (startDate: string, endDate?: string): Promise<string | null> => {
-      const anchor = anchorRef.current
-      let bars = barsRef.current.get(anchor)
-      if (bars != null) {
-        // 起始日前历史不足窗口根数时追拉：交易日估算一步到位（过冲无害），循环仅兜底补差；
-        // 起始日早于已加载窗口（估算未知精确模拟天数）与新股数据尽头均由此收敛。
-        // 注意 /api/replay 按「最新 N 根」回溯：深历史起始日即使带结束日，估算也须截至当下，
-        // 否则 N 不足以从当下铺回起始日（结束日只缩小 dayCount，不缩小回溯跨度）
-        for (let round = 0; round < 3; round += 1) {
-          const forwardCount = forwardCountOf(bars, startDate, endDate)
-          const startIndex = bars.findIndex((b) => dateKeyOfBar(b) >= startDate)
-          const historyLoaded = Math.max(0, startIndex)
-          if (historyLoaded >= PRE_START_WINDOW_BARS) {
-            break
-          }
-          const estimatedForward = startIndex === 0 ? estimateTradingBars(startDate) : forwardCount
-          const target = Math.min(
-            Math.max(
-              bars.length + (PRE_START_WINDOW_BARS - historyLoaded),
-              PRE_START_WINDOW_BARS + Math.max(forwardCount, estimatedForward)
-            ),
-            REPLAY_FETCH_MAX_BARS
-          )
-          const fetched = await fetchReplayBars(anchor, target)
-          if (fetched.length <= bars.length) {
-            break
-          }
-          bars = fetched
-          barsRef.current.set(anchor, bars)
-          setBarsVersion((v) => v + 1)
-        }
-      }
-      const result = await postSimSession({
-        action: 'start',
-        anchorCode: anchor,
-        startDate,
-        endDate
-      })
-      if (result == null) {
-        return '网络异常，请稍候重试|Network error, please retry'
-      }
-      if (!result.ok) {
-        return result.message
-      }
-      if (result.state.session == null) {
-        return '开局失败，请稍候重试|Failed to start, please retry'
-      }
-      setCalendar(bars != null ? calendarFrom(bars, startDate, endDate) : [])
-      syncState(result.state)
-      setPhase('live')
-      return null
-    },
-    [syncState]
-  )
+  /** 标的名称（随视图由服务端带回；无则 null，调用方回退代码） */
+  const nameOf = (code: string): string | null => namesRef.current.get(code) ?? null
 
   const togglePause = useCallback(() => {
     // 用本地派生态判断（到顶 ended 即停止操作；服务端对已 ended 会话的暂停/继续同样是 no-op）
@@ -350,15 +274,11 @@ export const useReplay = (options: UseReplayOptions): UseReplayResult => {
     error,
     state: simState,
     calendar,
-    startRange,
-    loadedWindowFirst,
     progress,
     barsVersion,
     quoteOf,
     visibleBarsOf,
-    allBarsOf,
-    forwardCountOn,
-    start,
+    nameOf,
     togglePause,
     restart,
     retry,
