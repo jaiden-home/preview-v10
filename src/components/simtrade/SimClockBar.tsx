@@ -9,22 +9,16 @@ interface SimClockBarProps {
   calendar: string[]
   /** 距下一交易日的计时进度 0..1（暂停/结束为 0） */
   progress: number
-  onToggle: () => void
 }
-
-const PlayIcon = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-    <path d="M8 5l11 7-11 7V5z" strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
-)
 
 /**
  * 模拟时钟（UI_SPEC §3.13，两行控制卡，恒为 live 形态——进入页面即自动开局，无选日期表单）：
- * 行 1 = 虚拟日期大字 + 第 x/N 天 + 暂停/继续（ended 态换「已结束」胶囊）；
+ * 行 1 = 虚拟日期大字 + 第 x/N 天（ended 态右侧换「已结束」胶囊）；
  * 行 2 = 整行计时进度 + 倒计时文案。
- * 倍速固定 10 秒 = 1 交易日（REPLAY_SPEED_MS），不提供选择。
+ * 暂停/继续控制不在本页（收敛至 §3.14 模拟设置页的开始暂停开关）。
+ * 倍速基准 10 秒 = 1 交易日（REPLAY_SPEED_MS），档位经设置页调整。
  */
-export default function SimClockBar({ t, state, calendar, progress, onToggle }: SimClockBarProps) {
+export default function SimClockBar({ t, state, calendar, progress }: SimClockBarProps) {
   const live = state != null
   const running = state?.status === 'running'
   const ended = state?.status === 'ended'
@@ -35,7 +29,7 @@ export default function SimClockBar({ t, state, calendar, progress, onToggle }: 
 
   return (
     <div className="sim-clock" role="group" aria-label={t('模拟时钟|Replay clock')}>
-      {/* 行 1：虚拟日期 + 主操作 */}
+      {/* 行 1：虚拟日期 + 状态 */}
       <div className="sim-clock-head">
         <div className="sim-clock-day">
           <span className="sim-day-value num">{liveDay}</span>
@@ -45,21 +39,7 @@ export default function SimClockBar({ t, state, calendar, progress, onToggle }: 
             </span>
           )}
         </div>
-        {ended ? (
-          <span className="sim-ended-tag">{t('已结束|Ended')}</span>
-        ) : (
-          <button type="button" className="sim-toggle-btn" onClick={onToggle}>
-            {running ? (
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                <path d="M9 5v14" strokeLinecap="round" />
-                <path d="M15 5v14" strokeLinecap="round" />
-              </svg>
-            ) : (
-              <PlayIcon />
-            )}
-            <span>{running ? t('暂停|Pause') : t('继续|Resume')}</span>
-          </button>
-        )}
+        {ended && <span className="sim-ended-tag">{t('已结束|Ended')}</span>}
       </div>
 
       {/* 行 2：计时进度 */}

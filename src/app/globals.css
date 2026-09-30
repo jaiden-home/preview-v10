@@ -2294,13 +2294,6 @@ body {
   }
 }
 
-/* ---------------- 首页第三张入口卡（极速模拟 /simtrade，UI_SPEC §3.12） ---------------- */
-
-/* 极速模拟卡：品牌蓝（默认 .home-card 语义色），双列栅格下通栏占位避免半空行 */
-#app .home-card.sim {
-  grid-column: 1 / -1;
-}
-
 /* ---------------- 极速模拟页（/simtrade，UI_SPEC §3.13） ---------------- */
 
 /* 模拟时钟（两行控制卡）：淡底整带（复用 .order-estimate 容器语言），置于委托面板首段 */
@@ -2373,37 +2366,7 @@ body {
   white-space: nowrap;
 }
 
-/* 开始/暂停：品牌蓝实底主操作（复用卖出 CTA 范式与 §2.3 品牌蓝投影） */
-#app .sim-toggle-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  height: 28px;
-  padding: 0 10px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--on-solid);
-  white-space: nowrap;
-  background-color: var(--tb-active);
-  border: none;
-  border-radius: var(--radius-sm);
-  box-shadow: 0 2px 8px rgba(22, 119, 255, 0.28);
-  cursor: pointer;
-  transition:
-    filter 0.2s ease,
-    box-shadow 0.2s ease;
-}
-
-#app .sim-toggle-btn:hover {
-  filter: brightness(1.06);
-}
-
-#app .sim-toggle-btn svg {
-  width: 12px;
-  height: 12px;
-}
-
-/* 已结束胶囊（结算卡另由 .sim-settle 承载） */
+/* 已结束胶囊（结算卡另由 .sim-settle 承载；暂停/继续开关随功能收敛至模拟设置页移除） */
 #app .sim-ended-tag {
   padding: 4px 10px;
   font-size: 11px;
@@ -2491,4 +2454,297 @@ body {
   margin-left: 8px;
   background-color: var(--tb-bg);
   border: 1px solid var(--tb-border);
+}
+
+/* ---------------- 模拟设置页（/admin/simtrade，UI_SPEC §3.14） ---------------- */
+
+/* 页面画布：卡片化范式（--page-tint）；不套 .trade-page——移动端保留工具栏 */
+#app .sim-settings-page {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--page-tint);
+}
+
+/* 内容列：窄幅居中（设置表单页，非数据密集页） */
+#app .sim-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 12px;
+}
+
+/* 设置卡：卡片基准内边距 + 纵向 12px 分组 */
+#app .sim-set-card,
+#app .sim-status-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 16px;
+}
+
+/* 卡头：Title + 结构实线分隔 */
+#app .sim-set-head {
+  margin: 0;
+  padding-bottom: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--tb-text);
+  border-bottom: 1px solid var(--tb-border);
+}
+
+/* 字段：标签上（Base/600 次要色）+ 控件下 */
+#app .sim-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+#app .sim-field-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--tb-text-sub);
+}
+
+/* 标的选择器：触发按钮 = 标准输入规格（§3.4） */
+#app .sim-pick {
+  position: relative;
+}
+
+#app .sim-pick-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  height: 36px;
+  padding: 0 10px;
+  color: var(--tb-text);
+  font-size: 13px;
+  text-align: left;
+  background-color: var(--tb-bg);
+  border: 1px solid var(--tb-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: border-color 0.2s ease;
+}
+
+#app .sim-pick-btn:hover {
+  border-color: var(--tb-active);
+}
+
+#app .sim-pick-id {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+#app .sim-pick-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--tb-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#app .sim-pick-code {
+  font-size: 11px;
+  color: var(--tb-text-sub);
+}
+
+#app .sim-pick-chevron {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  color: var(--tb-text-sub);
+  transition: transform 0.2s ease;
+}
+
+#app .sim-pick-chevron.open {
+  transform: rotate(180deg);
+}
+
+/* 下拉面板：随触发器等宽（复用 .dropdown/.search-box/.symbol-list 语言） */
+#app .sim-pick-dropdown {
+  left: 0;
+  right: 0;
+  padding: 8px;
+}
+
+#app .sim-pick-dropdown .symbol-row.selected {
+  background-color: var(--tb-active-bg);
+}
+
+/* 日期区间：双列输入 + 连接符 */
+#app .sim-set-dates {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+#app .sim-set-input {
+  flex: 1;
+  min-width: 0;
+  height: 36px;
+  padding: 0 8px;
+  color: var(--tb-text);
+  font-family: var(--font-num);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  background-color: var(--tb-bg);
+  border: 1px solid var(--tb-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+#app .sim-set-input:focus {
+  outline: none;
+  border-color: var(--tb-active);
+  box-shadow: 0 0 0 3px var(--tb-active-bg);
+}
+
+#app .sim-set-dash {
+  flex: none;
+  color: var(--tb-text-sub);
+}
+
+/* 字段提示行（Micro；区间倒置给语义红） */
+#app .sim-set-hint {
+  font-size: 10px;
+  color: var(--tb-text-sub);
+}
+
+#app .sim-set-hint.invalid {
+  color: var(--up);
+}
+
+/* 倍速分段（复用 .period-group 容器语言） */
+#app .sim-speed-group {
+  align-self: flex-start;
+}
+
+/* 主按钮：品牌蓝实底 CTA（同 .sim-settle-btn 范式，§5 主要操作 40px） */
+#app .sim-set-apply {
+  height: 40px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--on-solid);
+  background-color: var(--tb-active);
+  border: none;
+  border-radius: var(--radius-md);
+  box-shadow: 0 2px 8px rgba(22, 119, 255, 0.28);
+  cursor: pointer;
+  transition: filter 0.2s ease;
+}
+
+#app .sim-set-apply:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+
+#app .sim-set-apply:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* 状态卡：区间格通栏 */
+#app .sim-status-card .sim-settle-cell.span-2 {
+  grid-column: 1 / -1;
+}
+
+/* 开始/暂停开关行：结构实线与指标格分隔 */
+#app .sim-run-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--tb-border);
+}
+
+#app .sim-run-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+#app .sim-run-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--tb-text);
+}
+
+#app .sim-run-sub {
+  font-size: 10px;
+  color: var(--tb-text-sub);
+}
+
+/* 开关触控区（≥40px，§5） */
+#app .sim-run-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  height: 40px;
+  padding: 0 10px;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+#app .sim-run-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* 开关轨道 + 滑块（复用主题开关视觉语言，on 态品牌蓝实底） */
+#app .sim-run-switch {
+  position: relative;
+  display: block;
+  width: 42px;
+  height: 22px;
+  border-radius: 999px;
+  background-color: var(--tb-border);
+  transition: background-color 0.2s ease;
+}
+
+#app .sim-run-switch.on {
+  background-color: var(--tb-active);
+}
+
+#app .sim-run-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background-color: var(--on-solid);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  transition: transform 0.2s ease;
+}
+
+#app .sim-run-switch.on .sim-run-knob {
+  transform: translateX(20px);
+}
+
+@media (max-width: 768px) {
+  #app .sim-settings {
+    padding: 8px;
+  }
+
+  /* 窄屏倍速分段整行铺开防挤压 */
+  #app .sim-speed-group {
+    align-self: stretch;
+  }
 }

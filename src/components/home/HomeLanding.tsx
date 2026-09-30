@@ -104,7 +104,7 @@ export default function HomeLanding() {
               {t('虚拟资金整手交易，T+1、涨跌停与费用仿真|Virtual account with T+1, price limits and fee simulation')}
             </span>
           </Link>
-          {/* 极速模拟（加速回放）入口：双列栅格下通栏占位（.home-card.sim），品牌蓝语义 */}
+          {/* 极速模拟（加速回放）入口：品牌蓝语义 */}
           <Link className="home-card sim" href="/simtrade">
             <span className="home-card-head">
               <span className="home-card-icon" aria-hidden="true">
@@ -137,6 +137,40 @@ export default function HomeLanding() {
             <span className="home-card-title">{t('极速模拟|Sim Trading')}</span>
             <span className="home-card-desc">
               {t('历史 K 线回放，30 秒一个交易日|Replay history, one trading day in 30 seconds')}
+            </span>
+          </Link>
+          {/* 模拟设置（admin）入口：品牌蓝语义（§3.14） */}
+          <Link className="home-card settings" href="/admin/simtrade">
+            <span className="home-card-head">
+              <span className="home-card-icon" aria-hidden="true">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <circle cx="12" cy="12" r="3" />
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                </svg>
+              </span>
+              <span className="home-card-arrow" aria-hidden="true">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M9 5l7 7-7 7" />
+                </svg>
+              </span>
+            </span>
+            <span className="home-card-title">{t('模拟设置|Simulation Settings')}</span>
+            <span className="home-card-desc">
+              {t('模拟标的、区间、倍速与开始暂停|Symbol, date range, speed and run control')}
             </span>
           </Link>
         </nav>

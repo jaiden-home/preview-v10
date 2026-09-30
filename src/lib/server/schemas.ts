@@ -35,7 +35,14 @@ export const simOrderSchema = z.object({
   name: z.string().trim().max(20).optional()
 })
 
-/** 模拟交易会话控制（/api/sim/session）：倍速固定 10 秒（lib/trading/replay 的 REPLAY_SPEED_MS），无入参 */
+/** 每交易日真实毫秒（倍速 = REPLAY_SPEED_MS / 档位；1s~60s 整数护栏，档位由前端换算） */
+const speedMsField = z
+  .number()
+  .int()
+  .min(1_000, 'speedMs must be 1000-60000ms')
+  .max(60_000, 'speedMs must be 1000-60000ms')
+
+/** 模拟交易会话控制（/api/sim/session）：start 可带 speedMs（倍速档位换算），speed 会话内热切换 */
 export const simSessionSchema = z.discriminatedUnion('action', [
   z.object({
     action: z.literal('start'),
@@ -45,10 +52,12 @@ export const simSessionSchema = z.discriminatedUnion('action', [
       .string()
       .regex(/^\d{4}-\d{2}-\d{2}$/, 'endDate must be yyyy-mm-dd')
       .optional(),
-    paused: z.boolean().optional()
+    paused: z.boolean().optional(),
+    speedMs: speedMsField.optional()
   }),
   z.object({ action: z.literal('pause') }),
   z.object({ action: z.literal('resume') }),
+  z.object({ action: z.literal('speed'), speedMs: speedMsField }),
   z.object({ action: z.literal('restart') })
 ])
 

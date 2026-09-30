@@ -5,7 +5,14 @@ import type { KLineData } from 'klinecharts'
 import { fetchReplayView } from '@/lib/chart/api'
 import type { TradingAccount } from '@/lib/trading/account'
 import { advanceSessionBy, type SimSession, type SimState } from '@/lib/trading/protocol'
-import { dateKeyOfBar, replayQuoteOf, visibleDailyBarsOf, type ReplayQuote } from '@/lib/trading/replay'
+import {
+  AUTO_END_DATE,
+  AUTO_START_DATE,
+  dateKeyOfBar,
+  replayQuoteOf,
+  visibleDailyBarsOf,
+  type ReplayQuote
+} from '@/lib/trading/replay'
 import { fetchSimState, postSimSession } from '@/lib/trading/sim-api'
 
 /** 回放数据 = 服务端算好的视图（SimState.replay / /api/sim/replay?symbol=）：
@@ -13,10 +20,6 @@ import { fetchSimState, postSimSession } from '@/lib/trading/sim-api'
 
 /** 本地时钟节拍（running 时 1s 一拍：本地派生虚拟日推进 + 进度条插值，无网络轮询） */
 const LOCAL_TICK_MS = 1_000
-
-/** 自动开局固定区间（含两端；交易日不足/区间为空由服务端开局校验拒绝并整页报错重试） */
-const AUTO_START_DATE = '2024-01-01'
-const AUTO_END_DATE = '2025-01-01'
 
 /** boot = 引导（拉状态 + 无会话时自动开局）；live = 模拟进行/暂停/结束 */
 export type ReplayPhase = 'boot' | 'live'
@@ -46,7 +49,6 @@ export interface UseReplayResult {
   visibleBarsOf: (code: string) => KLineData[]
   /** 标的名称（随视图由服务端带回；无则 null，调用方回退代码） */
   nameOf: (code: string) => string | null
-  togglePause: () => void
   /** 重开一局（服务端清会话与账户，boot 以默认区间重新自动开局）；返回是否成功 */
   restart: () => Promise<boolean>
   /** 引导失败后重试 */
@@ -59,10 +61,10 @@ export interface UseReplayResult {
  * 虚拟时钟钩子（服务端权威 + 本地派生，无轮询）：
  * 会话状态（dayIndex/status/lastTickAt）与账户账务由 BFF 结算持久化（node:sqlite），
  * boot 拉取一次权威状态——已有会话直接恢复；无会话则以固定区间
- * （AUTO_START_DATE ~ AUTO_END_DATE，开局即暂停）自动开局。
+ * （AUTO_START_DATE ~ AUTO_END_DATE，开局即起走）自动开局。
  * running 期间由本地时钟（serverNow + lastTickAt + speedMs）派生虚拟日推进——
  * 回放数据不可变且前端已完整持有（历史窗口 + 模拟日），无需轮询；
- * 任何服务端交互（下单/暂停/继续/重开）的响应都会校准权威值。
+ * 任何服务端交互（下单/重开）的响应都会校准权威值；暂停/继续由模拟设置页（/admin/simtrade）发起。
  * K 线数据按需拉取内存缓存（图表与委托面板展示）。
  * 服务端时钟语义：页面关闭期间 running 照走；刷新后继续（不暂停追帧）。
  */
@@ -125,13 +127,12 @@ export const useReplay = (options: UseReplayOptions): UseReplayResult => {
       const anchor = simState.session?.anchorCode ?? anchorRef.current
       let view = simState.replay ?? null
       if (simState.session == null) {
-        // 无会话：固定区间自动开局（开局即暂停——第 1 天停住等「继续」，刷新/重进不误伤 running 会话）
+        // 无会话：固定区间自动开局并立即起走（暂停/继续控制收敛至模拟设置页，本页无开关）
         const result = await postSimSession({
           action: 'start',
           anchorCode: anchor,
           startDate: AUTO_START_DATE,
-          endDate: AUTO_END_DATE,
-          paused: true
+          endDate: AUTO_END_DATE
         })
         if (cancelled) {
           return
@@ -149,7 +150,7 @@ export const useReplay = (options: UseReplayOptions): UseReplayResult => {
         return
       }
       // 视图即数据：历史 + 全部模拟日（含未完成，按 dayIndex 逐日揭示）+ 名称；
-      // 服务端时钟：恢复不暂停（running 继续走，ended 保持结束态；新局由 start(paused) 决定）
+      // 服务端时钟：恢复不暂停（running 继续走，paused/ended 保持原态）
       barsRef.current = new Map([[anchor, [...view.history, ...view.simDays]]])
       namesRef.current = new Map([[anchor, view.name]])
       setBarsVersion((v) => v + 1)
@@ -227,19 +228,6 @@ export const useReplay = (options: UseReplayOptions): UseReplayResult => {
   /** 标的名称（随视图由服务端带回；无则 null，调用方回退代码） */
   const nameOf = (code: string): string | null => namesRef.current.get(code) ?? null
 
-  const togglePause = useCallback(() => {
-    // 用本地派生态判断（到顶 ended 即停止操作；服务端对已 ended 会话的暂停/继续同样是 no-op）
-    if (simState == null || simState.status === 'ended') {
-      return
-    }
-    void (async () => {
-      const next = await postSimSession({ action: simState.status === 'running' ? 'pause' : 'resume' })
-      if (next?.ok) {
-        syncState(next.state)
-      }
-    })()
-  }, [simState, syncState])
-
   const restart = useCallback(async (): Promise<boolean> => {
     const result = await postSimSession({ action: 'restart' })
     if (!result?.ok) {
@@ -279,7 +267,6 @@ export const useReplay = (options: UseReplayOptions): UseReplayResult => {
     quoteOf,
     visibleBarsOf,
     nameOf,
-    togglePause,
     restart,
     retry,
     applySimState

@@ -79,12 +79,31 @@ export type SimSessionAction =
       startDate: string
       /** 结束日（含）；缺省 = 回放至数据尽头。仅用于开局圈定 dayCount，会话内以 dayCount 为权威 */
       endDate?: string
-      /** 开局即暂停（自动开局用：第 1 天停住，点「继续」才开始计时） */
+      /** 开局即暂停（模拟设置页「保存并开局」用：第 1 天停住，开始暂停开关/继续起走） */
       paused?: boolean
+      /** 每交易日真实毫秒（倍速档位换算；缺省 = 基准 REPLAY_SPEED_MS） */
+      speedMs?: number
     }
   | { action: 'pause' }
   | { action: 'resume' }
+  | { action: 'speed'; speedMs: number }
   | { action: 'restart' }
+
+/**
+ * 会话内热切换倍速（设置页「保存倍速」）：
+ * running 按当前日进度比例折算 lastTickAt（进度不跳变），paused 仅换 speedMs（继续时重新计时），ended 原样。
+ * 调用前会话应已结算到 now（provider 先 loadSettled 再 control）。
+ */
+export const changeSessionSpeed = (session: SimSession, speedMs: number, now: number): SimSession => {
+  if (session.status === 'ended' || session.speedMs === speedMs) {
+    return session
+  }
+  if (session.status === 'paused') {
+    return { ...session, speedMs }
+  }
+  const progress = Math.min(1, Math.max(0, (now - session.lastTickAt) / session.speedMs))
+  return { ...session, speedMs, lastTickAt: now - progress * speedMs }
+}
 
 /** 会话控制响应：成功带回权威状态；422 业务拒绝带双语文案（jsonError 信封解包） */
 export type SimSessionResult = { ok: true; state: SimState } | { ok: false; message: string }

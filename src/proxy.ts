@@ -8,7 +8,8 @@ const RESERVED_ROOT_SEGMENTS = new Set([
   'robots.txt',
   'trade',
   'dashboard',
-  'simtrade'
+  'simtrade',
+  'admin'
 ])
 const SYMBOL_PATTERN = /^(sh|sz|bj)\d{6}$/
 

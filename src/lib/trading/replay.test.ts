@@ -4,9 +4,11 @@ import { dayKeyOf, createInitialAccount, executeBuy } from './account'
 import {
   calendarFrom,
   createReplaySession,
+  multiplierOf,
   replayQuoteOf,
   releaseAllFrozen,
   splitReplayView,
+  speedMsOf,
   virtualTsOf,
   visibleDailyBarsOf
 } from './replay'
@@ -37,6 +39,20 @@ describe('日原子状态机', () => {
     expect(session.dayIndex).toBe(1)
     expect(session.speedMs).toBe(10_000)
     expect(session.dayCount).toBe(10)
+  })
+
+  it('开局可带倍速：speedMs 档位换算生效', () => {
+    expect(createReplaySession('sh600519', '2023-06-01', 10, 2_000).speedMs).toBe(2_000)
+  })
+
+  it('倍速档位换算与反查互为闭环', () => {
+    for (const m of [1, 2, 5, 10]) {
+      expect(speedMsOf(m)).toBe(10_000 / m)
+      expect(multiplierOf(speedMsOf(m))).toBe(m)
+    }
+    // 非档位值取就近档
+    expect(multiplierOf(9_999)).toBe(1)
+    expect(multiplierOf(3_000)).toBe(5)
   })
 
   it('virtualTsOf 与 dayKeyOf 回环一致（下单落账即虚拟日期）', () => {

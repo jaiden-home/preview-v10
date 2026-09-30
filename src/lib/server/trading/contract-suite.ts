@@ -69,6 +69,32 @@ export const runSimTradingContractTests = (
       expect((await provider.getState(id)).session!.dayIndex).toBe(2)
     })
 
+    it('start(speedMs) 开局带倍速；speed 热切换保留当前日进度', async () => {
+      const provider = makeProvider()
+      const id = sid()
+      const fast = await provider.controlSession(id, {
+        action: 'start',
+        anchorCode: 'sh600519',
+        startDate: '2024-06-03',
+        speedMs: 2_000
+      })
+      expect(fast.session!.speedMs).toBe(2_000)
+
+      // 走 1s（2x 的一个交易日）后热切回 1x：进度 0 重算，不跳日
+      clock.advance(2_000)
+      let state = await provider.getState(id)
+      expect(state.session!.dayIndex).toBe(2)
+      const switched = await provider.controlSession(id, { action: 'speed', speedMs: REPLAY_SPEED_MS })
+      expect(switched.session!.speedMs).toBe(REPLAY_SPEED_MS)
+      // 热切换不结转跨日账务外的状态：仍 running 且 dayIndex 不变
+      state = await provider.getState(id)
+      expect(state.session).toMatchObject({ status: 'running', dayIndex: 2 })
+
+      // 无会话 speed no-op
+      const noSession = await provider.controlSession(sid(), { action: 'speed', speedMs: 5_000 })
+      expect(noSession.session).toBeNull()
+    })
+
     it('live 下单成交：成交价/数量入库，虚拟日冻结 T+1', async () => {
       const provider = makeProvider()
       const id = sid()

@@ -175,6 +175,23 @@ describe('startSessionEngine（开局编排）', () => {
     expect(started.session).toMatchObject({ dayIndex: 1, dayCount: 5, status: 'paused', lastTickAt: 0 })
   })
 
+  it('开局带 speedMs：倍速档位换算生效（缺省 = 基准 1x）', async () => {
+    const fast = await startSessionEngine(
+      createInitialAccount(D1),
+      { anchorCode: 'sh600519', startDate: '2024-06-03', speedMs: 2_000 },
+      0,
+      replaySource
+    )
+    expect(fast.session.speedMs).toBe(2_000)
+    const base = await startSessionEngine(
+      createInitialAccount(D1),
+      { anchorCode: 'sh600519', startDate: '2024-06-03' },
+      0,
+      replaySource
+    )
+    expect(base.session.speedMs).toBe(10_000)
+  })
+
   it('结束日早于起始日拒绝开局（区间为空）', async () => {
     await expect(
       startSessionEngine(
@@ -245,6 +262,22 @@ describe('applySessionControl（会话状态转移）', () => {
     })
     // 无会话 no-op
     expect(applySessionControl(null, { action: 'pause' }, 0)).toBeNull()
+  })
+
+  it('speed 热切换：running 按进度比例折算计时锚点，paused 仅换值，ended 原样', () => {
+    // 已结算到 now 的 running 会话（当前日进度 50%）：10s -> 2s 后锚点 = now - 1s
+    const settled = session({ lastTickAt: 1_000_000 })
+    const now = 1_000_000 + 5_000
+    const switched = applySessionControl(settled, { action: 'speed', speedMs: 2_000 }, now)
+    expect(switched).toMatchObject({ speedMs: 2_000, lastTickAt: now - 1_000 })
+    expect(applySessionControl(session({ status: 'paused' }), { action: 'speed', speedMs: 5_000 }, 9)).toMatchObject({
+      status: 'paused',
+      speedMs: 5_000
+    })
+    const ended = session({ status: 'ended', dayIndex: 5 })
+    expect(applySessionControl(ended, { action: 'speed', speedMs: 5_000 }, 9)).toBe(ended)
+    // 无会话 no-op
+    expect(applySessionControl(null, { action: 'speed', speedMs: 5_000 }, 0)).toBeNull()
   })
 })
 

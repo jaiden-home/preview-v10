@@ -15,14 +15,32 @@ export const PRE_START_WINDOW_BARS = 500
 /** 回放单次拉取根数上限（/api/sim/replay zod max 的护栏值；正常会话远小于此） */
 export const REPLAY_FETCH_MAX_BARS = 5000
 
-/** 固定倍速：完成一个交易日的真实毫秒数（写死 10 秒，不提供档位选择） */
+/** 基准倍速：1x 完成一个交易日的真实毫秒数（10 秒） */
 export const REPLAY_SPEED_MS = 10_000
+
+/** 倍速档位（模拟设置页分段；数值越大推进越快） */
+export const REPLAY_SPEED_MULTIPLIERS = [1, 2, 5, 10] as const
+
+/** 档位 -> 每交易日毫秒 */
+export const speedMsOf = (multiplier: number): number => Math.round(REPLAY_SPEED_MS / multiplier)
+
+/** 每交易日毫秒 -> 就近档位（服务端 speedMs 反查展示用） */
+export const multiplierOf = (speedMs: number): (typeof REPLAY_SPEED_MULTIPLIERS)[number] =>
+  REPLAY_SPEED_MULTIPLIERS.reduce(
+    (best, m) => (Math.abs(speedMsOf(m) - speedMs) < Math.abs(speedMsOf(best) - speedMs) ? m : best),
+    REPLAY_SPEED_MULTIPLIERS[0]
+  )
+
+/** 自动开局固定区间（含两端；/simtrade 无会话 boot 与设置页默认值共用） */
+export const AUTO_START_DATE = '2024-01-01'
+export const AUTO_END_DATE = '2025-01-01'
 
 export type ReplayStatus = 'running' | 'paused' | 'ended'
 
 export interface ReplayState {
   status: ReplayStatus
-  speedMs: 10_000
+  /** 完成一个交易日的真实毫秒（倍速档位换算，基准 REPLAY_SPEED_MS） */
+  speedMs: number
   /** 锚定标的（开局时的选中标的，提供共享交易日历） */
   anchorCode: string
   /** 第 1 个模拟日 yyyy-mm-dd */
@@ -72,10 +90,15 @@ export const splitReplayView = (
   return { history: history.slice(-PRE_START_WINDOW_BARS), simDays }
 }
 
-/** 开局：第 1 个交易日立即完成（整根出现） */
-export const createReplaySession = (anchorCode: string, startDate: string, dayCount: number): ReplayState => ({
+/** 开局：第 1 个交易日立即完成（整根出现）；speedMs 缺省 = 基准 1x */
+export const createReplaySession = (
+  anchorCode: string,
+  startDate: string,
+  dayCount: number,
+  speedMs: number = REPLAY_SPEED_MS
+): ReplayState => ({
   status: 'running',
-  speedMs: REPLAY_SPEED_MS,
+  speedMs,
   anchorCode,
   startDate,
   dayCount: Math.max(1, dayCount),

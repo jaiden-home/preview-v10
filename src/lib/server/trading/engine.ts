@@ -14,6 +14,7 @@ import {
 } from '@/lib/trading/account'
 import {
   REPLAY_FETCH_MAX_BARS,
+  REPLAY_SPEED_MS,
   calendarFrom,
   createReplaySession,
   releaseAllFrozen,
@@ -23,6 +24,7 @@ import {
 } from '@/lib/trading/replay'
 import {
   advanceSessionBy,
+  changeSessionSpeed,
   type SimOrderInput,
   type SimReplayView,
   type SimSession,
@@ -127,7 +129,7 @@ export const placeOrderEngine = async (
       'session_not_running',
       sess.status === 'ended'
         ? '本局已结束，点「再来一局」重开|Session ended, press Play again to restart'
-        : '已暂停，点「继续」后才能下单|Paused, press Resume to trade'
+        : '已暂停，请到「模拟设置」开启后下单|Paused; enable it in Simulation Settings to trade'
     )
   }
 
@@ -181,8 +183,10 @@ export interface StartSessionParams {
   startDate: string
   /** 结束日（含）；缺省 = 回放至数据尽头（dayCount = 截断后日历长度） */
   endDate?: string
-  /** 开局即暂停：第 1 天完成但停住计时（自动开局用，点「继续」起走） */
+  /** 开局即暂停：第 1 天完成但停住计时（模拟设置页「保存并开局」用，开始暂停开关起走） */
   paused?: boolean
+  /** 每交易日真实毫秒（倍速档位换算）；缺省 = 基准 REPLAY_SPEED_MS */
+  speedMs?: number
 }
 
 /** 开局：校验数据可行性（≥2 个交易日），建立会话并把账户结算到第 1 个虚拟日（历史建仓全部解冻） */
@@ -204,7 +208,7 @@ export const startSessionEngine = async (
     )
   }
   const session: SimSession = {
-    ...createReplaySession(params.anchorCode, params.startDate, calendar.length),
+    ...createReplaySession(params.anchorCode, params.startDate, calendar.length, params.speedMs ?? REPLAY_SPEED_MS),
     ...(params.paused ? { status: 'paused' as const } : {}),
     lastTickAt: now
   }
@@ -215,7 +219,7 @@ export const startSessionEngine = async (
   return { account: settledAccount, session }
 }
 
-/** 会话状态转移（start/restart 由 provider 专门处理，此处只做 pause/resume） */
+/** 会话状态转移（start/restart 由 provider 专门处理，此处只做 pause/resume/speed） */
 export const applySessionControl = (
   session: SimSession | null,
   action: SimSessionAction,
@@ -229,6 +233,9 @@ export const applySessionControl = (
       return session.status === 'running' ? { ...session, status: 'paused' } : session
     case 'resume':
       return session.status === 'paused' ? { ...session, status: 'running', lastTickAt: now } : session
+    case 'speed':
+      // 入参已按 now 结算（provider loadSettled），进度比例折算无跳变
+      return changeSessionSpeed(session, action.speedMs, now)
     default:
       return session
   }

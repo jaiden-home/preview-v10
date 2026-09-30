@@ -37,6 +37,8 @@ Next.js App Router 的应用根目录，包含全部页面路由与 BFF 接口�
   - `healthz/`：健康检查（`{ status, uptime, timestamp }`，供 Docker HEALTHCHECK 与探活使用）。
 - `dashboard/`：行情看板页（原首页终端整体迁移，默认上证指数，服务端直出首屏行情与日 K）。
 - `trade/`：模拟交易页（客户端虚拟账户 + BFF 行情轮询）。
+- `simtrade/`：极速模拟页（历史回放 + 虚拟时钟，账务由 `/api/sim/*` BFF 权威结算）。
+- `admin/`：管理命名空间；`admin/simtrade/` 模拟设置页（标的 / 起止日期 / 倍速 / 开始暂停开关）。
 - 根级文件：`layout.tsx`（根布局与 `#app` 命名空间）、`page.tsx`（首页入口页，仅承载行情看板与模拟交易两个入口）、`loading.tsx` / `error.tsx` / `not-found.tsx`（路由级加载、错误与 404 兜底）、`globals.css`（全局样式）。
 
 ### src/components/
