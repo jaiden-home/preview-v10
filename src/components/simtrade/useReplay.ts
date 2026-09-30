@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { KLineData } from 'klinecharts'
 import { fetchReplayView } from '@/lib/chart/api'
 import type { TradingAccount } from '@/lib/trading/account'
@@ -206,7 +206,9 @@ export const useReplay = (options: UseReplayOptions): UseReplayResult => {
   // 展示态 = 服务端权威 session + 本地时钟派生推进（与服务端 settle 同一函数，零口径漂移）。
   // 回放数据不可变且前端已完整持有（历史窗口 + 模拟日），无需轮询；服务端交互响应校准权威值
   const serverNowEst = sync.serverNow + (nowTick - sync.localAt)
-  const simState = state == null ? null : advanceSessionBy(state, serverNowEst)
+  // memo 固定派生结果的对象身份：advanceSessionBy 跨过首个虚拟日后每次调用都返回新对象，
+  // 不 memo 则任意无关重渲染都会让依赖 replay.state 的 effect（图表喂数等）误判"状态变化"
+  const simState = useMemo(() => (state == null ? null : advanceSessionBy(state, serverNowEst)), [state, serverNowEst])
   const dayIndex = simState?.dayIndex ?? 0
 
   const quoteOf = (code: string): ReplayQuote | null => {

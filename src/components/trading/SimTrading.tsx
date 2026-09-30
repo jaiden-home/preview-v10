@@ -167,8 +167,15 @@ export default function SimTrading() {
     if (bars.length === 0) {
       return
     }
-    feed.setBars(selectedCode, bars)
     const prev = feedRef.current
+    // 派生 simState 的对象身份每次渲染都会变（advanceSessionBy 恒返回新对象），
+    // 必须按值判重：标的/开局日/日序均未变时不得重喂，否则与
+    // onVisibleRangeChange → emitInfo → setInfo → 重渲染 形成无限
+    // setSymbol 全量重载风暴（右键切鼠标选择清空 hoverBar 后即触发，页面卡死）。
+    if (prev.code === selectedCode && prev.startDate === simState.startDate && prev.dayIndex === simState.dayIndex) {
+      return
+    }
+    feed.setBars(selectedCode, bars)
     const incremental =
       prev.code === selectedCode && prev.startDate === simState.startDate && simState.dayIndex === prev.dayIndex + 1
     if (incremental) {
