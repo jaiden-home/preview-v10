@@ -39,7 +39,7 @@ const D1 = new Date(2024, 5, 3, 10, 0, 0).getTime()
 
 const session = (overrides: Partial<SimSession> = {}): SimSession => ({
   status: 'running',
-  speedMs: 30_000,
+  speedMs: 10_000,
   anchorCode: 'sh600519',
   startDate: '2024-06-03',
   dayCount: 5,
@@ -78,7 +78,7 @@ describe('settleSim（跨日账务结算）', () => {
       qty: 100,
       ts: D1
     })
-    const settled = await settleSim(account, session(), 1_000_000 + 30_000, replaySource)
+    const settled = await settleSim(account, session(), 1_000_000 + 10_000, replaySource)
     expect(settled.changed).toBe(true)
     expect(settled.session?.dayIndex).toBe(2)
     expect(settled.account.positions[0]!.availableQty).toBe(100)
@@ -162,19 +162,14 @@ describe('placeOrderEngine（下单编排）', () => {
 describe('startSessionEngine（开局编排）', () => {
   it('交易日不足 2 天拒绝开局', async () => {
     await expect(
-      startSessionEngine(
-        createInitialAccount(D1),
-        { anchorCode: 'sh600519', startDate: '2024-06-07', speedMs: 30_000 },
-        0,
-        replaySource
-      )
+      startSessionEngine(createInitialAccount(D1), { anchorCode: 'sh600519', startDate: '2024-06-07' }, 0, replaySource)
     ).rejects.toMatchObject({ simCode: 'insufficient_history' })
   })
 
   it('结束日（含）截断开局：dayCount = 区间交易日数', async () => {
     const started = await startSessionEngine(
       createInitialAccount(D1),
-      { anchorCode: 'sh600519', startDate: '2024-06-03', endDate: '2024-06-05', speedMs: 30_000 },
+      { anchorCode: 'sh600519', startDate: '2024-06-03', endDate: '2024-06-05' },
       0,
       replaySource
     )
@@ -185,7 +180,7 @@ describe('startSessionEngine（开局编排）', () => {
     await expect(
       startSessionEngine(
         createInitialAccount(D1),
-        { anchorCode: 'sh600519', startDate: '2024-06-05', endDate: '2024-06-03', speedMs: 30_000 },
+        { anchorCode: 'sh600519', startDate: '2024-06-05', endDate: '2024-06-03' },
         0,
         replaySource
       )
@@ -204,14 +199,14 @@ describe('startSessionEngine（开局编排）', () => {
     })
     const started = await startSessionEngine(
       account,
-      { anchorCode: 'sh600519', startDate: '2024-06-03', speedMs: 15_000 },
+      { anchorCode: 'sh600519', startDate: '2024-06-03' },
       5_000,
       replaySource
     )
     expect(started.session).toMatchObject({
       dayIndex: 1,
       dayCount: 5,
-      speedMs: 15_000,
+      speedMs: 10_000,
       status: 'running',
       lastTickAt: 5_000
     })
@@ -222,21 +217,13 @@ describe('startSessionEngine（开局编排）', () => {
 })
 
 describe('applySessionControl（会话状态转移）', () => {
-  it('pause / resume（继续后当前日重新计时） / speed', () => {
+  it('pause / resume（继续后当前日重新计时）', () => {
     const running = session()
     expect(applySessionControl(running, { action: 'pause' }, 999)).toMatchObject({ status: 'paused' })
     expect(applySessionControl(session({ status: 'paused' }), { action: 'resume' }, 999)).toMatchObject({
       status: 'running',
       lastTickAt: 999
     })
-    expect(applySessionControl(running, { action: 'speed', speedMs: 60_000 }, 999)).toMatchObject({
-      speedMs: 60_000,
-      lastTickAt: 999
-    })
-    // paused 换速不动计时锚点
-    expect(
-      applySessionControl(session({ status: 'paused', lastTickAt: 5 }), { action: 'speed', speedMs: 60_000 }, 999)
-    ).toMatchObject({ speedMs: 60_000, lastTickAt: 5 })
     // 无会话 no-op
     expect(applySessionControl(null, { action: 'pause' }, 0)).toBeNull()
   })

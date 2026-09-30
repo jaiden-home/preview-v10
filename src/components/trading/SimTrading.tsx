@@ -15,7 +15,7 @@ import type { InfoSnapshot } from '@/lib/chart/terminal'
 import type { QuoteSnapshot } from '@/lib/chart/types'
 import SimClockBar from '@/components/simtrade/SimClockBar'
 import { useReplay } from '@/components/simtrade/useReplay'
-import { REPLAY_SPEEDS, estimateTradingBars, releaseAllFrozen, type ReplaySpeedMs } from '@/lib/trading/replay'
+import { estimateTradingBars, releaseAllFrozen, yearBeforeKey } from '@/lib/trading/replay'
 import { postSimOrder } from '@/lib/trading/sim-api'
 import OrderPanel from './OrderPanel'
 import PositionsTable from './PositionsTable'
@@ -28,7 +28,6 @@ import {
   fmtPct,
   fmtSignedMoney,
   loadSelectedSymbol,
-  dayKeyOf,
   round2,
   unfreezePositions,
   type TradeSide,
@@ -46,7 +45,7 @@ interface TradeNotice {
 /**
  * 极速模拟页（/simtrade）：虚拟时钟 + 历史 K 线回放（UI_SPEC §3.13）。
  * 日原子模型：开局选定起始日后第 1 个交易日立即完成（整根 K 线出现），
- * 每过倍速时长（15/30/60 秒）推进下一交易日，走满即本局结束。
+ * 每过固定 10 秒推进下一交易日，走满即本局结束。
  * **交易账务（账户/持仓/成交/回放会话/虚拟时钟）全部由 BFF 权威结算（node:sqlite 持久化）**：
  * 本组件只做展示与请求——下单走 /api/sim/orders，会话控制走 /api/sim/session；
  * running 期间虚拟日推进由本地时钟派生（回放数据不可变，无需轮询），
@@ -67,7 +66,6 @@ export default function SimTrading() {
   const [realQuotes, setRealQuotes] = useState<Record<string, QuoteSnapshot>>({})
   const [setupDate, setSetupDate] = useState('')
   const [setupEndDate, setSetupEndDate] = useState('')
-  const [setupSpeed, setSetupSpeed] = useState<ReplaySpeedMs>(REPLAY_SPEEDS[1])
   const [side, setSide] = useState<TradeSide>('buy')
   const [tab, setTab] = useState<'positions' | 'trades'>('positions')
   const [notice, setNotice] = useState<TradeNotice | null>(null)
@@ -123,17 +121,19 @@ export default function SimTrading() {
     setSelected(loadSelectedSymbol(REPLAY_SYMBOL_STORAGE_KEY) ?? DEFAULT_TRADING_SYMBOL)
   }, [])
 
-  // setup 默认起始日：恒为当日——非交易日/当日 K 线未生成时由天数校验提示（可模拟 0 天、按钮禁用），不自动回退；
-  // 默认结束日：可选范围上限（最新一根日 K）= 回放至数据尽头
+  // setup 默认日期区间（相差 1 年）：结束日 = 可选范围上限（最新一根日 K）= 回放至数据尽头，
+  // 起始日 = 结束日前推 1 年（yearBeforeKey）——新股上市不足 1 年自然从上市日起算，
+  // 可模拟天数由「≥2 交易日」开局校验兜底，均不自动回退
   useEffect(() => {
-    if (replay.phase === 'setup') {
-      if (setupDate === '') {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setSetupDate(dayKeyOf(Date.now()))
-      }
-      if (setupEndDate === '' && replay.startRange != null) {
-        setSetupEndDate(replay.startRange.max)
-      }
+    if (replay.phase !== 'setup' || replay.startRange == null) {
+      return
+    }
+    if (setupEndDate === '') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- 初始化默认值（与下方起始日同一豁免模式）
+      setSetupEndDate(replay.startRange.max)
+    }
+    if (setupDate === '') {
+      setSetupDate(yearBeforeKey(replay.startRange.max))
     }
   }, [replay.phase, replay.startRange, setupDate, setupEndDate])
 
@@ -365,7 +365,7 @@ export default function SimTrading() {
   const handleStart = async () => {
     if (setupDate !== '' && setupEndDate !== '') {
       // 失败文案来自服务端业务拒绝（交易日不足/数据不足等），网络异常由 start 兜底
-      const error = await replay.start(setupDate, setupEndDate, setupSpeed)
+      const error = await replay.start(setupDate, setupEndDate)
       if (error != null) {
         setNotice({ kind: 'err', text: t(error) })
       }
@@ -525,7 +525,6 @@ export default function SimTrading() {
                   range={replay.startRange}
                   forwardDays={setupForwardDays}
                   forwardDaysLowerBound={setupDaysLowerBound}
-                  speedMs={replay.phase === 'setup' ? setupSpeed : (simState?.speedMs ?? setupSpeed)}
                   endDate={
                     replay.phase === 'setup'
                       ? setupEndDate
@@ -537,7 +536,6 @@ export default function SimTrading() {
                   onEndDateChange={setSetupEndDate}
                   onStart={handleStart}
                   onToggle={replay.togglePause}
-                  onSpeedChange={replay.phase === 'setup' ? setSetupSpeed : replay.setSpeed}
                 />
                 <OrderPanel
                   t={t}

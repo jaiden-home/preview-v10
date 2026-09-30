@@ -4,7 +4,7 @@
 // 日后接入真实交易接口时，替换的是服务端 provider 实现，本协议与前端展示层不动。
 
 import type { OrderRejectCode, TradeSide, TradingAccount } from './account'
-import type { ReplaySpeedMs, ReplayState } from './replay'
+import type { ReplayState } from './replay'
 
 /** 服务端回放会话：ReplayState + 服务端时钟锚点（lastTickAt 起的墙钟流逝 = 虚拟日推进） */
 export interface SimSession extends ReplayState {
@@ -15,7 +15,7 @@ export interface SimSession extends ReplayState {
  * 服务端时钟推进（客户端与服务端共用同一实现，零口径漂移）：
  * running 时按 serverNow - lastTickAt 推进整数个虚拟日（保留余数进度），走满置 ended。
  * 服务端用它持久化结算（每个请求先 settle）；客户端用它本地派生展示态（不轮询），
- * 任何服务端交互（下单/暂停/继续/倍速）的响应都会带回权威 session 校准。
+ * 任何服务端交互（下单/暂停/继续/重开）的响应都会带回权威 session 校准。
  */
 export const advanceSessionBy = (session: SimSession, serverNow: number): SimSession => {
   if (session.status !== 'running') {
@@ -65,11 +65,9 @@ export type SimSessionAction =
       startDate: string
       /** 结束日（含）；缺省 = 回放至数据尽头。仅用于开局圈定 dayCount，会话内以 dayCount 为权威 */
       endDate?: string
-      speedMs: ReplaySpeedMs
     }
   | { action: 'pause' }
   | { action: 'resume' }
-  | { action: 'speed'; speedMs: ReplaySpeedMs }
   | { action: 'restart' }
 
 /** 会话控制响应：成功带回权威状态；422 业务拒绝带双语文案（jsonError 信封解包） */

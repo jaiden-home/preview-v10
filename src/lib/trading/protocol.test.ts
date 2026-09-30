@@ -5,7 +5,7 @@ import { advanceSessionBy, type SimSession } from './protocol'
 
 const session = (overrides: Partial<SimSession> = {}): SimSession => ({
   status: 'running',
-  speedMs: 30_000,
+  speedMs: 10_000,
   anchorCode: 'sh600519',
   startDate: '2024-06-03',
   dayCount: 5,
@@ -17,18 +17,18 @@ const session = (overrides: Partial<SimSession> = {}): SimSession => ({
 describe('advanceSessionBy（服务端时钟推进）', () => {
   it('不足一个倍速时长不推进（原引用返回，可作相等判据）', () => {
     const base = session()
-    expect(advanceSessionBy(base, 1_000_000 + 29_999)).toBe(base)
+    expect(advanceSessionBy(base, 1_000_000 + 9_999)).toBe(base)
   })
 
   it('推进整数日并保留余数进度', () => {
-    const next = advanceSessionBy(session(), 1_000_000 + 30_000 * 2 + 10_000)
+    const next = advanceSessionBy(session(), 1_000_000 + 10_000 * 2 + 4_000)
     expect(next.dayIndex).toBe(3)
-    expect(next.lastTickAt).toBe(1_000_000 + 60_000)
+    expect(next.lastTickAt).toBe(1_000_000 + 20_000)
     expect(next.status).toBe('running')
   })
 
   it('走满 dayCount 置 ended 且 dayIndex 不越界', () => {
-    const next = advanceSessionBy(session(), 1_000_000 + 30_000 * 100)
+    const next = advanceSessionBy(session(), 1_000_000 + 10_000 * 100)
     expect(next.dayIndex).toBe(5)
     expect(next.status).toBe('ended')
   })

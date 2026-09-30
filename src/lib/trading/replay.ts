@@ -1,6 +1,6 @@
 // ==================== 加速回放引擎（纯函数，/simtrade 专用） ====================
 // 日原子推进模型：开局选定起始日后，第 1 个交易日立即完成（整根 K 线出现），
-// 此后每过 speedMs（15/30/60 秒）完成下一个交易日——价格 = 当日收盘，
+// 此后每过固定 10 秒（REPLAY_SPEED_MS）完成下一个交易日——价格 = 当日收盘，
 // 走满 dayCount 个交易日即本局结束。
 // 成交时间戳 = 已完成虚拟日 15:00（本地时），dayKeyOf 反解回虚拟日期，
 // account.ts 的 T+1 冻结/解冻与当日盈亏滚动零改动复用。
@@ -25,15 +25,14 @@ export const estimateTradingBars = (startDate: string, now: number = Date.now())
   return Math.ceil(calendarDays * (5 / 7)) + 10
 }
 
-/** 倍速档位：真实毫秒数 = 完成一个交易日 */
-export const REPLAY_SPEEDS = [15_000, 30_000, 60_000] as const
-export type ReplaySpeedMs = (typeof REPLAY_SPEEDS)[number]
+/** 固定倍速：完成一个交易日的真实毫秒数（写死 10 秒，不提供档位选择） */
+export const REPLAY_SPEED_MS = 10_000
 
 export type ReplayStatus = 'running' | 'paused' | 'ended'
 
 export interface ReplayState {
   status: ReplayStatus
-  speedMs: ReplaySpeedMs
+  speedMs: 10_000
   /** 锚定标的（开局时的选中标的，提供共享交易日历） */
   anchorCode: string
   /** 第 1 个模拟日 yyyy-mm-dd */
@@ -46,6 +45,17 @@ export interface ReplayState {
 
 /** bar 时间戳 -> yyyy-mm-dd */
 export const dateKeyOfBar = (bar: KLineData): string => dayKeyOf(bar.timestamp)
+
+/** 日期键前推 1 年（闰日 2/29 回退 2/28；setup 默认起始日 = 结束日 - 1 年） */
+export const yearBeforeKey = (dayKey: string): string => {
+  const [y, m, d] = dayKey.split('-').map(Number)
+  const date = new Date(y - 1, m - 1, d)
+  if (date.getMonth() !== m - 1) {
+    // 非闰年 2/29 滚到 3 月，回退到 2 月末
+    date.setDate(0)
+  }
+  return dayKeyOf(date.getTime())
+}
 
 /** 虚拟成交时间戳：虚拟日 15:00（本地时）；dayKeyOf(virtualTsOf(k)) === k */
 export const virtualTsOf = (dayKey: string): number => {
@@ -88,14 +98,9 @@ export const startRangeOf = (bars: KLineData[]): ReplayStartRange | null => {
 }
 
 /** 开局：第 1 个交易日立即完成（整根出现） */
-export const createReplaySession = (
-  anchorCode: string,
-  startDate: string,
-  dayCount: number,
-  speedMs: ReplaySpeedMs = REPLAY_SPEEDS[1]
-): ReplayState => ({
+export const createReplaySession = (anchorCode: string, startDate: string, dayCount: number): ReplayState => ({
   status: 'running',
-  speedMs,
+  speedMs: REPLAY_SPEED_MS,
   anchorCode,
   startDate,
   dayCount: Math.max(1, dayCount),

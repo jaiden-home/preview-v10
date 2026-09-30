@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { REPLAY_SPEED_MS } from '@/lib/trading/replay'
 import type { SimErrorCode, SimOrderInput, SimOrderResult, SimSessionAction, SimState } from '@/lib/trading/protocol'
 
 // ==================== 模拟交易服务契约（BFF 路由唯一依赖） ====================
@@ -27,7 +28,7 @@ export interface SimTradingProvider {
   getState(sid: string): Promise<SimState>
   /** 下单（服务端权威校验与成交；虚拟成交时间由服务端会话推导） */
   placeOrder(sid: string, order: SimOrderInput): Promise<SimOrderResult>
-  /** 会话控制（start/pause/resume/speed/restart） */
+  /** 会话控制（start/pause/resume/restart） */
   controlSession(sid: string, action: SimSessionAction): Promise<SimState>
 }
 
@@ -42,7 +43,7 @@ export const runSimTradingContractTests = (
   const sid = () => `test-sid-${Math.random().toString(36).slice(2)}`
 
   const startSession = async (provider: SimTradingProvider, id: string) =>
-    provider.controlSession(id, { action: 'start', anchorCode: 'sh600519', startDate: '2024-06-03', speedMs: 30_000 })
+    provider.controlSession(id, { action: 'start', anchorCode: 'sh600519', startDate: '2024-06-03' })
 
   describe('sim trading provider contract', () => {
     it('暴露合法 id 与能力声明', () => {
@@ -108,13 +109,13 @@ export const runSimTradingContractTests = (
       await provider.placeOrder(id, { side: 'buy', code: 'sh600519', price: 100, qty: 100 })
 
       // 推进 1 个虚拟日：当日买入解冻为可卖
-      clock.advance(30_000)
+      clock.advance(REPLAY_SPEED_MS)
       let state = await provider.getState(id)
       expect(state.session!.dayIndex).toBe(2)
       expect(state.account.positions[0]!.availableQty).toBe(100)
 
       // 推到走满：ended 封顶，dayIndex 不再超过 dayCount
-      clock.advance(30_000 * 10)
+      clock.advance(REPLAY_SPEED_MS * 10)
       state = await provider.getState(id)
       expect(state.session!.status).toBe('ended')
       expect(state.session!.dayIndex).toBe(state.session!.dayCount)

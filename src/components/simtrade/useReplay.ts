@@ -8,7 +8,6 @@ import { advanceSessionBy, type SimSession, type SimState } from '@/lib/trading/
 import {
   PRE_START_WINDOW_BARS,
   REPLAY_FETCH_MAX_BARS,
-  REPLAY_SPEEDS,
   calendarFrom,
   dateKeyOfBar,
   estimateTradingBars,
@@ -17,7 +16,6 @@ import {
   startRangeOf,
   visibleDailyBarsOf,
   type ReplayQuote,
-  type ReplaySpeedMs,
   type ReplayStartRange
 } from '@/lib/trading/replay'
 import { fetchSimState, postSimSession } from '@/lib/trading/sim-api'
@@ -64,9 +62,8 @@ export interface UseReplayResult {
   /** setup 预览：自某日期起可模拟的交易日数（endDate（含）截断） */
   forwardCountOn: (code: string, date: string, endDate?: string) => number
   /** 开局（服务端建立会话；endDate 缺省 = 回放至数据尽头）；null = 成功，否则为双语错误文案 */
-  start: (startDate: string, endDate?: string, speedMs?: ReplaySpeedMs) => Promise<string | null>
+  start: (startDate: string, endDate?: string) => Promise<string | null>
   togglePause: () => void
-  setSpeed: (ms: ReplaySpeedMs) => void
   /** 重开一局（服务端清会话与账户，回到选日期）；返回是否成功 */
   restart: () => Promise<boolean>
   /** 引导失败后重试 */
@@ -80,7 +77,7 @@ export interface UseReplayResult {
  * 会话状态（dayIndex/status/lastTickAt）与账户账务由 BFF 结算持久化（node:sqlite），
  * boot 拉取一次权威状态后，running 期间由本地时钟（serverNow + lastTickAt + speedMs）
  * 派生虚拟日推进——回放数据不可变且前端已完整持有（历史窗口 + 模拟日），无需轮询；
- * 任何服务端交互（下单/暂停/继续/倍速/重开）的响应都会校准权威值。
+ * 任何服务端交互（下单/暂停/继续/重开）的响应都会校准权威值。
  * K 线数据按需拉取内存缓存（图表与委托面板展示）。
  * 服务端时钟语义：页面关闭期间 running 照走；刷新后继续（不暂停追帧）。
  */
@@ -251,7 +248,7 @@ export const useReplay = (options: UseReplayOptions): UseReplayResult => {
     forwardCountOf(barsRef.current.get(code) ?? [], date, endDate)
 
   const start = useCallback(
-    async (startDate: string, endDate?: string, speedMs?: ReplaySpeedMs): Promise<string | null> => {
+    async (startDate: string, endDate?: string): Promise<string | null> => {
       const anchor = anchorRef.current
       let bars = barsRef.current.get(anchor)
       if (bars != null) {
@@ -287,8 +284,7 @@ export const useReplay = (options: UseReplayOptions): UseReplayResult => {
         action: 'start',
         anchorCode: anchor,
         startDate,
-        endDate,
-        speedMs: speedMs ?? REPLAY_SPEEDS[1]
+        endDate
       })
       if (result == null) {
         return '网络异常，请稍候重试|Network error, please retry'
@@ -319,21 +315,6 @@ export const useReplay = (options: UseReplayOptions): UseReplayResult => {
       }
     })()
   }, [simState, syncState])
-
-  const setSpeed = useCallback(
-    (ms: ReplaySpeedMs) => {
-      if (state == null || state.speedMs === ms) {
-        return
-      }
-      void (async () => {
-        const simState = await postSimSession({ action: 'speed', speedMs: ms })
-        if (simState?.ok) {
-          syncState(simState.state)
-        }
-      })()
-    },
-    [state, syncState]
-  )
 
   const restart = useCallback(async (): Promise<boolean> => {
     const result = await postSimSession({ action: 'restart' })
@@ -379,7 +360,6 @@ export const useReplay = (options: UseReplayOptions): UseReplayResult => {
     forwardCountOn,
     start,
     togglePause,
-    setSpeed,
     restart,
     retry,
     applySimState

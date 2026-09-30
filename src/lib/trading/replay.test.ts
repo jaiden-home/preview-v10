@@ -13,6 +13,7 @@ import {
   startRangeOf,
   virtualTsOf,
   visibleDailyBarsOf,
+  yearBeforeKey,
   type ReplayState
 } from './replay'
 const bar = (date: string, open: number, high: number, low: number, close: number): KLineData => {
@@ -35,10 +36,21 @@ const tradingDates = (count: number, start = '2023-06-01'): string[] => {
   return dates
 }
 
+describe('yearBeforeKey（默认起始日 = 结束日前推 1 年）', () => {
+  it('平年前推整年', () => {
+    expect(yearBeforeKey('2024-06-03')).toBe('2023-06-03')
+    expect(yearBeforeKey('2025-12-31')).toBe('2024-12-31')
+  })
+
+  it('闰日 2/29 回退到 2/28', () => {
+    expect(yearBeforeKey('2024-02-29')).toBe('2023-02-28')
+  })
+})
+
 describe('日原子状态机', () => {
   const state = (over: Partial<ReplayState>): ReplayState => ({
     status: 'running',
-    speedMs: 30_000,
+    speedMs: 10_000,
     anchorCode: 'sh600519',
     startDate: '2023-06-01',
     dayCount: 3,
@@ -50,7 +62,7 @@ describe('日原子状态机', () => {
     const session = createReplaySession('sh600519', '2023-06-01', 10)
     expect(session.status).toBe('running')
     expect(session.dayIndex).toBe(1)
-    expect(session.speedMs).toBe(30_000)
+    expect(session.speedMs).toBe(10_000)
     expect(session.dayCount).toBe(10)
   })
 

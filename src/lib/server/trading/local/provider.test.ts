@@ -55,8 +55,7 @@ describe('local provider（SQLite 持久化与隔离）', () => {
     await writer.controlSession(sid, {
       action: 'start',
       anchorCode: 'sh600519',
-      startDate: '2024-06-03',
-      speedMs: 30_000
+      startDate: '2024-06-03'
     })
     await writer.placeOrder(sid, { side: 'buy', code: 'sh600519', name: '贵州茅台', price: 100, qty: 100 })
 
@@ -74,8 +73,7 @@ describe('local provider（SQLite 持久化与隔离）', () => {
     await provider.controlSession('sid-a', {
       action: 'start',
       anchorCode: 'sh600519',
-      startDate: '2024-06-03',
-      speedMs: 30_000
+      startDate: '2024-06-03'
     })
     const b = await provider.getState('sid-b')
     expect(b.session).toBeNull()
@@ -89,17 +87,16 @@ describe('local provider（SQLite 持久化与隔离）', () => {
     await provider.controlSession(sid, {
       action: 'start',
       anchorCode: 'sh600519',
-      startDate: '2024-06-03',
-      speedMs: 30_000
+      startDate: '2024-06-03'
     })
     await provider.controlSession(sid, { action: 'pause' })
-    clock.advance(30_000 * 5)
+    clock.advance(10_000 * 5)
     const state = await provider.getState(sid)
     expect(state.session!.status).toBe('paused')
     expect(state.session!.dayIndex).toBe(1)
     // 继续后当前日重新计时
     await provider.controlSession(sid, { action: 'resume' })
-    clock.advance(29_999)
+    clock.advance(9_999)
     expect((await provider.getState(sid)).session!.dayIndex).toBe(1)
   })
 })

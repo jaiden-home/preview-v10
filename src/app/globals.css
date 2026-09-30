@@ -2403,38 +2403,6 @@ body {
   color: var(--tb-text-sub);
 }
 
-/* 倍速分段：复用 §3.3 分段范式（容器底换 --tb-bg 与时钟条带区分层） */
-#app .sim-speed-group {
-  display: flex;
-  gap: 2px;
-  padding: 2px;
-  background-color: var(--tb-bg);
-  border-radius: var(--radius-sm);
-}
-
-#app .sim-speed-btn {
-  padding: 2px 8px;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--tb-text-sub);
-  background-color: transparent;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  transition:
-    color 0.2s ease,
-    background-color 0.2s ease;
-}
-
-#app .sim-speed-btn:hover {
-  color: var(--tb-text);
-}
-
-#app .sim-speed-btn.active {
-  color: var(--tb-active);
-  background-color: var(--tb-active-bg);
-}
-
 /* 开始/暂停：品牌蓝实底主操作（复用卖出 CTA 范式与 §2.3 品牌蓝投影） */
 #app .sim-toggle-btn {
   display: inline-flex;

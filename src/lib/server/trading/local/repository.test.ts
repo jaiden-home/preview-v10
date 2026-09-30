@@ -67,7 +67,7 @@ describe('SimRepository（node:sqlite 内存库）', () => {
   it('会话读写往返与删除', () => {
     const session: SimSession = {
       status: 'running',
-      speedMs: 15_000,
+      speedMs: 10_000,
       anchorCode: 'sh600519',
       startDate: '2024-06-03',
       dayCount: 42,

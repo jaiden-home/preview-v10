@@ -12,7 +12,6 @@ import {
   validateOrder,
   type TradingAccount
 } from '@/lib/trading/account'
-import type { ReplaySpeedMs } from '@/lib/trading/replay'
 import {
   REPLAY_FETCH_MAX_BARS,
   calendarFrom,
@@ -170,7 +169,6 @@ export interface StartSessionParams {
   startDate: string
   /** 结束日（含）；缺省 = 回放至数据尽头（dayCount = 截断后日历长度） */
   endDate?: string
-  speedMs: ReplaySpeedMs
 }
 
 /** 开局：校验数据可行性（≥2 个交易日），建立会话并把账户结算到第 1 个虚拟日（历史建仓全部解冻） */
@@ -192,7 +190,7 @@ export const startSessionEngine = async (
     )
   }
   const session: SimSession = {
-    ...createReplaySession(params.anchorCode, params.startDate, calendar.length, params.speedMs),
+    ...createReplaySession(params.anchorCode, params.startDate, calendar.length),
     lastTickAt: now
   }
   const barsByCode = await barsForCodes([params.anchorCode, ...account.positions.map((p) => p.code)], source)
@@ -202,7 +200,7 @@ export const startSessionEngine = async (
   return { account: settledAccount, session }
 }
 
-/** 会话状态转移（start/restart 由 provider 专门处理，此处只做 pause/resume/speed） */
+/** 会话状态转移（start/restart 由 provider 专门处理，此处只做 pause/resume） */
 export const applySessionControl = (
   session: SimSession | null,
   action: SimSessionAction,
@@ -216,13 +214,6 @@ export const applySessionControl = (
       return session.status === 'running' ? { ...session, status: 'paused' } : session
     case 'resume':
       return session.status === 'paused' ? { ...session, status: 'running', lastTickAt: now } : session
-    case 'speed':
-      return {
-        ...session,
-        speedMs: action.speedMs,
-        // running 换速当前日重新计时；paused 保持原锚点不动
-        lastTickAt: session.status === 'running' ? now : session.lastTickAt
-      }
     default:
       return session
   }

@@ -1,6 +1,6 @@
 'use client'
 
-import { REPLAY_SPEEDS, type ReplaySpeedMs, type ReplayStartRange, type ReplayState } from '@/lib/trading/replay'
+import type { ReplayStartRange, ReplayState } from '@/lib/trading/replay'
 
 interface SimClockBarProps {
   t: (key: string) => string
@@ -20,18 +20,10 @@ interface SimClockBarProps {
   forwardDays: number
   /** setup：所选日早于已加载窗口时，forwardDays 仅为下界（显示 ≥N） */
   forwardDaysLowerBound?: boolean
-  speedMs: ReplaySpeedMs
   onDateChange: (date: string) => void
   onEndDateChange: (date: string) => void
   onStart: () => void
   onToggle: () => void
-  onSpeedChange: (ms: ReplaySpeedMs) => void
-}
-
-const speedLabel: Record<number, string> = {
-  15_000: '15秒|15s',
-  30_000: '30秒|30s',
-  60_000: '60秒|60s'
 }
 
 const PlayIcon = () => (
@@ -43,8 +35,8 @@ const PlayIcon = () => (
 /**
  * 模拟时钟（UI_SPEC §3.13，两行控制卡）：
  * 行 1 = 时间锚点 + 主操作（setup：起始/结束日期区间输入 + 「开始模拟」；live：虚拟日期大字 + 第 x/N 天 + 暂停/继续）；
- * 行 2 = 整行计时进度 + 倒计时文案（setup：区间可模拟天数提示）；
- * 行 3 = 倍速分段（15/30/60 秒 = 1 交易日）。
+ * 行 2 = 整行计时进度 + 倒计时文案（setup：区间可模拟天数提示）。
+ * 倍速固定 10 秒 = 1 交易日（REPLAY_SPEED_MS），不提供选择。
  */
 export default function SimClockBar({
   t,
@@ -57,12 +49,10 @@ export default function SimClockBar({
   range,
   forwardDays,
   forwardDaysLowerBound = false,
-  speedMs,
   onDateChange,
   onEndDateChange,
   onStart,
-  onToggle,
-  onSpeedChange
+  onToggle
 }: SimClockBarProps) {
   const setup = mode === 'setup'
   const live = !setup && state != null
@@ -180,21 +170,6 @@ export default function SimClockBar({
           </span>
         )}
       </div>
-
-      {/* 行 3：倍速 */}
-      <span className="sim-speed-group" role="group" aria-label={t('倍速|Speed')}>
-        {REPLAY_SPEEDS.map((ms) => (
-          <button
-            key={ms}
-            type="button"
-            className={`sim-speed-btn${speedMs === ms ? ' active' : ''}`}
-            aria-pressed={speedMs === ms}
-            onClick={() => onSpeedChange(ms)}
-          >
-            {t(speedLabel[ms])}
-          </button>
-        ))}
-      </span>
     </div>
   )
 }
