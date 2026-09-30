@@ -21,10 +21,10 @@ export const searchQuerySchema = z.object({
   q: z.string().trim().min(1, 'query is required').max(40, 'query is too long')
 })
 
-/** 回放数据：目标根数（2~5000，默认 800；BFF 按页回溯至上市/数据尽头） */
+/** 回放数据：目标根数（2~2000，默认 500；BFF 按页回溯至上市/数据尽头） */
 export const replayQuerySchema = z.object({
   symbol: symbolField,
-  bars: z.coerce.number().int().min(2).max(5000).default(800)
+  bars: z.coerce.number().int().min(2).max(2000).default(500)
 })
 
 /** 模拟交易倍速档位（与 lib/trading/replay 的 REPLAY_SPEEDS 保持同步） */

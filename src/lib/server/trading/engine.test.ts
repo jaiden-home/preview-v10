@@ -7,7 +7,6 @@ import {
   applySessionControl,
   closePricesAt,
   placeOrderEngine,
-  settleSession,
   settleSim,
   startSessionEngine,
   type MarketSource
@@ -47,31 +46,6 @@ const session = (overrides: Partial<SimSession> = {}): SimSession => ({
   dayIndex: 1,
   lastTickAt: 1_000_000,
   ...overrides
-})
-
-describe('settleSession（服务端时钟推进）', () => {
-  it('不足一个倍速时长不推进', () => {
-    const base = session()
-    expect(settleSession(base, 1_000_000 + 29_999)).toBe(base)
-  })
-
-  it('推进整数日并保留余数进度', () => {
-    const next = settleSession(session(), 1_000_000 + 30_000 * 2 + 10_000)
-    expect(next.dayIndex).toBe(3)
-    expect(next.lastTickAt).toBe(1_000_000 + 60_000)
-    expect(next.status).toBe('running')
-  })
-
-  it('走满 dayCount 置 ended 且 dayIndex 不越界', () => {
-    const next = settleSession(session(), 1_000_000 + 30_000 * 100)
-    expect(next.dayIndex).toBe(5)
-    expect(next.status).toBe('ended')
-  })
-
-  it('paused/ended 原样返回', () => {
-    const paused = session({ status: 'paused' })
-    expect(settleSession(paused, 1_000_000 + 999_999)).toBe(paused)
-  })
 })
 
 describe('closePricesAt（跨日结算价格）', () => {

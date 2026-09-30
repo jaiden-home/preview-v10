@@ -9,6 +9,9 @@
 import type { KLineData } from 'klinecharts'
 import { dayKeyOf, type TradingAccount } from './account'
 
+/** 起始日前历史窗口根数（与 /trade 首次加载 BAR_LIMIT 对齐；起始日前不足则拉全量） */
+export const PRE_START_WINDOW_BARS = 500
+
 /** 倍速档位：真实毫秒数 = 完成一个交易日 */
 export const REPLAY_SPEEDS = [15_000, 30_000, 60_000] as const
 export type ReplaySpeedMs = (typeof REPLAY_SPEEDS)[number]

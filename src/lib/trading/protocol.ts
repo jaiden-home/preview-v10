@@ -11,6 +11,29 @@ export interface SimSession extends ReplayState {
   lastTickAt: number
 }
 
+/**
+ * 服务端时钟推进（客户端与服务端共用同一实现，零口径漂移）：
+ * running 时按 serverNow - lastTickAt 推进整数个虚拟日（保留余数进度），走满置 ended。
+ * 服务端用它持久化结算（每个请求先 settle）；客户端用它本地派生展示态（不轮询），
+ * 任何服务端交互（下单/暂停/继续/倍速）的响应都会带回权威 session 校准。
+ */
+export const advanceSessionBy = (session: SimSession, serverNow: number): SimSession => {
+  if (session.status !== 'running') {
+    return session
+  }
+  const days = Math.floor((serverNow - session.lastTickAt) / session.speedMs)
+  if (days <= 0) {
+    return session
+  }
+  const dayIndex = Math.min(session.dayCount, session.dayIndex + days)
+  return {
+    ...session,
+    dayIndex,
+    status: dayIndex >= session.dayCount ? 'ended' : 'running',
+    lastTickAt: session.lastTickAt + days * session.speedMs
+  }
+}
+
 /** /api/sim/state 与各写操作的成功响应体 */
 export interface SimState {
   account: TradingAccount

@@ -13,8 +13,15 @@ import {
   type TradingAccount
 } from '@/lib/trading/account'
 import type { ReplaySpeedMs } from '@/lib/trading/replay'
-import { calendarFrom, createReplaySession, releaseAllFrozen, replayQuoteOf, virtualTsOf } from '@/lib/trading/replay'
-import type { SimOrderInput, SimSession, SimSessionAction } from '@/lib/trading/protocol'
+import {
+  PRE_START_WINDOW_BARS,
+  calendarFrom,
+  createReplaySession,
+  releaseAllFrozen,
+  replayQuoteOf,
+  virtualTsOf
+} from '@/lib/trading/replay'
+import { advanceSessionBy, type SimOrderInput, type SimSession, type SimSessionAction } from '@/lib/trading/protocol'
 import { fetchQuote } from '../market-service'
 import { fetchReplayBars } from '../replay-service'
 import { SimTradingError } from './contract'
@@ -29,23 +36,7 @@ export interface MarketSource {
 
 // ==================== 时钟与跨日结算 ====================
 
-/** 时钟结算：running 时按墙钟推进日原子（保留不足一日的余数），走满置 ended；paused/ended 原样返回 */
-export const settleSession = (session: SimSession, now: number): SimSession => {
-  if (session.status !== 'running') {
-    return session
-  }
-  const days = Math.floor((now - session.lastTickAt) / session.speedMs)
-  if (days <= 0) {
-    return session
-  }
-  const dayIndex = Math.min(session.dayCount, session.dayIndex + days)
-  return {
-    ...session,
-    dayIndex,
-    status: dayIndex >= session.dayCount ? 'ended' : 'running',
-    lastTickAt: session.lastTickAt + days * session.speedMs
-  }
-}
+// 时钟推进统一走 protocol.advanceSessionBy（客户端展示派生与服务端持久化结算共用，零口径漂移）
 
 /** 各持仓在虚拟日的收盘价（停牌缺日沿用最近一根收盘；无数据回退成本价） */
 export const closePricesAt = (
@@ -89,7 +80,7 @@ export const settleSim = async (
   if (session == null || session.status !== 'running') {
     return { account, session, changed: false }
   }
-  const next = settleSession(session, now)
+  const next = advanceSessionBy(session, now)
   if (next === session) {
     return { account, session, changed: false }
   }
@@ -261,8 +252,8 @@ const barsForCodes = async (codes: string[], source: MarketSource): Promise<Map<
 
 /** bars 进程内缓存 TTL（与 CACHE_KLINE_HIST_TTL_MS 对齐：历史不可变，除权后定时全量刷新） */
 const REPLAY_BARS_CACHE_TTL_MS = 600_000
-/** 回放/结算所需全量日 K 根数（与客户端 useReplay 的拉取口径一致） */
-const REPLAY_BARS_LIMIT = 5000
+/** 回放/结算所需日 K 根数上限（历史窗口 + 足够模拟天数；replay-service 会回溯到数据尽头） */
+const REPLAY_BARS_LIMIT = PRE_START_WINDOW_BARS + 1500
 
 /** 默认行情源：实时行情走 market-service（上游有 TTL 缓存），历史日 K 走 replay-service */
 export const createMarketSource = (): MarketSource => {

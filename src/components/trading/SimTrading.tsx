@@ -15,7 +15,7 @@ import type { InfoSnapshot } from '@/lib/chart/terminal'
 import type { QuoteSnapshot } from '@/lib/chart/types'
 import SimClockBar from '@/components/simtrade/SimClockBar'
 import { useReplay } from '@/components/simtrade/useReplay'
-import { REPLAY_SPEEDS, type ReplaySpeedMs } from '@/lib/trading/replay'
+import { REPLAY_SPEEDS, releaseAllFrozen, type ReplaySpeedMs } from '@/lib/trading/replay'
 import { postSimOrder } from '@/lib/trading/sim-api'
 import OrderPanel from './OrderPanel'
 import PositionsTable from './PositionsTable'
@@ -30,6 +30,7 @@ import {
   loadSelectedSymbol,
   dayKeyOf,
   round2,
+  unfreezePositions,
   type TradeSide,
   type TradingAccount
 } from '@/lib/trading/account'
@@ -47,8 +48,9 @@ interface TradeNotice {
  * 日原子模型：开局选定起始日后第 1 个交易日立即完成（整根 K 线出现），
  * 每过倍速时长（15/30/60 秒）推进下一交易日，走满即本局结束。
  * **交易账务（账户/持仓/成交/回放会话/虚拟时钟）全部由 BFF 权威结算（node:sqlite 持久化）**：
- * 本组件只做展示与请求——下单走 /api/sim/orders，会话控制走 /api/sim/session，
- * live running 时 ~1s 轮询 /api/sim/state 校准权威状态（进度条本地插值）。
+ * 本组件只做展示与请求——下单走 /api/sim/orders，会话控制走 /api/sim/session；
+ * running 期间虚拟日推进由本地时钟派生（回放数据不可变，无需轮询），
+ * 任何服务端交互的响应都会校准权威状态（跨日账务先本地推导展示，服务端结算覆盖校准）。
  * 行情分两段：**未开局 = 与 /trade 完全一致（图表实时完整日 K + order-head 实时行情，
  * 可按实时价交易、记真实日期）**；
  * **开局后 = 回放（图表切为起始日前历史 + 逐日推进，order-head 现价 = 最新完成日收盘，
@@ -274,6 +276,25 @@ export default function SimTrading() {
     feedRef.current = { code: selectedCode, startDate: simState.startDate, dayIndex: simState.dayIndex }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- chart/feed/replay 方法逐渲染重建，入依赖会每帧重跑
   }, [replay.phase, replay.error, replay.state, replay.barsVersion, selectedCode])
+
+  // 展示层虚拟日结算（本地推导，不轮询）：本地时钟派生跨日时滚动 T+1 解冻与当日盈亏基准，
+  // 价格取本地回放缓存（与服务端结算同一套纯函数）；账务权威仍在服务端——
+  // 任何下单/会话操作的响应都会以服务端结算结果覆盖校准本地账户。
+  // 账户 dayKey 晚于虚拟日（开局前按真实日期交易的仓位）视为历史持仓，全部解冻。
+  useEffect(() => {
+    if (replay.phase !== 'live' || simState == null || account == null) {
+      return
+    }
+    const virtualDay = replay.calendar[simState.dayIndex - 1] ?? simState.startDate
+    if (account.dayKey === virtualDay) {
+      return
+    }
+    const rolled = account.dayKey > virtualDay ? releaseAllFrozen(account) : unfreezePositions(account, virtualDay)
+    const { totalAssets } = calcEquity(rolled, priceMapOf(rolled, syntheticQuotes))
+    // 跨日推导确需在 effect 内同步回写展示账户（与初始化 effect 同一豁免模式）
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setAccount({ ...rolled, dayKey: virtualDay, dayStartEquity: totalAssets })
+  }, [replay.phase, replay.calendar, simState, account, syntheticQuotes])
 
   const priceMap = useMemo(() => priceMapOf(account, syntheticQuotes), [account, syntheticQuotes])
   const equity = account != null ? calcEquity(account, priceMap) : null

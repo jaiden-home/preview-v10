@@ -4,10 +4,12 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { KLineData } from 'klinecharts'
 import { fetchReplayBars } from '@/lib/chart/api'
 import type { TradingAccount } from '@/lib/trading/account'
-import type { SimSession, SimState } from '@/lib/trading/protocol'
+import { advanceSessionBy, type SimSession, type SimState } from '@/lib/trading/protocol'
 import {
+  PRE_START_WINDOW_BARS,
   REPLAY_SPEEDS,
   calendarFrom,
+  dateKeyOfBar,
   forwardCountOf,
   replayQuoteOf,
   startRangeOf,
@@ -18,12 +20,12 @@ import {
 } from '@/lib/trading/replay'
 import { fetchSimState, postSimSession } from '@/lib/trading/sim-api'
 
-/** 回放数据集：向 BFF 拉取全量历史日 K（按页回溯至上市/数据尽头，上限 5000 根 ≈ 20 年）；
- *  起始日任意可选，可模拟天数由数据决定（与服务端结算口径一致） */
-const REPLAY_FETCH_BARS = 5000
+/** 回放数据两阶段加载：setup 拉 PRE_START_WINDOW_BARS(500) 根用于选日期；
+ *  start 时按用户所选起始日追拉——补齐起始日前 500 根历史窗口 + 全部模拟日
+ *  （起始日前不足 500 个交易日的新股则回溯到上市全量即止；与服务端结算口径一致） */
 
-/** live running 时的服务端状态轮询间隔（进度条本地插值，轮询仅做权威校准） */
-const SIM_POLL_INTERVAL_MS = 1_000
+/** 本地时钟节拍（running 时 1s 一拍：本地派生虚拟日推进 + 进度条插值，无网络轮询） */
+const LOCAL_TICK_MS = 1_000
 
 /** boot = 引导中；setup = 选起始日开局；live = 模拟进行/暂停/结束 */
 export type ReplayPhase = 'boot' | 'setup' | 'live'
@@ -70,10 +72,12 @@ export interface UseReplayResult {
 }
 
 /**
- * 虚拟时钟钩子（服务端权威 + 客户端插值）：
- * 会话状态（dayIndex/status/lastTickAt）与账户账务全部由 BFF 结算持久化（node:sqlite），
- * 本钩子负责：boot 拉取权威状态 → live 按 ~1s 轮询校准 → 进度条用 serverNow + lastTickAt 本地插值；
- * K 线数据仍按需拉取内存缓存（图表与委托面板展示）。
+ * 虚拟时钟钩子（服务端权威 + 本地派生，无轮询）：
+ * 会话状态（dayIndex/status/lastTickAt）与账户账务由 BFF 结算持久化（node:sqlite），
+ * boot 拉取一次权威状态后，running 期间由本地时钟（serverNow + lastTickAt + speedMs）
+ * 派生虚拟日推进——回放数据不可变且前端已全量持有，无需轮询；
+ * 任何服务端交互（下单/暂停/继续/倍速/重开）的响应都会校准权威值。
+ * K 线数据按需拉取内存缓存（图表与委托面板展示）。
  * 服务端时钟语义：页面关闭期间 running 照走；刷新后继续（不暂停追帧）。
  */
 export const useReplay = (options: UseReplayOptions): UseReplayResult => {
@@ -124,7 +128,7 @@ export const useReplay = (options: UseReplayOptions): UseReplayResult => {
       pendingRef.current.clear()
       const [simState, bars] = await Promise.all([
         fetchSimState(),
-        fetchReplayBars(anchorRef.current, REPLAY_FETCH_BARS)
+        fetchReplayBars(anchorRef.current, PRE_START_WINDOW_BARS)
       ])
       if (cancelled) {
         return
@@ -136,7 +140,17 @@ export const useReplay = (options: UseReplayOptions): UseReplayResult => {
       syncState(simState)
       const session = simState.session
       const anchor = session?.anchorCode ?? anchorRef.current
-      const anchorBars = anchor === anchorRef.current ? bars : await fetchReplayBars(anchor, REPLAY_FETCH_BARS)
+      let anchorBars = anchor === anchorRef.current ? bars : await fetchReplayBars(anchor, PRE_START_WINDOW_BARS)
+      if (cancelled) {
+        return
+      }
+      // 恢复会话：按「起始日前 500 历史 + 全部模拟日」口径补拉（与 start() 一致；新股数据尽头即止）
+      if (session != null && anchorBars.length < PRE_START_WINDOW_BARS + session.dayCount) {
+        const fetched = await fetchReplayBars(anchor, PRE_START_WINDOW_BARS + session.dayCount)
+        if (!cancelled && fetched.length > anchorBars.length) {
+          anchorBars = fetched
+        }
+      }
       if (cancelled) {
         return
       }
@@ -173,7 +187,7 @@ export const useReplay = (options: UseReplayOptions): UseReplayResult => {
     }
     missing.forEach((code) => pendingRef.current.add(code))
     void (async () => {
-      const results = await Promise.all(missing.map((code) => fetchReplayBars(code, REPLAY_FETCH_BARS)))
+      const results = await Promise.all(missing.map((code) => fetchReplayBars(code, PRE_START_WINDOW_BARS)))
       if (cancelled) {
         return
       }
@@ -187,37 +201,20 @@ export const useReplay = (options: UseReplayOptions): UseReplayResult => {
     }
   }, [phase, error, codesKey])
 
-  // 权威轮询：live running 时 ~1s 同步服务端状态（推进/暂停/结束都以下一次轮询为准）
+  // 本地时钟节拍（1s 一拍，仅 running：驱动本地派生虚拟日推进与进度条插值）
   useEffect(() => {
     if (phase !== 'live' || state?.status !== 'running') {
       return
     }
-    let cancelled = false
-    const timer = setInterval(() => {
-      void (async () => {
-        const simState = await fetchSimState()
-        if (cancelled || simState == null) {
-          return
-        }
-        syncState(simState)
-      })()
-    }, SIM_POLL_INTERVAL_MS)
-    return () => {
-      cancelled = true
-      clearInterval(timer)
-    }
-  }, [phase, state?.status, syncState])
-
-  // 插值时钟（1s 一拍，仅 running：进度条在两次轮询间平滑推进）
-  useEffect(() => {
-    if (phase !== 'live' || state?.status !== 'running') {
-      return
-    }
-    const timer = setInterval(() => setNowTick(Date.now()), 1_000)
+    const timer = setInterval(() => setNowTick(Date.now()), LOCAL_TICK_MS)
     return () => clearInterval(timer)
   }, [phase, state?.status])
 
-  const dayIndex = state?.dayIndex ?? 0
+  // 展示态 = 服务端权威 session + 本地时钟派生推进（与服务端 settle 同一函数，零口径漂移）。
+  // 回放数据不可变且前端已全量持有，无需轮询；任何服务端交互（下单/暂停/继续/倍速）响应都会校准权威值
+  const serverNowEst = sync.serverNow + (nowTick - sync.localAt)
+  const simState = state == null ? null : advanceSessionBy(state, serverNowEst)
+  const dayIndex = simState?.dayIndex ?? 0
 
   const quoteOf = (code: string): ReplayQuote | null => {
     const bars = barsRef.current.get(code)
@@ -241,16 +238,39 @@ export const useReplay = (options: UseReplayOptions): UseReplayResult => {
 
   const start = useCallback(
     async (startDate: string, speedMs?: ReplaySpeedMs): Promise<boolean> => {
+      const anchor = anchorRef.current
+      let bars = barsRef.current.get(anchor)
+      if (bars != null) {
+        // 起始日前历史不足窗口根数时追拉：补齐缺口 + 全部模拟日（数据尽头即止，防异常空转）
+        for (let round = 0; round < 4; round += 1) {
+          const forwardCount = forwardCountOf(bars, startDate)
+          const startIndex = bars.findIndex((b) => dateKeyOfBar(b) >= startDate)
+          const historyLoaded = Math.max(0, startIndex)
+          if (historyLoaded >= PRE_START_WINDOW_BARS) {
+            break
+          }
+          const target = Math.max(
+            bars.length + (PRE_START_WINDOW_BARS - historyLoaded),
+            PRE_START_WINDOW_BARS + forwardCount
+          )
+          const fetched = await fetchReplayBars(anchor, target)
+          if (fetched.length <= bars.length) {
+            break
+          }
+          bars = fetched
+          barsRef.current.set(anchor, bars)
+          setBarsVersion((v) => v + 1)
+        }
+      }
       const simState = await postSimSession({
         action: 'start',
-        anchorCode: anchorRef.current,
+        anchorCode: anchor,
         startDate,
         speedMs: speedMs ?? REPLAY_SPEEDS[1]
       })
       if (simState?.session == null) {
         return false
       }
-      const bars = barsRef.current.get(simState.session.anchorCode)
       setCalendar(bars != null ? calendarFrom(bars, startDate) : [])
       syncState(simState)
       setPhase('live')
@@ -260,16 +280,17 @@ export const useReplay = (options: UseReplayOptions): UseReplayResult => {
   )
 
   const togglePause = useCallback(() => {
-    if (state == null || state.status === 'ended') {
+    // 用本地派生态判断（到顶 ended 即停止操作；服务端对已 ended 会话的暂停/继续同样是 no-op）
+    if (simState == null || simState.status === 'ended') {
       return
     }
     void (async () => {
-      const simState = await postSimSession({ action: state.status === 'running' ? 'pause' : 'resume' })
-      if (simState != null) {
-        syncState(simState)
+      const next = await postSimSession({ action: simState.status === 'running' ? 'pause' : 'resume' })
+      if (next != null) {
+        syncState(next)
       }
     })()
-  }, [state, syncState])
+  }, [simState, syncState])
 
   const setSpeed = useCallback(
     (ms: ReplaySpeedMs) => {
@@ -309,16 +330,16 @@ export const useReplay = (options: UseReplayOptions): UseReplayResult => {
     [syncState]
   )
 
-  /** 进度：服务端时钟插值 (serverNow + 本地流逝 - lastTickAt) / speedMs，轮询周期内平滑 */
+  /** 进度：派生态的 lastTickAt 已随本地时钟推进到当前虚拟日起点，直接求当前日占比 */
   const progress =
-    state?.status === 'running'
-      ? Math.min(1, Math.max(0, (sync.serverNow + (nowTick - sync.localAt) - state.lastTickAt) / state.speedMs))
+    simState?.status === 'running'
+      ? Math.min(1, Math.max(0, (serverNowEst - simState.lastTickAt) / simState.speedMs))
       : 0
 
   return {
     phase,
     error,
-    state,
+    state: simState,
     calendar,
     startRange,
     progress,
