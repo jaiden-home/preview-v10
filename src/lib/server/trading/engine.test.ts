@@ -171,6 +171,27 @@ describe('startSessionEngine（开局编排）', () => {
     ).rejects.toMatchObject({ simCode: 'insufficient_history' })
   })
 
+  it('结束日（含）截断开局：dayCount = 区间交易日数', async () => {
+    const started = await startSessionEngine(
+      createInitialAccount(D1),
+      { anchorCode: 'sh600519', startDate: '2024-06-03', endDate: '2024-06-05', speedMs: 30_000 },
+      0,
+      replaySource
+    )
+    expect(started.session).toMatchObject({ dayIndex: 1, dayCount: 3, status: 'running' })
+  })
+
+  it('结束日早于起始日拒绝开局（区间为空）', async () => {
+    await expect(
+      startSessionEngine(
+        createInitialAccount(D1),
+        { anchorCode: 'sh600519', startDate: '2024-06-05', endDate: '2024-06-03', speedMs: 30_000 },
+        0,
+        replaySource
+      )
+    ).rejects.toMatchObject({ simCode: 'insufficient_history' })
+  })
+
   it('开局：真实日期建仓视为历史持仓全部解冻，基准滚动到第 1 个虚拟日', async () => {
     // 用"未来"时间建仓，使账户 dayKey 晚于虚拟起点
     const realTs = new Date(2026, 0, 15, 10).getTime()

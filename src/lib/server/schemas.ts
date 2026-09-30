@@ -46,6 +46,10 @@ export const simSessionSchema = z.discriminatedUnion('action', [
     action: z.literal('start'),
     anchorCode: symbolField,
     startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'startDate must be yyyy-mm-dd'),
+    endDate: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, 'endDate must be yyyy-mm-dd')
+      .optional(),
     speedMs: simSpeedField
   }),
   z.object({ action: z.literal('pause') }),

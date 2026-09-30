@@ -53,13 +53,21 @@ export const virtualTsOf = (dayKey: string): number => {
   return new Date(y, m - 1, d, 15, 0, 0, 0).getTime()
 }
 
-/** 共享交易日历：锚定标的自 startDate 起（含）的交易日日期序列（升序） */
-export const calendarFrom = (bars: KLineData[], startDate: string): string[] =>
-  bars.filter((bar) => dateKeyOfBar(bar) >= startDate).map(dateKeyOfBar)
+/** 共享交易日历：锚定标的自 startDate 起（含）的交易日日期序列（升序）；endDate（含）截断本局 */
+export const calendarFrom = (bars: KLineData[], startDate: string, endDate?: string): string[] =>
+  bars
+    .filter((bar) => {
+      const d = dateKeyOfBar(bar)
+      return d >= startDate && (endDate == null || d <= endDate)
+    })
+    .map(dateKeyOfBar)
 
-/** 自 startDate 起可模拟的交易日数 */
-export const forwardCountOf = (bars: KLineData[], startDate: string): number =>
-  bars.filter((bar) => dateKeyOfBar(bar) >= startDate).length
+/** 自 startDate 起可模拟的交易日数（endDate（含）截断；缺省 = 到数据尽头） */
+export const forwardCountOf = (bars: KLineData[], startDate: string, endDate?: string): number =>
+  bars.filter((bar) => {
+    const d = dateKeyOfBar(bar)
+    return d >= startDate && (endDate == null || d <= endDate)
+  }).length
 
 /** 可选起始日范围：全历史任意可选（min = A 股开市日，早于上市日时落到数据首日开局）；
  *  max = 最新一根日 K（选它仍有 1 天，由"≥2 天"开局校验拦截）。

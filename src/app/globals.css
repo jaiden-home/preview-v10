@@ -2344,8 +2344,17 @@ body {
   color: var(--tb-text-sub);
 }
 
-/* setup：起始日标签 + 日期输入 */
+/* setup：起始/结束日期区间容器（窄屏允许整组换行） */
 #app .sim-clock-start {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+/* 单个日期组：标签 + 输入（原 .sim-clock-start 形态） */
+#app .sim-clock-field {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -2546,7 +2555,7 @@ body {
   border: 1px solid var(--tb-border);
 }
 
-/* 时钟条内起始日输入（setup 阶段）：紧凑规格，点击弹原生日期选择 */
+/* 时钟条内日期区间输入（setup 阶段）：紧凑规格，点击弹原生日期选择 */
 #app .sim-date-input {
   height: 26px;
   padding: 0 6px;

@@ -59,11 +59,21 @@ export type SimOrderResult = { ok: true; state: SimState } | { ok: false; code: 
 
 /** 会话控制请求体（/api/sim/session） */
 export type SimSessionAction =
-  | { action: 'start'; anchorCode: string; startDate: string; speedMs: ReplaySpeedMs }
+  | {
+      action: 'start'
+      anchorCode: string
+      startDate: string
+      /** 结束日（含）；缺省 = 回放至数据尽头。仅用于开局圈定 dayCount，会话内以 dayCount 为权威 */
+      endDate?: string
+      speedMs: ReplaySpeedMs
+    }
   | { action: 'pause' }
   | { action: 'resume' }
   | { action: 'speed'; speedMs: ReplaySpeedMs }
   | { action: 'restart' }
+
+/** 会话控制响应：成功带回权威状态；422 业务拒绝带双语文案（jsonError 信封解包） */
+export type SimSessionResult = { ok: true; state: SimState } | { ok: false; message: string }
 
 /** 模拟交易域错误码（下单拒绝与会话控制共用；OrderRejectCode 之外补充编排层错误） */
 export type SimErrorCode =

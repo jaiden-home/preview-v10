@@ -12,14 +12,17 @@ interface SimClockBarProps {
   progress: number
   /** setup：当前所选起始日（可改）；live：最新完成交易日（展示） */
   date: string
-  /** setup：可选起始日范围 */
+  /** setup：当前所选结束日（可改，含当日，缺省 = 数据尽头） */
+  endDate: string
+  /** setup：可选起始日范围（min/max 对两个输入同界） */
   range: ReplayStartRange | null
-  /** setup：自所选日起可模拟的交易日数 */
+  /** setup：自起始日（含）至结束日（含）可模拟的交易日数 */
   forwardDays: number
   /** setup：所选日早于已加载窗口时，forwardDays 仅为下界（显示 ≥N） */
   forwardDaysLowerBound?: boolean
   speedMs: ReplaySpeedMs
   onDateChange: (date: string) => void
+  onEndDateChange: (date: string) => void
   onStart: () => void
   onToggle: () => void
   onSpeedChange: (ms: ReplaySpeedMs) => void
@@ -39,8 +42,8 @@ const PlayIcon = () => (
 
 /**
  * 模拟时钟（UI_SPEC §3.13，两行控制卡）：
- * 行 1 = 时间锚点 + 主操作（setup：起始日输入 + 「开始模拟」；live：虚拟日期大字 + 第 x/N 天 + 暂停/继续）；
- * 行 2 = 整行计时进度 + 倒计时文案（setup：可模拟天数提示）；
+ * 行 1 = 时间锚点 + 主操作（setup：起始/结束日期区间输入 + 「开始模拟」；live：虚拟日期大字 + 第 x/N 天 + 暂停/继续）；
+ * 行 2 = 整行计时进度 + 倒计时文案（setup：区间可模拟天数提示）；
  * 行 3 = 倍速分段（15/30/60 秒 = 1 交易日）。
  */
 export default function SimClockBar({
@@ -50,11 +53,13 @@ export default function SimClockBar({
   calendar,
   progress,
   date,
+  endDate,
   range,
   forwardDays,
   forwardDaysLowerBound = false,
   speedMs,
   onDateChange,
+  onEndDateChange,
   onStart,
   onToggle,
   onSpeedChange
@@ -65,29 +70,47 @@ export default function SimClockBar({
   const ended = state?.status === 'ended'
   const liveDay = live ? (calendar[state!.dayIndex - 1] ?? state!.startDate) : date
   const days = forwardDays
-  // 至少 2 个交易日（大于 1 日）才能开始模拟
-  const startDisabled = setup && (date === '' || days <= 1)
+  const endBeforeStart = setup && endDate !== '' && date !== '' && endDate < date
+  // 至少 2 个交易日（大于 1 日）且结束日不早于起始日才能开始模拟
+  const startDisabled = setup && (date === '' || endDate === '' || endBeforeStart || days <= 1)
   const clamped = Math.min(1, Math.max(0, progress))
   const pct = Math.round(clamped * 100)
   const remainSec = state != null ? Math.max(0, Math.ceil(((1 - clamped) * state.speedMs) / 1000)) : 0
+  // 起始日上限：不越过结束日；结束日下限：不早于起始日（已选值参与约束）
+  const startMax = endBeforeStart || (endDate !== '' && endDate < (range?.max ?? '')) ? endDate : range?.max
+  const endMin = date !== '' && date > (range?.min ?? '') ? date : range?.min
 
   return (
     <div className="sim-clock" role="group" aria-label={t('模拟时钟|Replay clock')}>
       {/* 行 1：时间锚点 + 主操作 */}
       <div className="sim-clock-head">
         {setup ? (
-          <label className="sim-clock-start">
-            <span className="sim-start-label">{t('起始日期|Start date')}</span>
-            <input
-              className="sim-date-input"
-              type="date"
-              value={date}
-              min={range?.min}
-              max={range?.max}
-              aria-label={t('选择起始日期|Pick a start date')}
-              onChange={(e) => onDateChange(e.target.value)}
-            />
-          </label>
+          <div className="sim-clock-start">
+            <label className="sim-clock-field">
+              <span className="sim-start-label">{t('起始日期|Start date')}</span>
+              <input
+                className="sim-date-input"
+                type="date"
+                value={date}
+                min={range?.min}
+                max={startMax}
+                aria-label={t('选择起始日期|Pick a start date')}
+                onChange={(e) => onDateChange(e.target.value)}
+              />
+            </label>
+            <label className="sim-clock-field">
+              <span className="sim-start-label">{t('结束日期|End date')}</span>
+              <input
+                className="sim-date-input"
+                type="date"
+                value={endDate}
+                min={endMin}
+                max={range?.max}
+                aria-label={t('选择结束日期|Pick an end date')}
+                onChange={(e) => onEndDateChange(e.target.value)}
+              />
+            </label>
+          </div>
         ) : (
           <div className="sim-clock-day">
             <span className="sim-day-value num">{liveDay}</span>
@@ -147,11 +170,13 @@ export default function SimClockBar({
           <span className="sim-clock-hint">
             {date === ''
               ? t('请选择起始日期|Pick a start date')
-              : days > 1
-                ? forwardDaysLowerBound
-                  ? t(`自该日起超过 ${days} 个交易日|More than ${days} trading days`)
-                  : t(`自该日起共 ${days} 个交易日|${days} trading days`)
-                : t('交易日不足，请选择更早的起始日期|Not enough trading days; pick an earlier start date')}
+              : endBeforeStart
+                ? t('结束日期不能早于起始日期|End date must not be earlier than the start date')
+                : days > 1
+                  ? forwardDaysLowerBound
+                    ? t(`自该日起超过 ${days} 个交易日|More than ${days} trading days`)
+                    : t(`区间内共 ${days} 个交易日|${days} trading days in range`)
+                  : t('交易日不足，请调整起始/结束日期|Not enough trading days; adjust the dates')}
           </span>
         )}
       </div>

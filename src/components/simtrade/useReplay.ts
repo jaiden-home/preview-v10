@@ -61,10 +61,10 @@ export interface UseReplayResult {
   visibleBarsOf: (code: string) => KLineData[]
   /** 已加载窗口日 K（未开局阶段图表展示实时完整 K 线，与 /trade 一致） */
   allBarsOf: (code: string) => KLineData[]
-  /** setup 预览：自某日期起可模拟的交易日数 */
-  forwardCountOn: (code: string, date: string) => number
-  /** 开局（服务端建立会话）；返回是否成功 */
-  start: (startDate: string, speedMs?: ReplaySpeedMs) => Promise<boolean>
+  /** setup 预览：自某日期起可模拟的交易日数（endDate（含）截断） */
+  forwardCountOn: (code: string, date: string, endDate?: string) => number
+  /** 开局（服务端建立会话；endDate 缺省 = 回放至数据尽头）；null = 成功，否则为双语错误文案 */
+  start: (startDate: string, endDate?: string, speedMs?: ReplaySpeedMs) => Promise<string | null>
   togglePause: () => void
   setSpeed: (ms: ReplaySpeedMs) => void
   /** 重开一局（服务端清会话与账户，回到选日期）；返回是否成功 */
@@ -151,9 +151,13 @@ export const useReplay = (options: UseReplayOptions): UseReplayResult => {
         return
       }
       // 恢复会话：按「起始日前 500 历史 + 全部模拟日」口径补拉（与 start() 一致；新股数据尽头即止）；
+      // 带结束日的会话 dayCount 仅区间天数，但「最新 N 根」回溯须覆盖到起始日 → 与 estimate 取大；
       // 目标钳制到 API 上限，防异常 dayCount 构造出超限请求（正常会话 ≤999，不会触发）
       if (session != null && anchorBars.length < PRE_START_WINDOW_BARS + session.dayCount) {
-        const target = Math.min(PRE_START_WINDOW_BARS + session.dayCount, REPLAY_FETCH_MAX_BARS)
+        const target = Math.min(
+          PRE_START_WINDOW_BARS + Math.max(session.dayCount, estimateTradingBars(session.startDate)),
+          REPLAY_FETCH_MAX_BARS
+        )
         const fetched = await fetchReplayBars(anchor, target)
         if (!cancelled && fetched.length > anchorBars.length) {
           anchorBars = fetched
@@ -243,17 +247,20 @@ export const useReplay = (options: UseReplayOptions): UseReplayResult => {
 
   const allBarsOf = (code: string): KLineData[] => barsRef.current.get(code) ?? []
 
-  const forwardCountOn = (code: string, date: string): number => forwardCountOf(barsRef.current.get(code) ?? [], date)
+  const forwardCountOn = (code: string, date: string, endDate?: string): number =>
+    forwardCountOf(barsRef.current.get(code) ?? [], date, endDate)
 
   const start = useCallback(
-    async (startDate: string, speedMs?: ReplaySpeedMs): Promise<boolean> => {
+    async (startDate: string, endDate?: string, speedMs?: ReplaySpeedMs): Promise<string | null> => {
       const anchor = anchorRef.current
       let bars = barsRef.current.get(anchor)
       if (bars != null) {
         // 起始日前历史不足窗口根数时追拉：交易日估算一步到位（过冲无害），循环仅兜底补差；
-        // 起始日早于已加载窗口（估算未知精确模拟天数）与新股数据尽头均由此收敛
+        // 起始日早于已加载窗口（估算未知精确模拟天数）与新股数据尽头均由此收敛。
+        // 注意 /api/replay 按「最新 N 根」回溯：深历史起始日即使带结束日，估算也须截至当下，
+        // 否则 N 不足以从当下铺回起始日（结束日只缩小 dayCount，不缩小回溯跨度）
         for (let round = 0; round < 3; round += 1) {
-          const forwardCount = forwardCountOf(bars, startDate)
+          const forwardCount = forwardCountOf(bars, startDate, endDate)
           const startIndex = bars.findIndex((b) => dateKeyOfBar(b) >= startDate)
           const historyLoaded = Math.max(0, startIndex)
           if (historyLoaded >= PRE_START_WINDOW_BARS) {
@@ -276,19 +283,26 @@ export const useReplay = (options: UseReplayOptions): UseReplayResult => {
           setBarsVersion((v) => v + 1)
         }
       }
-      const simState = await postSimSession({
+      const result = await postSimSession({
         action: 'start',
         anchorCode: anchor,
         startDate,
+        endDate,
         speedMs: speedMs ?? REPLAY_SPEEDS[1]
       })
-      if (simState?.session == null) {
-        return false
+      if (result == null) {
+        return '网络异常，请稍候重试|Network error, please retry'
       }
-      setCalendar(bars != null ? calendarFrom(bars, startDate) : [])
-      syncState(simState)
+      if (!result.ok) {
+        return result.message
+      }
+      if (result.state.session == null) {
+        return '开局失败，请稍候重试|Failed to start, please retry'
+      }
+      setCalendar(bars != null ? calendarFrom(bars, startDate, endDate) : [])
+      syncState(result.state)
       setPhase('live')
-      return true
+      return null
     },
     [syncState]
   )
@@ -300,8 +314,8 @@ export const useReplay = (options: UseReplayOptions): UseReplayResult => {
     }
     void (async () => {
       const next = await postSimSession({ action: simState.status === 'running' ? 'pause' : 'resume' })
-      if (next != null) {
-        syncState(next)
+      if (next?.ok) {
+        syncState(next.state)
       }
     })()
   }, [simState, syncState])
@@ -313,8 +327,8 @@ export const useReplay = (options: UseReplayOptions): UseReplayResult => {
       }
       void (async () => {
         const simState = await postSimSession({ action: 'speed', speedMs: ms })
-        if (simState != null) {
-          syncState(simState)
+        if (simState?.ok) {
+          syncState(simState.state)
         }
       })()
     },
@@ -322,11 +336,11 @@ export const useReplay = (options: UseReplayOptions): UseReplayResult => {
   )
 
   const restart = useCallback(async (): Promise<boolean> => {
-    const simState = await postSimSession({ action: 'restart' })
-    if (simState == null) {
+    const result = await postSimSession({ action: 'restart' })
+    if (!result?.ok) {
       return false
     }
-    syncState(simState)
+    syncState(result.state)
     barsRef.current.clear()
     pendingRef.current.clear()
     setBootId((id) => id + 1)

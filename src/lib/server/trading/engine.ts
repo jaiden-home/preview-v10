@@ -168,6 +168,8 @@ export const placeOrderEngine = async (
 export interface StartSessionParams {
   anchorCode: string
   startDate: string
+  /** 结束日（含）；缺省 = 回放至数据尽头（dayCount = 截断后日历长度） */
+  endDate?: string
   speedMs: ReplaySpeedMs
 }
 
@@ -182,11 +184,11 @@ export const startSessionEngine = async (
   if (bars.length < 3) {
     throw new SimTradingError('insufficient_history', '回放数据不足，无法开始模拟|Insufficient replay data to start')
   }
-  const calendar = calendarFrom(bars, params.startDate)
+  const calendar = calendarFrom(bars, params.startDate, params.endDate)
   if (calendar.length < 2) {
     throw new SimTradingError(
       'insufficient_history',
-      '交易日不足，请选择更早的起始日期|Not enough trading days; pick an earlier start date'
+      '交易日不足，请调整起始/结束日期|Not enough trading days; adjust the dates'
     )
   }
   const session: SimSession = {

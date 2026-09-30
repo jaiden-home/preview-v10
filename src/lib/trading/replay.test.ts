@@ -97,6 +97,18 @@ describe('窗口与起始日范围', () => {
     expect(forwardCountOf(bars, dates[502])).toBe(1)
   })
 
+  it('结束日（含）截断：日历与可模拟天数按区间计', () => {
+    const calendar = calendarFrom(bars, dates[3], dates[52])
+    expect(calendar).toHaveLength(50)
+    expect(calendar[0]).toBe(dates[3])
+    expect(calendar[calendar.length - 1]).toBe(dates[52])
+    expect(forwardCountOf(bars, dates[3], dates[52])).toBe(50)
+    expect(forwardCountOf(bars, dates[3], dates[3])).toBe(1)
+    // 结束日早于起始日 → 空区间
+    expect(calendarFrom(bars, dates[3], dates[2])).toEqual([])
+    expect(forwardCountOf(bars, dates[3], dates[2])).toBe(0)
+  })
+
   it('可选起始日范围：全历史任意可选（min=A 股开市日，max=最新一根）', () => {
     const range = startRangeOf(bars)!
     expect(range).not.toBeNull()

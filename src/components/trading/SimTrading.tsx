@@ -15,7 +15,7 @@ import type { InfoSnapshot } from '@/lib/chart/terminal'
 import type { QuoteSnapshot } from '@/lib/chart/types'
 import SimClockBar from '@/components/simtrade/SimClockBar'
 import { useReplay } from '@/components/simtrade/useReplay'
-import { REPLAY_SPEEDS, releaseAllFrozen, type ReplaySpeedMs } from '@/lib/trading/replay'
+import { REPLAY_SPEEDS, estimateTradingBars, releaseAllFrozen, type ReplaySpeedMs } from '@/lib/trading/replay'
 import { postSimOrder } from '@/lib/trading/sim-api'
 import OrderPanel from './OrderPanel'
 import PositionsTable from './PositionsTable'
@@ -66,6 +66,7 @@ export default function SimTrading() {
   const [names, setNames] = useState<Record<string, string | null>>({})
   const [realQuotes, setRealQuotes] = useState<Record<string, QuoteSnapshot>>({})
   const [setupDate, setSetupDate] = useState('')
+  const [setupEndDate, setSetupEndDate] = useState('')
   const [setupSpeed, setSetupSpeed] = useState<ReplaySpeedMs>(REPLAY_SPEEDS[1])
   const [side, setSide] = useState<TradeSide>('buy')
   const [tab, setTab] = useState<'positions' | 'trades'>('positions')
@@ -122,13 +123,19 @@ export default function SimTrading() {
     setSelected(loadSelectedSymbol(REPLAY_SYMBOL_STORAGE_KEY) ?? DEFAULT_TRADING_SYMBOL)
   }, [])
 
-  // setup 默认起始日：恒为当日——非交易日/当日 K 线未生成时由天数校验提示（可模拟 0 天、按钮禁用），不自动回退
+  // setup 默认起始日：恒为当日——非交易日/当日 K 线未生成时由天数校验提示（可模拟 0 天、按钮禁用），不自动回退；
+  // 默认结束日：可选范围上限（最新一根日 K）= 回放至数据尽头
   useEffect(() => {
-    if (replay.phase === 'setup' && setupDate === '') {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setSetupDate(dayKeyOf(Date.now()))
+    if (replay.phase === 'setup') {
+      if (setupDate === '') {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setSetupDate(dayKeyOf(Date.now()))
+      }
+      if (setupEndDate === '' && replay.startRange != null) {
+        setSetupEndDate(replay.startRange.max)
+      }
     }
-  }, [replay.phase, setupDate])
+  }, [replay.phase, replay.startRange, setupDate, setupEndDate])
 
   // 标的名称：每标的一次性拉取（开局后回放行情展示用；未开局用实时行情自带名称）。
   // 注意：成功后才标记 tried——StrictMode 双挂载下首跑被取消，若先标记会永久跳过重试
@@ -356,10 +363,11 @@ export default function SimTrading() {
   }
 
   const handleStart = async () => {
-    if (setupDate !== '') {
-      const ok = await replay.start(setupDate, setupSpeed)
-      if (!ok) {
-        setNotice({ kind: 'err', text: t('开局失败，请稍候重试|Failed to start, please retry') })
+    if (setupDate !== '' && setupEndDate !== '') {
+      // 失败文案来自服务端业务拒绝（交易日不足/数据不足等），网络异常由 start 兜底
+      const error = await replay.start(setupDate, setupEndDate, setupSpeed)
+      if (error != null) {
+        setNotice({ kind: 'err', text: t(error) })
       }
     }
   }
@@ -375,6 +383,7 @@ export default function SimTrading() {
       return
     }
     setSetupDate('')
+    setSetupEndDate('')
     const ok = await replay.restart()
     if (!ok) {
       setNotice({ kind: 'err', text: t('重开失败，请稍候重试|Restart failed, please retry') })
@@ -383,14 +392,21 @@ export default function SimTrading() {
     setNotice({ kind: 'ok', text: t('已重开一局|Session restarted') })
   }
 
-  const setupForwardDays =
-    replay.phase === 'setup' && setupDate !== '' ? replay.forwardCountOn(selectedCode, setupDate) : 0
-  // 所选日早于已加载窗口 → 本地只能算下界（追拉后由服务端校准精确 dayCount）
-  const setupDaysLowerBound =
+  // 起始日早于已加载窗口（最近 500 根）时本地无法精确计数区间交易日：
+  // 用自然日估算（过冲无害，服务端开局权威校准 dayCount）；其余情形用已加载数据精确计数
+  const setupBeforeWindow =
     replay.phase === 'setup' &&
     setupDate !== '' &&
     replay.loadedWindowFirst !== '' &&
     setupDate < replay.loadedWindowFirst
+  const setupForwardDays =
+    replay.phase === 'setup' && setupDate !== '' && setupEndDate !== ''
+      ? setupBeforeWindow
+        ? estimateTradingBars(setupDate, new Date(`${setupEndDate}T00:00:00`).getTime())
+        : replay.forwardCountOn(selectedCode, setupDate, setupEndDate)
+      : 0
+  // 所选日早于已加载窗口 → 本地只能算下界（追拉后由服务端校准精确 dayCount）
+  const setupDaysLowerBound = setupBeforeWindow
 
   return (
     <div className={`trade-page${panelOpen ? ' sheet-open' : ''}`}>
@@ -510,7 +526,15 @@ export default function SimTrading() {
                   forwardDays={setupForwardDays}
                   forwardDaysLowerBound={setupDaysLowerBound}
                   speedMs={replay.phase === 'setup' ? setupSpeed : (simState?.speedMs ?? setupSpeed)}
+                  endDate={
+                    replay.phase === 'setup'
+                      ? setupEndDate
+                      : simState != null
+                        ? (replay.calendar[simState.dayCount - 1] ?? setupEndDate)
+                        : setupEndDate
+                  }
                   onDateChange={setSetupDate}
+                  onEndDateChange={setSetupEndDate}
                   onStart={handleStart}
                   onToggle={replay.togglePause}
                   onSpeedChange={replay.phase === 'setup' ? setSetupSpeed : replay.setSpeed}

@@ -1,7 +1,7 @@
 // ==================== 模拟交易 BFF 请求封装（仅客户端） ====================
 // 失败返回 null / 业务拒绝体，由调用方兜底；账户与会话的权威状态一律来自服务端响应。
 
-import type { SimOrderInput, SimOrderResult, SimSessionAction, SimState } from './protocol'
+import type { SimOrderInput, SimOrderResult, SimSessionAction, SimSessionResult, SimState } from './protocol'
 
 /** 账户 + 会话快照（页面初始化与 live 轮询） */
 export const fetchSimState = async (): Promise<SimState | null> => {
@@ -36,18 +36,22 @@ export const postSimOrder = async (order: SimOrderInput): Promise<SimOrderResult
   }
 }
 
-/** 会话控制（start/pause/resume/speed/restart） */
-export const postSimSession = async (action: SimSessionAction): Promise<SimState | null> => {
+/** 会话控制（start/pause/resume/speed/restart）：422 拒绝解包 jsonError 信封带文案；网络/服务异常返回 null */
+export const postSimSession = async (action: SimSessionAction): Promise<SimSessionResult | null> => {
   try {
     const response = await fetch('/api/sim/session', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(action)
     })
+    if (response.status === 422) {
+      const body = (await response.json()) as { error?: { message?: string } }
+      return { ok: false, message: body.error?.message ?? '开局失败，请稍候重试|Failed to start, please retry' }
+    }
     if (!response.ok) {
       return null
     }
-    return (await response.json()) as SimState
+    return { ok: true, state: (await response.json()) as SimState }
   } catch {
     return null
   }
