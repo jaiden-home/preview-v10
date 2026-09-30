@@ -16,6 +16,8 @@ interface SimClockBarProps {
   range: ReplayStartRange | null
   /** setup：自所选日起可模拟的交易日数 */
   forwardDays: number
+  /** setup：所选日早于已加载窗口时，forwardDays 仅为下界（显示 ≥N） */
+  forwardDaysLowerBound?: boolean
   speedMs: ReplaySpeedMs
   onDateChange: (date: string) => void
   onStart: () => void
@@ -50,6 +52,7 @@ export default function SimClockBar({
   date,
   range,
   forwardDays,
+  forwardDaysLowerBound = false,
   speedMs,
   onDateChange,
   onStart,
@@ -145,7 +148,9 @@ export default function SimClockBar({
             {date === ''
               ? t('请选择起始日期|Pick a start date')
               : days > 1
-                ? t(`自该日起共 ${days} 个交易日|${days} trading days`)
+                ? forwardDaysLowerBound
+                  ? t(`自该日起超过 ${days} 个交易日|More than ${days} trading days`)
+                  : t(`自该日起共 ${days} 个交易日|${days} trading days`)
                 : t('交易日不足，请选择更早的起始日期|Not enough trading days; pick an earlier start date')}
           </span>
         )}

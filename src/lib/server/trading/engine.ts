@@ -14,7 +14,7 @@ import {
 } from '@/lib/trading/account'
 import type { ReplaySpeedMs } from '@/lib/trading/replay'
 import {
-  PRE_START_WINDOW_BARS,
+  REPLAY_FETCH_MAX_BARS,
   calendarFrom,
   createReplaySession,
   releaseAllFrozen,
@@ -252,8 +252,8 @@ const barsForCodes = async (codes: string[], source: MarketSource): Promise<Map<
 
 /** bars 进程内缓存 TTL（与 CACHE_KLINE_HIST_TTL_MS 对齐：历史不可变，除权后定时全量刷新） */
 const REPLAY_BARS_CACHE_TTL_MS = 600_000
-/** 回放/结算所需日 K 根数上限（历史窗口 + 足够模拟天数；replay-service 会回溯到数据尽头） */
-const REPLAY_BARS_LIMIT = PRE_START_WINDOW_BARS + 1500
+/** 回放/结算所需日 K 根数上限（与 /api/replay 上限同口径；正常会话远小于此，选早期起始日时按需触达） */
+const REPLAY_BARS_LIMIT = REPLAY_FETCH_MAX_BARS
 
 /** 默认行情源：实时行情走 market-service（上游有 TTL 缓存），历史日 K 走 replay-service */
 export const createMarketSource = (): MarketSource => {

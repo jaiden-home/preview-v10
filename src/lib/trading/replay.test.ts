@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest'
 import type { KLineData } from 'klinecharts'
 import { dayKeyOf, createInitialAccount, executeBuy } from './account'
 import {
+  EARLIEST_START_DATE,
   advanceDay,
   calendarFrom,
   createReplaySession,
+  estimateTradingBars,
   forwardCountOf,
   replayQuoteOf,
   releaseAllFrozen,
@@ -95,15 +97,23 @@ describe('窗口与起始日范围', () => {
     expect(forwardCountOf(bars, dates[502])).toBe(1)
   })
 
-  it('可选起始日范围：数据集内任意可选（min=第二根，max=最新一根）', () => {
+  it('可选起始日范围：全历史任意可选（min=A 股开市日，max=最新一根）', () => {
     const range = startRangeOf(bars)!
     expect(range).not.toBeNull()
-    expect(range.min).toBe(dates[1])
+    expect(range.min).toBe(EARLIEST_START_DATE)
     expect(range.max).toBe(dates[502])
     // 任意起始日的可模拟天数由数据决定，无固定窗口上限
-    expect(forwardCountOf(bars, range.min)).toBe(502)
+    expect(forwardCountOf(bars, range.min)).toBe(503)
     expect(forwardCountOf(bars, range.max)).toBe(1)
     expect(startRangeOf(bars.slice(0, 2))).toBeNull()
+  })
+
+  it('交易日估算：自然日 × 5/7 上取整 + 余量；日期越早估算越大', () => {
+    const now = new Date('2024-01-15T00:00:00').getTime()
+    expect(estimateTradingBars('2024-01-15', now)).toBe(10) // 当天 → 仅余量
+    expect(estimateTradingBars('2024-01-01', now)).toBe(Math.ceil(14 * (5 / 7)) + 10) // 14 自然日 → 10+10
+    expect(estimateTradingBars('2023-01-15', now)).toBeGreaterThan(estimateTradingBars('2023-06-15', now))
+    expect(estimateTradingBars('2030-01-01', now)).toBe(10) // 未来日期 → 0 自然日
   })
 })
 

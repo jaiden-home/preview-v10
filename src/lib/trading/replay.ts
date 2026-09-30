@@ -12,8 +12,18 @@ import { dayKeyOf, type TradingAccount } from './account'
 /** 起始日前历史窗口根数（与 /trade 首次加载 BAR_LIMIT 对齐；起始日前不足则拉全量） */
 export const PRE_START_WINDOW_BARS = 500
 
-/** 回放单次拉取根数上限（/api/replay zod max 与客户端追拉目标的公共钳制值） */
-export const REPLAY_FETCH_MAX_BARS = 2000
+/** 回放单次拉取根数上限（/api/replay zod max 与客户端追拉目标的公共钳制值；纯护栏，正常会话远小于此） */
+export const REPLAY_FETCH_MAX_BARS = 5000
+
+/** 起始日最早可选日期（A 股上交所开市日；早于标的上市日时自然落到数据首日开局） */
+export const EARLIEST_START_DATE = '1990-12-19'
+
+/** 自然日 → 交易日估算（≈ 5/7，含节假日余量上取整）：追拉目标一步到位用，过冲无害 */
+export const estimateTradingBars = (startDate: string, now: number = Date.now()): number => {
+  const start = new Date(`${startDate}T00:00:00`).getTime()
+  const calendarDays = Math.max(0, Math.ceil((now - start) / 86_400_000))
+  return Math.ceil(calendarDays * (5 / 7)) + 10
+}
 
 /** 倍速档位：真实毫秒数 = 完成一个交易日 */
 export const REPLAY_SPEEDS = [15_000, 30_000, 60_000] as const
@@ -51,8 +61,9 @@ export const calendarFrom = (bars: KLineData[], startDate: string): string[] =>
 export const forwardCountOf = (bars: KLineData[], startDate: string): number =>
   bars.filter((bar) => dateKeyOfBar(bar) >= startDate).length
 
-/** 可选起始日范围：数据集内任意可选（能模拟几天由数据决定）；
- *  min 取第二根（首根无昨收上下文），max = 最新一根日 K（选它仍有 1 天，由"≥2 天"开局校验拦截） */
+/** 可选起始日范围：全历史任意可选（min = A 股开市日，早于上市日时落到数据首日开局）；
+ *  max = 最新一根日 K（选它仍有 1 天，由"≥2 天"开局校验拦截）。
+ *  选早于已加载窗口的日期时，可模拟天数本地只能算下界（追拉后由服务端权威校准） */
 export interface ReplayStartRange {
   min: string
   max: string
@@ -63,7 +74,7 @@ export const startRangeOf = (bars: KLineData[]): ReplayStartRange | null => {
     return null
   }
   return {
-    min: dateKeyOfBar(bars[1]!),
+    min: EARLIEST_START_DATE,
     max: dateKeyOfBar(bars[bars.length - 1]!)
   }
 }

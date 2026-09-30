@@ -11,6 +11,7 @@ import {
   REPLAY_SPEEDS,
   calendarFrom,
   dateKeyOfBar,
+  estimateTradingBars,
   forwardCountOf,
   replayQuoteOf,
   startRangeOf,
@@ -21,9 +22,9 @@ import {
 } from '@/lib/trading/replay'
 import { fetchSimState, postSimSession } from '@/lib/trading/sim-api'
 
-/** 回放数据两阶段加载：setup 拉 PRE_START_WINDOW_BARS(500) 根用于选日期；
- *  start 时按用户所选起始日追拉——补齐起始日前 500 根历史窗口 + 全部模拟日
- *  （起始日前不足 500 个交易日的新股则回溯到上市全量即止；与服务端结算口径一致） */
+/** 回放数据两阶段加载：setup 拉 PRE_START_WINDOW_BARS(500) 根用于选日期（起始日可选全历史）；
+ *  start 时按所选起始日追拉——交易日估算一步到位，补齐起始日前 500 根历史窗口 + 全部模拟日，
+ *  上限 REPLAY_FETCH_MAX_BARS（纯护栏；新股/超早日期回溯到上市全量即止；与服务端结算口径一致） */
 
 /** 本地时钟节拍（running 时 1s 一拍：本地派生虚拟日推进 + 进度条插值，无网络轮询） */
 const LOCAL_TICK_MS = 1_000
@@ -48,6 +49,8 @@ export interface UseReplayResult {
   calendar: string[]
   /** setup 阶段：可选起始日范围 */
   startRange: ReplayStartRange | null
+  /** setup 阶段：已加载窗口首根日期（所选日期早于此 → 可模拟天数仅为下界） */
+  loadedWindowFirst: string
   /** 当前日计时进度 0..1（running 时；暂停/结束为 0） */
   progress: number
   /** bars 缓存版本号（任一标的拉取完成后 +1，驱动依赖方重算） */
@@ -88,6 +91,7 @@ export const useReplay = (options: UseReplayOptions): UseReplayResult => {
   const [state, setState] = useState<SimSession | null>(null)
   const [calendar, setCalendar] = useState<string[]>([])
   const [startRange, setStartRange] = useState<ReplayStartRange | null>(null)
+  const [loadedWindowFirst, setLoadedWindowFirst] = useState('')
   const [error, setError] = useState(false)
   const [barsVersion, setBarsVersion] = useState(0)
   const [bootId, setBootId] = useState(0)
@@ -125,6 +129,7 @@ export const useReplay = (options: UseReplayOptions): UseReplayResult => {
       setState(null)
       setCalendar([])
       setStartRange(null)
+      setLoadedWindowFirst('')
       barsRef.current = new Map()
       pendingRef.current.clear()
       const [simState, bars] = await Promise.all([
@@ -166,6 +171,7 @@ export const useReplay = (options: UseReplayOptions): UseReplayResult => {
         return
       }
       setStartRange(startRangeOf(anchorBars))
+      setLoadedWindowFirst(dateKeyOfBar(anchorBars[1]!))
       setPhase('setup')
     }
     void boot()
@@ -244,16 +250,21 @@ export const useReplay = (options: UseReplayOptions): UseReplayResult => {
       const anchor = anchorRef.current
       let bars = barsRef.current.get(anchor)
       if (bars != null) {
-        // 起始日前历史不足窗口根数时追拉：补齐缺口 + 全部模拟日（数据尽头即止，防异常空转）
-        for (let round = 0; round < 4; round += 1) {
+        // 起始日前历史不足窗口根数时追拉：交易日估算一步到位（过冲无害），循环仅兜底补差；
+        // 起始日早于已加载窗口（估算未知精确模拟天数）与新股数据尽头均由此收敛
+        for (let round = 0; round < 3; round += 1) {
           const forwardCount = forwardCountOf(bars, startDate)
           const startIndex = bars.findIndex((b) => dateKeyOfBar(b) >= startDate)
           const historyLoaded = Math.max(0, startIndex)
           if (historyLoaded >= PRE_START_WINDOW_BARS) {
             break
           }
+          const estimatedForward = startIndex === 0 ? estimateTradingBars(startDate) : forwardCount
           const target = Math.min(
-            Math.max(bars.length + (PRE_START_WINDOW_BARS - historyLoaded), PRE_START_WINDOW_BARS + forwardCount),
+            Math.max(
+              bars.length + (PRE_START_WINDOW_BARS - historyLoaded),
+              PRE_START_WINDOW_BARS + Math.max(forwardCount, estimatedForward)
+            ),
             REPLAY_FETCH_MAX_BARS
           )
           const fetched = await fetchReplayBars(anchor, target)
@@ -345,6 +356,7 @@ export const useReplay = (options: UseReplayOptions): UseReplayResult => {
     state: simState,
     calendar,
     startRange,
+    loadedWindowFirst,
     progress,
     barsVersion,
     quoteOf,

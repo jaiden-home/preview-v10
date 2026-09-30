@@ -385,6 +385,12 @@ export default function SimTrading() {
 
   const setupForwardDays =
     replay.phase === 'setup' && setupDate !== '' ? replay.forwardCountOn(selectedCode, setupDate) : 0
+  // 所选日早于已加载窗口 → 本地只能算下界（追拉后由服务端校准精确 dayCount）
+  const setupDaysLowerBound =
+    replay.phase === 'setup' &&
+    setupDate !== '' &&
+    replay.loadedWindowFirst !== '' &&
+    setupDate < replay.loadedWindowFirst
 
   return (
     <div className={`trade-page${panelOpen ? ' sheet-open' : ''}`}>
@@ -502,6 +508,7 @@ export default function SimTrading() {
                   }
                   range={replay.startRange}
                   forwardDays={setupForwardDays}
+                  forwardDaysLowerBound={setupDaysLowerBound}
                   speedMs={replay.phase === 'setup' ? setupSpeed : (simState?.speedMs ?? setupSpeed)}
                   onDateChange={setSetupDate}
                   onStart={handleStart}
