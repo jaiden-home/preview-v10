@@ -22,9 +22,6 @@ import TradeSummary from './TradeSummary'
 import {
   REPLAY_SYMBOL_STORAGE_KEY,
   calcEquity,
-  fmtMoney,
-  fmtPct,
-  fmtSignedMoney,
   loadSelectedSymbol,
   round2,
   unfreezePositions,
@@ -451,41 +448,6 @@ export default function SimTrading() {
         </div>
       )}
 
-      {/* 本局结束：简版结算卡（数字汇总 + 再来一局） */}
-      {simState?.status === 'ended' && equity != null && account != null && (
-        <div className="sim-settle" role="dialog" aria-modal="true" aria-label={t('本局结算|Session summary')}>
-          <div className="sim-settle-card">
-            <h3 className="sim-settle-title">{t('本局结束|Session ended')}</h3>
-            <div className="sim-settle-grid">
-              <span className="sim-settle-cell">
-                <span className="sim-settle-label">{t('总资产|Total assets')}</span>
-                <span className="sim-settle-value num">{fmtMoney(equity.totalAssets)}</span>
-              </span>
-              <span className="sim-settle-cell">
-                <span className="sim-settle-label">{t('总盈亏|Total P&L')}</span>
-                <span className={`sim-settle-value num ${pnlClass(equity.totalPnl)}`}>
-                  {fmtSignedMoney(equity.totalPnl)}
-                </span>
-              </span>
-              <span className="sim-settle-cell">
-                <span className="sim-settle-label">{t('总收益率|Return')}</span>
-                <span className={`sim-settle-value num ${pnlClass(equity.totalPnl)}`}>
-                  {fmtPct(equity.totalPnlPct)}
-                </span>
-              </span>
-              <span className="sim-settle-cell">
-                <span className="sim-settle-label">{t('成交笔数|Trades')}</span>
-                <span className="sim-settle-value num">{account.trades.length}</span>
-              </span>
-            </div>
-            {/* 重开/重置收敛至模拟设置页（v2.45）：链接跳转，设置页「保存并开局」清账重开 */}
-            <Link className="sim-settle-btn" href="/admin/simtrade">
-              {t('重开一局（模拟设置）|Restart in Simulation Settings')}
-            </Link>
-          </div>
-        </div>
-      )}
-
       {/* 移动端弹层遮罩（桌面经 CSS 恒不显示） */}
       {panelOpen && <div className="trade-sheet-mask" aria-hidden="true" onClick={() => setPanelOpen(false)} />}
 
@@ -516,5 +478,3 @@ const priceMapOf = (account: TradingAccount | null, quotes: Record<string, Quote
   }
   return map
 }
-
-const pnlClass = (n: number): string => (n > 0 ? 'up' : n < 0 ? 'down' : '')
