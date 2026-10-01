@@ -7,12 +7,14 @@ import {
   calendarFrom,
   createReplaySession,
   nearestSpeedPresetMs,
+  replayFundamentalOf,
   replayQuoteOf,
   releaseAllFrozen,
   splitReplayView,
   virtualTsOf,
   visibleDailyBarsOf
 } from './replay'
+import type { QuoteSnapshot } from '../chart/types'
 const bar = (date: string, open: number, high: number, low: number, close: number): KLineData => {
   const [y, m, d] = date.split('-').map(Number)
   return { timestamp: new Date(y, m - 1, d).getTime(), open, high, low, close, volume: 1000 }
@@ -150,5 +152,80 @@ describe('行情与可见日 K（多标的对齐、停牌回退）', () => {
     expect(replayQuoteOf([], 1, calendar)).toBeNull()
     expect(replayQuoteOf(bars, 1, [])).toBeNull()
     expect(visibleDailyBarsOf(bars, 1, ['2023-05-01'])).toHaveLength(0)
+  })
+})
+
+describe('回放基本面（现价比例回溯 + 当日精确推算）', () => {
+  const volBar = (date: string, open: number, high: number, low: number, close: number, volume: number): KLineData => ({
+    ...bar(date, open, high, low, close),
+    volume
+  })
+  const quoteOf = (over: Partial<QuoteSnapshot>): QuoteSnapshot => ({
+    market: 'sh',
+    ticker: '600999',
+    name: null,
+    price: 10,
+    prevClose: 9.9,
+    fundamental: {
+      pe: 20,
+      peDynamic: 18,
+      peStatic: 22,
+      pb: 2,
+      totalMarketCap: 100e8,
+      floatMarketCap: 80e8,
+      avgPrice: 10.1,
+      turnoverRate: 3,
+      amplitude: 5
+    },
+    ...over
+  })
+  const bars = [volBar('2024-01-01', 9.5, 10.5, 9.4, 10, 800), volBar('2024-01-02', 10, 12, 11, 12, 1000)]
+
+  it('市值/市盈/市净/均价按「回放末日收盘 / 现价」比例回溯', () => {
+    const f = replayFundamentalOf(quoteOf({}), bars)
+    // ratio = 12 / 10 = 1.2
+    expect(f.pe).toBeCloseTo(24)
+    expect(f.peDynamic).toBeCloseTo(21.6)
+    expect(f.peStatic).toBeCloseTo(26.4)
+    expect(f.pb).toBeCloseTo(2.4)
+    expect(f.totalMarketCap).toBeCloseTo(120e8)
+    expect(f.floatMarketCap).toBeCloseTo(96e8)
+    expect(f.avgPrice).toBeCloseTo(12.12)
+  })
+
+  it('振幅 = 末日 (高-低)/昨收（前一根收盘），当日精确、与快照振幅无关', () => {
+    const f = replayFundamentalOf(quoteOf({}), bars)
+    expect(f.amplitude).toBeCloseTo(((12 - 11) / 10) * 100)
+  })
+
+  it('换手率 = 末日量 × 100 股 / 流通股本（主板量为手口径）', () => {
+    const f = replayFundamentalOf(quoteOf({}), bars)
+    // 流通股本 = 80e8 / 10 = 8e8 股；1000 手 = 1e5 股
+    expect(f.turnoverRate).toBeCloseTo((1e5 / 8e8) * 100)
+  })
+
+  it('科创板量为股口径（不乘 100）', () => {
+    const star = quoteOf({ market: 'sh', ticker: '688981' })
+    const f = replayFundamentalOf(star, bars)
+    expect(f.turnoverRate).toBeCloseTo((1000 / 8e8) * 100)
+  })
+
+  it('首根无前收：振幅退回以开盘为基准', () => {
+    const f = replayFundamentalOf(quoteOf({}), [volBar('2024-01-02', 10, 12, 11, 12, 1000)])
+    expect(f.amplitude).toBeCloseTo(((12 - 11) / 10) * 100)
+  })
+
+  it('bars 为空返回 {}；现价缺失时仅振幅可得', () => {
+    expect(replayFundamentalOf(quoteOf({}), [])).toEqual({})
+    const f = replayFundamentalOf(quoteOf({ price: null }), bars)
+    expect(f.amplitude).toBeCloseTo(10)
+    expect(f.pe).toBeUndefined()
+    expect(f.turnoverRate).toBeUndefined()
+  })
+
+  it('流通市值/量为零或缺失时换手率缺数（指数等无流通市值标的）', () => {
+    const f = replayFundamentalOf(quoteOf({ fundamental: { floatMarketCap: undefined } }), bars)
+    expect(f.turnoverRate).toBeUndefined()
+    expect(f.pe).toBeUndefined()
   })
 })

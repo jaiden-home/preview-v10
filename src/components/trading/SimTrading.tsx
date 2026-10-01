@@ -8,11 +8,12 @@ import ChartTools from '@/components/terminal/ChartTools'
 import InfoTable from '@/components/terminal/InfoTable'
 import { useLocale } from '@/components/terminal/useLocale'
 import { useChartTerminal } from '@/components/terminal/useChartTerminal'
+import { fetchQuoteSnapshot } from '@/lib/chart/api'
 import { createReplayFeed } from '@/lib/chart/replay-loader'
 import type { InfoSnapshot } from '@/lib/chart/terminal'
-import type { QuoteSnapshot } from '@/lib/chart/types'
+import type { FundamentalData, QuoteSnapshot } from '@/lib/chart/types'
 import { useReplay } from '@/components/simtrade/useReplay'
-import { releaseAllFrozen } from '@/lib/trading/replay'
+import { releaseAllFrozen, replayFundamentalOf } from '@/lib/trading/replay'
 import { postSimOrder } from '@/lib/trading/sim-api'
 import OrderPanel from './OrderPanel'
 import PositionsTable from './PositionsTable'
@@ -51,6 +52,8 @@ interface TradeNotice {
  * 任何服务端交互的响应都会校准权威状态（跨日账务先本地推导展示，服务端结算覆盖校准）。
  * 行情恒为回放：图表 = 起始日前历史 + 已完成模拟日，order-head 现价 = 最新完成日收盘
  * （与图表一致，仅随虚拟日推进变化）；T+1/涨跌停按虚拟日结算（服务端）。
+ * 信息表格基本面 = 现时行情快照按回放口径回溯（replayFundamentalOf：振幅/换手率当日精确、
+ * 市值/市盈/市净/均价按收盘比例近似），经 chart.setFundamental 注入，不混入实时现价。
  * 选中标的仍用独立 localStorage key，与 /trade 互不干扰。
  */
 export default function SimTrading() {
@@ -79,6 +82,9 @@ export default function SimTrading() {
   })
   const chartContainerRef = useRef<HTMLDivElement>(null)
   const selectedCode = `${selected.market}${selected.ticker}`
+  // 现时行情快照（信息表格回放基本面的回溯基准）：按标的缓存，换标的时一次拉取
+  const quoteCacheRef = useRef<Map<string, QuoteSnapshot>>(new Map())
+  const [fundQuote, setFundQuote] = useState<{ code: string; quote: QuoteSnapshot } | null>(null)
 
   // 回放引擎：虚拟时钟（日原子）+ 各标的回放行情（选中 + 持仓按需拉取）
   const positionKey = useMemo(
@@ -186,6 +192,43 @@ export default function SimTrading() {
     feedRef.current = { code: selectedCode, startDate: simState.startDate, dayIndex: simState.dayIndex }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- chart/feed/replay 方法逐渲染重建，入依赖会每帧重跑
   }, [replay.phase, replay.error, replay.state, replay.barsVersion, selectedCode])
+
+  // 信息表格基本面补数：拉现时行情快照（按标的缓存，异步到达后 setState），
+  // 不进实时现价/昨收——委托面板行情恒为回放口径（syntheticQuotes）
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      let quote = quoteCacheRef.current.get(selectedCode) ?? null
+      if (quote == null) {
+        quote = await fetchQuoteSnapshot(selectedCode)
+        if (quote != null) {
+          quoteCacheRef.current.set(selectedCode, quote)
+        }
+      }
+      if (!cancelled && quote != null) {
+        setFundQuote({ code: selectedCode, quote })
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [selectedCode])
+
+  // 回放末日基本面：振幅/换手率当日精确推算，市值/市盈/市净/均价按收盘比例回溯（见 replayFundamentalOf）；
+  // 随虚拟日推进（末日收盘变化）与换标的重算，注入图表信息表格
+  const activeFundQuote = fundQuote != null && fundQuote.code === selectedCode ? fundQuote.quote : null
+  const replayFund = useMemo<FundamentalData>(() => {
+    if (activeFundQuote == null) {
+      return {}
+    }
+    return replayFundamentalOf(activeFundQuote, replay.visibleBarsOf(selectedCode))
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- visibleBarsOf 读回放缓存，随 state/barsVersion 变化
+  }, [activeFundQuote, selectedCode, replay.state, replay.barsVersion])
+
+  useEffect(() => {
+    chart.setFundamental(replayFund)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- chart 方法逐渲染重建
+  }, [replayFund])
 
   // 展示层虚拟日结算（本地推导，不轮询）：本地时钟派生跨日时滚动 T+1 解冻与当日盈亏基准，
   // 价格取本地回放缓存（与服务端结算同一套纯函数）；账务权威仍在服务端——

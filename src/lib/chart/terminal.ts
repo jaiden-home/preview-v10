@@ -56,7 +56,7 @@ export interface ChartTerminalOptions {
   dark?: boolean
   /** 自定义数据加载器（极速模拟回放页注入；缺省走 BFF 实时加载器） */
   dataLoader?: DataLoader
-  /** 是否拉取真实行情快照补充基本面（回放页传 false，信息表格基本面显示 --） */
+  /** 是否拉取真实行情快照补充基本面（回放页传 false：不混入实时行情，基本面经 setFundamental 注入） */
   pollQuote?: boolean
   /** 信息表格数据变更（十字光标 / 数据刷新 / 基本面到达） */
   onInfoUpdate: (snapshot: InfoSnapshot) => void
@@ -175,6 +175,12 @@ export class ChartTerminal {
     if (this.options.pollQuote !== false) {
       void this.refreshQuote(symbol)
     }
+  }
+
+  /** 外部注入基本面并即时刷新信息表格（回放页：pollQuote=false 时由调用方按回放口径供给，如 replayFundamentalOf） */
+  setFundamental(data: FundamentalData): void {
+    this.latestFundamental = data
+    this.emitInfo()
   }
 
   private refreshQuote = async (symbol: { market: string; ticker: string }): Promise<void> => {

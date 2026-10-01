@@ -7,6 +7,8 @@
 // 全部为环境无关纯函数（服务端结算与客户端展示共用）；会话权威状态由 BFF 持久化，K 线数据不落盘。
 
 import type { KLineData } from 'klinecharts'
+import type { FundamentalData, QuoteSnapshot } from '../chart/types'
+import { isCnStarMarket } from '../chart/utils'
 import { dayKeyOf, type TradingAccount } from './account'
 
 /** 起始日前历史窗口根数（起始日前不足则拉全量） */
@@ -141,6 +143,48 @@ export const replayQuoteOf = (bars: KLineData[], dayIndex: number, calendar: str
 /** 图表可见日 K：起始日之前的历史 + 已完成的模拟日（升序） */
 export const visibleDailyBarsOf = (bars: KLineData[], dayIndex: number, calendar: string[]): KLineData[] =>
   bars.slice(0, lastIndexOf(bars, dayIndex, calendar) + 1)
+
+/**
+ * 回放末日基本面：信息表格（§3.6）在回放页缺失字段的补数口径。
+ * 回放 K 线只有量价，缺股本/财务数据 → 以**现时实时行情**为基准近似回溯
+ * （与信息表格悬停历史 K 线同一口径，见 fundamental.ts）：
+ * - 市盈/市净/市值/均价：按「回放末日收盘 / 现价」比例回溯（假设股本与财务数据不变）；
+ * - 振幅：回放末日 (高-低)/昨收，**当日精确**（昨收 = 前一根收盘，首根退回开盘）；
+ * - 换手率：末日成交量 / 流通股本（流通市值 / 现价），**当日精确**——量纲随板块：
+ *   主板/创业板/北交为「手」（×100 股），科创板为「股」（不乘）。
+ * bars 为空返回 {}；现价缺失（无法定标/推算流通股本）时仅振幅可得，其余缺数显示 --。
+ */
+export const replayFundamentalOf = (quote: QuoteSnapshot, bars: KLineData[]): FundamentalData => {
+  const last = bars[bars.length - 1]
+  if (last == null) {
+    return {}
+  }
+  const out: FundamentalData = {}
+  const prevClose = bars.length > 1 ? bars[bars.length - 2]!.close : last.open
+  if (prevClose > 0) {
+    out.amplitude = (Math.abs(last.high - last.low) / prevClose) * 100
+  }
+  const price = quote.price
+  if (price == null || price <= 0) {
+    return out
+  }
+  const fund = quote.fundamental
+  if (fund.floatMarketCap != null && fund.floatMarketCap > 0 && last.volume != null && last.volume > 0) {
+    const sharesPerUnit = isCnStarMarket(quote) ? 1 : 100
+    const floatShares = fund.floatMarketCap / price
+    out.turnoverRate = ((last.volume * sharesPerUnit) / floatShares) * 100
+  }
+  const ratio = last.close / price
+  const scale = (v?: number): number | undefined => (v != null ? v * ratio : undefined)
+  out.pe = scale(fund.pe)
+  out.peDynamic = scale(fund.peDynamic)
+  out.peStatic = scale(fund.peStatic)
+  out.pb = scale(fund.pb)
+  out.totalMarketCap = scale(fund.totalMarketCap)
+  out.floatMarketCap = scale(fund.floatMarketCap)
+  out.avgPrice = scale(fund.avgPrice)
+  return out
+}
 
 /**
  * 回放开局：真实日期（晚于虚拟起点）建仓的冻结仓位视为历史持仓，全部转为可卖——

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type RefObject } from 'react'
 import type { DataLoader, KLineData } from 'klinecharts'
 import { ChartTerminal, type InfoSnapshot } from '@/lib/chart/terminal'
 import { DEFAULT_PERIOD_KEY, type PeriodKey } from '@/lib/chart/constants'
-import type { QuoteSnapshot } from '@/lib/chart/types'
+import type { FundamentalData, QuoteSnapshot } from '@/lib/chart/types'
 import { readLocaleFromHash } from '@/lib/i18n'
 
 /** 当前是否深色主题：#app.dark 类是唯一事实源（客户端导航不重建根节点，主题类随 DOM 保留到下一页面） */
@@ -44,6 +44,8 @@ export function useChartTerminal(options: UseChartTerminalOptions) {
   const [mainIndicators, setMainIndicators] = useState<ReadonlySet<string>>(() => new Set(['MA']))
   const [subIndicators, setSubIndicators] = useState<ReadonlySet<string>>(() => new Set(['VOL', 'MACD']))
   const [activeTool, setActiveTool] = useState<string | null>(null)
+  /** 终端创建前到达的外部基本面（回放页），创建时补投，避免早到丢失 */
+  const pendingFundamentalRef = useRef<FundamentalData | null>(null)
 
   const enabled = options.enabled !== false
   const symbolKey = `${options.symbol.market}${options.symbol.ticker}`
@@ -79,6 +81,9 @@ export function useChartTerminal(options: UseChartTerminalOptions) {
     })
     terminalRef.current = terminal
     chartSymbolRef.current = `${symbol.market}${symbol.ticker}`
+    if (pendingFundamentalRef.current != null) {
+      terminal.setFundamental(pendingFundamentalRef.current)
+    }
     void terminal.init()
     // klinecharts 不自动跟随容器伸缩：容器盒尺寸变化（交易页首行随面板内容变化）时重算画布布局
     const resizeObserver = new ResizeObserver(() => terminal.resize())
@@ -105,6 +110,12 @@ export function useChartTerminal(options: UseChartTerminalOptions) {
   const setSymbol = (symbol: { market: string; ticker: string }) => {
     chartSymbolRef.current = `${symbol.market}${symbol.ticker}`
     terminalRef.current?.setSymbol(symbol)
+  }
+
+  /** 外部注入基本面（回放页按回放口径供给）；终端未就绪时暂存，创建后补投 */
+  const setFundamental = (data: FundamentalData) => {
+    pendingFundamentalRef.current = data
+    terminalRef.current?.setFundamental(data)
   }
 
   const toggleTheme = () => {
@@ -171,6 +182,7 @@ export function useChartTerminal(options: UseChartTerminalOptions) {
 
   return {
     setSymbol,
+    setFundamental,
     toggleTheme,
     periodKey,
     changePeriod,
