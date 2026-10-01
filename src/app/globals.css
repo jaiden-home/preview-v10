@@ -1268,6 +1268,7 @@ body {
 }
 
 #app .order-head {
+  position: relative;
   display: flex;
   flex-direction: row;
   align-items: center;
@@ -1277,21 +1278,36 @@ body {
   border-bottom: 1px dashed var(--chart-grid);
 }
 
+/* 行排：文字栈 + 可选收尾时钟徽记并排（v2.46）；min-width 链保证名称省略号生效 */
 #app .order-title {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* 标题文字栈（名称/代码纵排，v2.46 自 .order-title 拆出） */
+#app .order-title-text {
   display: flex;
   flex-direction: column;
   min-width: 0;
 }
 
+/* 名称与现价 Display-S 同尺寸（v2.47，左右双栈对称；行高 1.2 对齐 .order-price） */
 #app .order-name {
-  font-size: 13px;
+  font-size: 22px;
   font-weight: 600;
+  line-height: 1.2;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+/* 代码与涨跌 Secondary 同尺寸（股票代码 num 等宽，硬性约束 §3） */
 #app .order-code {
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
   font-size: 11px;
   color: var(--tb-text-sub);
 }
@@ -2296,76 +2312,81 @@ body {
 
 /* ---------------- 极速模拟页（/simtrade，UI_SPEC §3.13） ---------------- */
 
-/* 模拟时钟（单行仪表条）：左天数 + 右倒计时，底缘 2px 刻线 = 当日计时进度；
-   收尾 10 秒 .urgent 整条红色提醒（淡底 + 倒计时脉冲） */
-#app .sim-clock {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 6px 10px 8px;
-  overflow: hidden;
-  background-color: var(--tb-hover);
-  border-radius: var(--radius-sm);
-  transition: background-color 0.2s ease;
-}
-
-/* 左：第 x/N 个交易日（安静锚点） */
-#app .sim-day-meta {
-  font-size: 11px;
-  color: var(--tb-text-sub);
-}
-
-/* 底缘进度刻线：贴条底绝对定位（脱离 flex 流），宽度为数据驱动内联值（同涨跌色例外），禁过渡宽高 */
-#app .sim-progress {
+/* 模拟时钟融合 order-head（v2.46，独立 .sim-clock 时钟条删除）：
+   底缘基线虚线（1px dashed --chart-grid）即当日计时进度——覆盖层与基线同几何
+   （同为 1px dashed、自左对齐），按进度自左逐点点亮（红 --up，A 股语义），
+   idle 视觉与基线完全一致；
+   收尾 10 秒（URGENT_SECONDS）背景单次闪烁 + 标题旁圆形倒计时环徽记 */
+#app .sim-head-progress {
   position: absolute;
   left: 0;
-  right: 0;
   bottom: 0;
-  height: 2px;
-  background-color: var(--tb-border);
+  height: 0;
+  /* 点亮色虚线：与 order-head 基线同周期对齐，宽度为数据驱动内联值（禁过渡宽高） */
+  border-bottom: 1px dashed var(--up);
+  pointer-events: none;
 }
 
-#app .sim-progress-fill {
-  display: block;
-  height: 100%;
-  background-color: var(--tb-active);
-  transition: background-color 0.2s ease;
+/* 收尾 10 秒：背景闪一下（进入区间触发一次，日推进重置后可再现） */
+#app .order-head.urgent {
+  animation: klinecharts-sim-flash 0.8s ease-out;
 }
 
-/* 右：倒计时/状态文案 */
-#app .sim-countdown {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--tb-text);
-  white-space: nowrap;
-  transition: color 0.2s ease;
-}
+@keyframes klinecharts-sim-flash {
+  0% {
+    background-color: transparent;
+  }
 
-/* 收尾 10 秒：整条点火（淡红底 + 红 字/刻线 + 倒计时脉冲） */
-#app .sim-clock.urgent {
-  background-color: var(--up-bg);
-}
+  20% {
+    background-color: var(--up-bg);
+  }
 
-#app .sim-clock.urgent .sim-progress-fill {
-  background-color: var(--up);
-}
-
-#app .sim-clock.urgent .sim-countdown {
-  color: var(--up);
-  animation: klinecharts-sim-urgent 1s ease-in-out infinite;
-}
-
-@keyframes klinecharts-sim-urgent {
-  0%,
   100% {
-    opacity: 1;
+    background-color: transparent;
   }
+}
 
-  50% {
-    opacity: 0.35;
-  }
+/* 圆形倒计时环徽记（红色，随 .order-title 并排）：轨道环低透明度衬底 +
+   倒计时弧自 12 点起随剩余秒数收缩（dashoffset 为数据驱动内联值，禁过渡）
+   + 环心剩余秒数；日推进/暂停即随卸载消失（弧无动画，reduced-motion 无需降级） */
+#app .sim-clock-badge {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  color: var(--up);
+}
+
+#app .sim-clock-badge svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* 轨道环：同色低透明度（令色相随主题，仅降存在感） */
+#app .sim-count-track {
+  opacity: 0.25;
+}
+
+/* 倒计时弧：顺时针收缩（起点随秒数顺时针推进、止于 12 点；旋转 -90° 将收尾锚到 12 点） */
+#app .sim-count-arc {
+  transform: rotate(-90deg);
+  transform-origin: 12px 12px;
+}
+
+/* 环心剩余秒数：绝对居中于环内（Micro 级 num 等宽，与徽记同色） */
+#app .sim-count-num {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
 }
 
 /* 本局结算：遮罩 + 弹窗（层序：遮罩 1090 / 弹层 1100 < 结算 1150 < Toast 1200） */

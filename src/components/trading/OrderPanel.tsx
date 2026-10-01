@@ -13,6 +13,7 @@ import {
   type TradeSide,
   type TradingAccount
 } from '@/lib/trading/account'
+import type { ReplayState } from '@/lib/trading/replay'
 
 interface OrderPanelProps {
   t: Translate
@@ -22,10 +23,35 @@ interface OrderPanelProps {
   quote: QuoteSnapshot | null
   account: TradingAccount
   onSubmit: (side: TradeSide, price: number, qty: number) => void
+  /** 回放会话（仅 /simtrade 传入；缺省 = /trade 实时模式，order-head 不渲染模拟时钟） */
+  simState?: ReplayState | null
+  /** 距下一交易日的计时进度 0..1（暂停/结束为 0） */
+  simProgress?: number
 }
 
-/** 买/卖委托面板：现价跟随、整手快捷仓位、费用预估；校验与成交在父组件完成 */
-export default function OrderPanel({ t, side, onSideChange, code, quote, account, onSubmit }: OrderPanelProps) {
+/** 收尾倒计时阈值（秒）：进入区间 order-head 背景闪一下 + 标题旁出现圆形倒计时环徽记 */
+const URGENT_SECONDS = 10
+
+/** 倒计时环周长（r = 8.5）：dasharray 基数，dashoffset 随剩余秒数递减 */
+const RING_C = 2 * Math.PI * 8.5
+
+/**
+ * 买/卖委托面板：现价跟随、整手快捷仓位、费用预估；校验与成交在父组件完成。
+ * /simtrade 传入 simState/simProgress 时模拟时钟融合 order-head（UI_SPEC §3.13）：
+ * 底缘基线虚线即当日计时进度（覆盖层同几何虚线自左逐点亮起），收尾 10 秒
+ * 背景单次闪烁 + 标题旁圆形倒计时环徽记（弧随剩余秒数收缩），日推进即消失。
+ */
+export default function OrderPanel({
+  t,
+  side,
+  onSideChange,
+  code,
+  quote,
+  account,
+  onSubmit,
+  simState = null,
+  simProgress = 0
+}: OrderPanelProps) {
   const [price, setPrice] = useState('')
   const [qty, setQty] = useState('')
   // 是否手动改过价：未改过时价格持续跟随现价
@@ -73,6 +99,13 @@ export default function OrderPanel({ t, side, onSideChange, code, quote, account
   const limitDownText = limits == null ? '--' : limits.lower.toFixed(2)
   const availText = side === 'buy' ? `${buyMax}` : `${availableQty}/${position?.qty ?? 0}`
 
+  // 融合时钟派生（/simtrade）：进度点亮段宽度 + 收尾倒计时
+  const simRunning = simState?.status === 'running'
+  const simClamped = Math.min(1, Math.max(0, simProgress))
+  const simPct = Math.round(simClamped * 100)
+  const remainSec = simState != null ? Math.max(0, Math.ceil(((1 - simClamped) * simState.speedMs) / 1000)) : 0
+  const urgent = simRunning === true && remainSec <= URGENT_SECONDS
+
   // 快捷仓位（买卖同款 1/n 仓）：按最大可买/可卖取整手；
   // 全仓买入 = 最大可买（整手），全仓卖出 = 全部可卖（可含零股）
   const applyFraction = (frac: number) => {
@@ -94,10 +127,39 @@ export default function OrderPanel({ t, side, onSideChange, code, quote, account
 
   return (
     <div className="order-body">
-      <header className="order-head">
+      <header className={`order-head${urgent ? ' urgent' : ''}`}>
         <div className="order-title">
-          <span className="order-name">{quote?.name ?? code}</span>
-          <span className="order-code">{code}</span>
+          <div className="order-title-text">
+            <span className="order-name">{quote?.name ?? code}</span>
+            <span className="order-code">{code}</span>
+          </div>
+          {/* 收尾 10 秒：随标题并排的圆形倒计时环（弧随剩余秒数收缩、环心剩余秒数，日推进/暂停即卸载消失） */}
+          {urgent && (
+            <span
+              className="sim-clock-badge"
+              role="timer"
+              aria-label={t(`距下一交易日 ${remainSec} 秒|${remainSec}s to next trading day`)}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                {/* 轨道环（低透明度衬底） */}
+                <circle className="sim-count-track" cx="12" cy="12" r="8.5" />
+                {/* 倒计时弧：顺时针收缩（起点随秒数顺时针推进、止于 12 点），负 dashoffset 数据驱动内联值 */}
+                <circle
+                  className="sim-count-arc"
+                  cx="12"
+                  cy="12"
+                  r="8.5"
+                  strokeDasharray={RING_C}
+                  strokeDashoffset={-RING_C * (1 - remainSec / URGENT_SECONDS)}
+                  strokeLinecap="round"
+                />
+              </svg>
+              {/* 环心剩余秒数（aria 信息已由徽记 label 承载） */}
+              <span className="sim-count-num" aria-hidden="true">
+                {remainSec}
+              </span>
+            </span>
+          )}
         </div>
         {livePrice != null && (
           <div className="order-quote">
@@ -110,6 +172,18 @@ export default function OrderPanel({ t, side, onSideChange, code, quote, account
               </span>
             )}
           </div>
+        )}
+        {/* 融合时钟进度：与基线同几何的虚线覆盖层自左逐点亮起（宽度为数据驱动内联值，禁过渡宽高） */}
+        {simRunning && (
+          <span
+            className="sim-head-progress"
+            role="progressbar"
+            aria-label={t('当前交易日进度|Current trading day progress')}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={simPct}
+            style={{ width: `${simPct}%` }}
+          />
         )}
       </header>
 

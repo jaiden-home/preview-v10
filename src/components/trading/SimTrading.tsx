@@ -11,7 +11,6 @@ import { useChartTerminal } from '@/components/terminal/useChartTerminal'
 import { createReplayFeed } from '@/lib/chart/replay-loader'
 import type { InfoSnapshot } from '@/lib/chart/terminal'
 import type { QuoteSnapshot } from '@/lib/chart/types'
-import SimClockBar from '@/components/simtrade/SimClockBar'
 import { useReplay } from '@/components/simtrade/useReplay'
 import { releaseAllFrozen } from '@/lib/trading/replay'
 import { postSimOrder } from '@/lib/trading/sim-api'
@@ -322,9 +321,8 @@ export default function SimTrading() {
               {/* klinecharts 画布容器（客户端初始化，不参与 SSR）：回放数据 */}
               <div className="trade-chart-body" ref={chartContainerRef} />
             </section>
-            {/* 委托面板：桌面为右列单卡三段式（时钟 → 行情 → 交易 → 资产）；
-               setup 阶段时钟条承载开局，委托表单以起始日前收盘预览（提交提示先开始）；
-               移动端转悬浮交易坞（收合仅露坞条）+ 底部弹层（§3.11） */}
+            {/* 委托面板：桌面为右列单卡（行情头 order-head 融合模拟时钟（v2.46）→ 交易 → 资产）；
+               移动端转悬浮交易坞（收合仅露坞条）+ 底部弹层（§3.11），order-head 含时钟一并隐藏 */}
             <section
               id="trade-order-panel"
               className={`trade-card trade-panel${panelOpen ? ' open' : ''}`}
@@ -367,7 +365,6 @@ export default function SimTrading() {
                 )}
               </button>
               <div className="trade-panel-body">
-                <SimClockBar t={t} state={simState} progress={replay.progress} />
                 <OrderPanel
                   t={t}
                   side={side}
@@ -376,6 +373,8 @@ export default function SimTrading() {
                   quote={syntheticQuotes[selectedCode] ?? null}
                   account={account}
                   onSubmit={handleSubmit}
+                  simState={simState}
+                  simProgress={replay.progress}
                 />
                 <TradeSummary t={t} account={account} equity={equity} />
               </div>
