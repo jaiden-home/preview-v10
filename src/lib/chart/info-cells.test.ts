@@ -46,7 +46,7 @@ describe('信息表格数据', () => {
     )!
     expect(cells).toHaveLength(16)
     const labels = cells.map((c) => c.label)
-    expect(labels.slice(0, 8)).toEqual(['时间', '今价', '今开', '最高', '最低', '均价', '涨跌', '振幅'])
+    expect(labels.slice(0, 8)).toEqual(['时间', '今收', '今开', '最高', '最低', '均价', '涨跌', '振幅'])
     expect(labels.slice(8)).toEqual(['换手率', '成交量', '总市值', '流通市值', '市盈', '市盈动', '市盈静', '市净率'])
     // 上涨：行情行红涨色，时间中性
     expect(cells[0].color).toBe('var(--tb-text)')

@@ -38,7 +38,7 @@ const formatBarTime = (timestamp: number, intraday: boolean): string => {
 /**
  * 信息表格数据（K线行情 + 基本面混排，随十字光标联动）。
  * 统一布局：PC 端 8 列 2 行 / 移动端 4 列 4 行
- * 行1：时间 今价 今开 最高 最低 均价 涨跌 振幅
+ * 行1：时间 今收 今开 最高 最低 均价 涨跌 振幅
  * 行2：换手率 成交量 总市值 流通市值 市盈 市盈动 市盈静 市净率
  * 返回 null 表示暂无数据（渲染加载占位）。
  */
@@ -83,7 +83,7 @@ export const buildInfoCells = (source: InfoSnapshotSource, locale: Locale): Info
       cellClass: 'cell-time'
     },
     open: { label: t('今开|Open'), value: fixed(open) },
-    close: { label: t('今价|Close'), value: fixed(current.close) },
+    close: { label: t('今收|Close'), value: fixed(current.close) },
     high: { label: t('最高|High'), value: fixed(high) },
     low: { label: t('最低|Low'), value: fixed(low) },
     chg: { label: t('涨跌|Chg'), value: `${sign}${fixed(change)} (${sign}${fixed(pct)}%)` },
