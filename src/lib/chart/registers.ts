@@ -103,7 +103,7 @@ export const setupChartRegisters = async (locale: Locale): Promise<void> => {
     name: 'MA',
     shortName: 'MA',
     series: 'price',
-    calcParams: [5, 10, 30, 60],
+    calcParams: [3, 5, 10, 30, 60],
     precision: 2,
     shouldOhlc: true,
     regenerateFigures: (params) =>
