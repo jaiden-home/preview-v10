@@ -2272,10 +2272,14 @@ body {
     margin-left: auto;
   }
 
-  /* 移动端进度条用实线（1px solid --up，小屏点状虚线不清晰）：点亮段实线完全遮住
-     底缘虚线基线，视觉 = 左实线红 / 右虚线灰；桌面 order-head 仍为同几何虚线 */
+  /* 移动端进度条加粗为 3px 实线 --up（1px 在小屏过细）：由 border 画法改实高块，
+     bottom:-1 连同底缘 1px 虚线基线一并盖住，视觉 = 左 3px 实线红 / 右 1px 虚线灰；
+     桌面 order-head 仍为同几何 1px 虚线 */
   #app .trade-dock-bar.sim .sim-head-progress {
-    border-bottom-style: solid;
+    bottom: -1px;
+    height: 3px;
+    border-bottom: none;
+    background-color: var(--up);
   }
 
   #app .trade-dock-bar.sim.urgent {
