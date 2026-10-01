@@ -1,6 +1,7 @@
 import type { AxisCreateRangeCallback, AxisCreateTicksCallback, AxisTick, KLineData } from 'klinecharts'
 import type { Locale } from '../i18n'
 import { PERCENT_Y_AXIS_NAME } from './constants'
+import { shadowStubRects } from './min-shadow'
 import { calcTimeShareAvg, percentOfPrevClose, priceOfPercent, timeShareState, type TimeShareDatum } from './timeshare'
 
 /**
@@ -55,6 +56,42 @@ export const setupChartRegisters = async (locale: Locale): Promise<void> => {
       ctx.moveTo(bounding.left, y)
       ctx.lineTo(bounding.right, y)
       ctx.stroke()
+      ctx.restore()
+      return false
+    }
+  })
+
+  // 亚像素影线补画（挂主图）：真实影线像素长度不足时从实体边缘向外补一段最小可见竖线，
+  // 「有价差就至少看得见 1px」。仅 K 线模式存在（分时切换由 ChartTerminal 移除/重建），
+  // 不出图例不出 tooltip（见 createTooltipDataSource 空图例，与 MA 覆盖一致）
+  registerIndicator<Record<string, never>>({
+    name: 'MIN_SHADOW',
+    shortName: '',
+    series: 'price',
+    calcParams: [],
+    figures: [],
+    calc: (dataList: KLineData[]) => dataList.map(() => ({})),
+    createTooltipDataSource: () => ({
+      name: '',
+      calcParamsText: '',
+      features: [],
+      legends: []
+    }),
+    draw: ({ ctx, chart, xAxis, yAxis }) => {
+      const dataList = chart.getDataList()
+      const { from, to } = chart.getVisibleRange()
+      ctx.save()
+      for (let i = from; i < to; i++) {
+        const bar = dataList[i]
+        if (bar == null) {
+          continue
+        }
+        const x = xAxis.convertTimestampToPixel(bar.timestamp)
+        for (const rect of shadowStubRects(bar, (price) => yAxis.convertToPixel(price), x)) {
+          ctx.fillStyle = rect.color
+          ctx.fillRect(rect.x, rect.y, rect.width, rect.height)
+        }
+      }
       ctx.restore()
       return false
     }

@@ -136,6 +136,8 @@ export class ChartTerminal {
     this.applyTooltipStyles()
     this.syncAxisCompactness(true)
     chart.createIndicator({ name: 'MA', paneId: 'candle_pane' }, true)
+    // 亚像素影线补画：K 线模式常驻（分时进入时移除、退出时重建）
+    chart.createIndicator({ name: 'MIN_SHADOW', paneId: 'candle_pane' }, true)
     chart.createIndicator({ name: 'VOL' })
     chart.createIndicator({ name: 'MACD' })
     chart.setPeriod({ span: 1, type: 'day' })
@@ -482,6 +484,8 @@ export class ChartTerminal {
       return
     }
     chart.removeIndicator({ name: 'MA', paneId: 'candle_pane' })
+    // 分时是面积线图，蜡烛影线补画不再适用
+    chart.removeIndicator({ name: 'MIN_SHADOW', paneId: 'candle_pane' })
     chart.createIndicator({ name: 'TIME', paneId: 'candle_pane' }, true)
     // 跨交易日重载时形态已就位，避免重复创建百分比轴
     if (this.percentAxisId == null) {
@@ -548,6 +552,7 @@ export class ChartTerminal {
     // 最新价标线在分时下被置为「vs 昨收」单色，退出时恢复 K 线红涨绿跌语义
     this.applyCnColorScheme()
     this.chart?.createIndicator({ name: 'MA', paneId: 'candle_pane' }, true)
+    this.chart?.createIndicator({ name: 'MIN_SHADOW', paneId: 'candle_pane' }, true)
     if (nextPeriod != null) {
       this.chart?.setPeriod(nextPeriod)
     }
