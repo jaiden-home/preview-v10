@@ -44,8 +44,8 @@ interface TradeNotice {
  * 极速模拟页（/simtrade）：虚拟时钟 + 历史 K 线回放（UI_SPEC §3.13）。
  * 日原子模型：进入页面即以固定区间（AUTO_START_DATE ~ AUTO_END_DATE，2024-01-01 ~ 2025-01-01）
  * 自动开局并立即起走，每过倍速时长推进下一交易日，走满即本局结束；
- * 重开一局 = 清账后按同区间重新自动开局。**暂停/继续不在本页**——收敛至
- * /admin/simtrade 模拟设置页的开始暂停开关（§3.14）。
+ * 重置账户 / 重开一局不在本页（连同暂停/继续）——收敛至
+ * /admin/simtrade 模拟设置页（§3.14：开始暂停开关 + 重置账户按钮）。
  * **交易账务（账户/持仓/成交/回放会话/虚拟时钟）全部由 BFF 权威结算（node:sqlite 持久化）**：
  * 本组件只做展示与请求——下单走 /api/sim/orders，会话控制走 /api/sim/session；
  * running 期间虚拟日推进由本地时钟派生（回放数据不可变，无需轮询），
@@ -237,7 +237,7 @@ export default function SimTrading() {
         kind: 'err',
         text:
           simState.status === 'ended'
-            ? t('本局已结束，点「再来一局」重开|Session ended, press Play again to restart')
+            ? t('本局已结束，请到「模拟设置」重开|Session ended; restart it in Simulation Settings')
             : t('已暂停，请到「模拟设置」开启后下单|Paused; enable it in Simulation Settings to trade')
       })
       return
@@ -264,25 +264,6 @@ export default function SimTrading() {
       kind: 'ok',
       text: `${orderSide === 'buy' ? t('买入|Buy') : t('卖出|Sell')} ${selectedCode} ${qty}${t('股|shares')} @ ${price.toFixed(2)} ${t('已成交|filled')}`
     })
-  }
-
-  /** 重开一局：服务端清账，boot 按固定区间（AUTO_START_DATE ~ AUTO_END_DATE）重新自动开局（暂停态） */
-  const handleReset = async () => {
-    if (
-      !window.confirm(
-        t(
-          '确定重开一局？将清空全部持仓、记录与本局进度。|Restart the session? All positions, records and replay progress will be cleared.'
-        )
-      )
-    ) {
-      return
-    }
-    const ok = await replay.restart()
-    if (!ok) {
-      setNotice({ kind: 'err', text: t('重开失败，请稍候重试|Restart failed, please retry') })
-      return
-    }
-    setNotice({ kind: 'ok', text: t('已重开一局|Session restarted') })
   }
 
   return (
@@ -386,7 +367,7 @@ export default function SimTrading() {
                 )}
               </button>
               <div className="trade-panel-body">
-                <SimClockBar t={t} state={simState} calendar={replay.calendar} progress={replay.progress} />
+                <SimClockBar t={t} state={simState} progress={replay.progress} />
                 <OrderPanel
                   t={t}
                   side={side}
@@ -396,7 +377,7 @@ export default function SimTrading() {
                   account={account}
                   onSubmit={handleSubmit}
                 />
-                <TradeSummary t={t} account={account} equity={equity} onReset={handleReset} />
+                <TradeSummary t={t} account={account} equity={equity} />
               </div>
             </section>
             <section className="trade-card trade-records">
@@ -455,9 +436,10 @@ export default function SimTrading() {
                 <span className="sim-settle-value num">{account.trades.length}</span>
               </span>
             </div>
-            <button type="button" className="sim-settle-btn" onClick={handleReset}>
-              {t('再来一局|Play again')}
-            </button>
+            {/* 重开/重置收敛至模拟设置页（v2.45）：链接跳转，设置页「保存并开局」清账重开 */}
+            <Link className="sim-settle-btn" href="/admin/simtrade">
+              {t('重开一局（模拟设置）|Restart in Simulation Settings')}
+            </Link>
           </div>
         </div>
       )}

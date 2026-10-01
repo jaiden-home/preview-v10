@@ -170,7 +170,7 @@ export default function HomeLanding() {
             </span>
             <span className="home-card-title">{t('模拟设置|Simulation Settings')}</span>
             <span className="home-card-desc">
-              {t('模拟标的、区间、倍速与开始暂停|Symbol, date range, speed and run control')}
+              {t('模拟标的、区间、倍速、开始暂停与重置|Symbol, date range, speed, run and reset control')}
             </span>
           </Link>
         </nav>

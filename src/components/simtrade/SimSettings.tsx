@@ -12,10 +12,10 @@ import { advanceSessionBy, type SimSessionAction, type SimState } from '@/lib/tr
 import {
   AUTO_END_DATE,
   AUTO_START_DATE,
-  REPLAY_SPEED_MULTIPLIERS,
+  REPLAY_SPEED_MS,
+  REPLAY_SPEED_PRESETS_MS,
   dateKeyOfBar,
-  multiplierOf,
-  speedMsOf
+  nearestSpeedPresetMs
 } from '@/lib/trading/replay'
 import { fetchSimState, postSimSession } from '@/lib/trading/sim-api'
 
@@ -38,7 +38,7 @@ const endDayOf = (state: SimState): string | null => {
 }
 
 /**
- * 模拟设置页（/admin/simtrade，UI_SPEC §3.14）：标的 / 起止日期 / 倍速 / 开始暂停开关。
+ * 模拟设置页（/admin/simtrade，UI_SPEC §3.14）：标的 / 起止日期 / 倍速 / 开始暂停开关 / 重置账户。
  * 服务端权威：无会话 boot 的自动开局仍用固定默认区间；本页改动即显式重开局——
  * 仅倍速变化走 speed 热切换（保留当前日进度不清账），标的/区间变化 = restart + start 清账重开。
  */
@@ -55,7 +55,7 @@ export default function SimSettings() {
   const [name, setName] = useState<string | null>(DEFAULT_NAME)
   const [startDate, setStartDate] = useState(AUTO_START_DATE)
   const [endDate, setEndDate] = useState(AUTO_END_DATE)
-  const [multiplier, setMultiplier] = useState<number>(1)
+  const [speedMs, setSpeedMs] = useState<number>(REPLAY_SPEED_MS)
 
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<TradeNotice | null>(null)
@@ -101,7 +101,7 @@ export default function SimSettings() {
       setName(state.replay?.name ?? (session == null ? DEFAULT_NAME : null))
       setStartDate(session?.startDate ?? AUTO_START_DATE)
       setEndDate(session != null ? (endDayOf(state) ?? '') : AUTO_END_DATE)
-      setMultiplier(session != null ? multiplierOf(session.speedMs) : 1)
+      setSpeedMs(session != null ? nearestSpeedPresetMs(session.speedMs) : REPLAY_SPEED_MS)
     }
     void load()
     return () => {
@@ -149,7 +149,7 @@ export default function SimSettings() {
   const sessionEndDay = snapshot != null ? endDayOf(snapshot.state) : null
   const view = snapshot?.state.replay
 
-  const nextSpeedMs = speedMsOf(multiplier)
+  const nextSpeedMs = speedMs
   /** 区间未变（标的 + 起始日 + 结束日对齐；倍速另算） */
   const windowSame =
     simState != null &&
@@ -187,7 +187,7 @@ export default function SimSettings() {
     setCode(session.anchorCode)
     setName(state.replay?.name ?? null)
     setStartDate(session.startDate)
-    setMultiplier(multiplierOf(session.speedMs))
+    setSpeedMs(nearestSpeedPresetMs(session.speedMs))
     setEndDate(endDayOf(state) ?? '')
   }
 
@@ -205,6 +205,33 @@ export default function SimSettings() {
       text: res != null && !res.ok ? res.message : t('操作失败，请稍候重试|Action failed, please retry')
     })
     return false
+  }
+
+  /** restart + start 清账重开（「应用并重开」「保存并开局」「重置账户」共用核心；响应即校准表单） */
+  const restartSession = async (startRunning: boolean, okText: string): Promise<void> => {
+    const restartRes = await postSimSession({ action: 'restart' })
+    const startRes =
+      restartRes != null
+        ? await postSimSession({
+            action: 'start',
+            anchorCode: code,
+            startDate,
+            endDate: endDate || undefined,
+            speedMs: nextSpeedMs,
+            paused: !startRunning
+          })
+        : null
+    if (startRes != null && startRes.ok && startRes.state.session != null) {
+      adopt(startRes.state)
+      syncForm(startRes.state)
+      setNotice({ kind: 'ok', text: okText })
+    } else {
+      setNotice({
+        kind: 'err',
+        text: startRes != null && !startRes.ok ? startRes.message : t('保存失败，请稍候重试|Save failed, please retry')
+      })
+      setReloadId((v) => v + 1)
+    }
   }
 
   /** 保存设置核心（不包 busy，供按钮与开关复用）：仅倍速 = speed 热切换；否则 restart + start 清账重开 */
@@ -228,35 +255,31 @@ export default function SimSettings() {
     ) {
       return
     }
-    const restartRes = await postSimSession({ action: 'restart' })
-    const startRes =
-      restartRes != null
-        ? await postSimSession({
-            action: 'start',
-            anchorCode: code,
-            startDate,
-            endDate: endDate || undefined,
-            speedMs: nextSpeedMs,
-            paused: !startRunning
-          })
-        : null
-    if (startRes != null && startRes.ok && startRes.state.session != null) {
-      adopt(startRes.state)
-      syncForm(startRes.state)
-      setNotice({
-        kind: 'ok',
-        text: startRunning
-          ? t('已按新设置开局|Started with new settings')
-          : t('设置已保存，点开关开始模拟|Settings saved; toggle to start')
-      })
-    } else {
-      setNotice({
-        kind: 'err',
-        text: startRes != null && !startRes.ok ? startRes.message : t('保存失败，请稍候重试|Save failed, please retry')
-      })
-      setReloadId((v) => v + 1)
-    }
+    await restartSession(
+      startRunning,
+      startRunning
+        ? t('已按新设置开局|Started with new settings')
+        : t('设置已保存，点开关开始模拟|Settings saved; toggle to start')
+    )
   }
+
+  /** 重置账户：不论参数是否变化恒清账重开（自 /simtrade 账户摘要移入） */
+  const handleResetAccount = () =>
+    withBusy(async () => {
+      if (!startEndValid) {
+        return
+      }
+      if (
+        !window.confirm(
+          t(
+            '确定重置账户？将清空全部持仓、成交记录与本局进度。|Reset the account? All positions, trades and replay progress will be cleared.'
+          )
+        )
+      ) {
+        return
+      }
+      await restartSession(true, t('账户已重置|Account reset'))
+    })
 
   /** 开始/暂停开关：开 = 恢复或按当前设置开局（倍速变化先热切）；关 = 暂停 */
   const handleToggleRun = (next: boolean): Promise<void> =>
@@ -315,7 +338,8 @@ export default function SimSettings() {
     window.setTimeout(() => root?.classList.remove('theme-switching'), 50)
   }
 
-  const sessionSpeedText = simState != null ? `${multiplierOf(simState.speedMs)}x` : '--'
+  const sessionSpeedSec = simState != null ? Math.round(simState.speedMs / 1000) : null
+  const sessionSpeedText = sessionSpeedSec != null ? t(`${sessionSpeedSec}秒|${sessionSpeedSec}s`) : '--'
 
   return (
     <div className="sim-settings-page">
@@ -441,21 +465,22 @@ export default function SimSettings() {
               <div className="sim-field">
                 <span className="sim-field-label">{t('模拟倍速|Replay speed')}</span>
                 <div className="period-group sim-speed-group" role="group" aria-label={t('模拟倍速|Replay speed')}>
-                  {REPLAY_SPEED_MULTIPLIERS.map((m) => (
-                    <button
-                      key={m}
-                      type="button"
-                      className={`tb-btn${multiplier === m ? ' active' : ''}`}
-                      onClick={() => setMultiplier(m)}
-                    >
-                      {m}x
-                    </button>
-                  ))}
+                  {REPLAY_SPEED_PRESETS_MS.map((presetMs) => {
+                    const sec = presetMs / 1000
+                    return (
+                      <button
+                        key={presetMs}
+                        type="button"
+                        className={`tb-btn${speedMs === presetMs ? ' active' : ''}`}
+                        onClick={() => setSpeedMs(presetMs)}
+                      >
+                        {t(`${sec}秒|${sec}s`)}
+                      </button>
+                    )
+                  })}
                 </div>
                 <span className="sim-set-hint num">
-                  {t(
-                    `当前：每交易日 ${speedSec} 秒（${multiplier}x）|Current: ${speedSec}s per trading day (${multiplier}x)`
-                  )}
+                  {t(`当前：每交易日 ${speedSec} 秒|Current: ${speedSec}s per trading day`)}
                 </span>
               </div>
 
@@ -532,6 +557,14 @@ export default function SimSettings() {
                   </span>
                 </button>
               </div>
+              <button
+                type="button"
+                className="sim-reset-btn"
+                onClick={handleResetAccount}
+                disabled={busy || loadError || !startEndValid}
+              >
+                {t('重置账户|Reset account')}
+              </button>
             </section>
           </div>
         </div>

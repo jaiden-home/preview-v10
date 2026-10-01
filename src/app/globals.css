@@ -2296,86 +2296,76 @@ body {
 
 /* ---------------- 极速模拟页（/simtrade，UI_SPEC §3.13） ---------------- */
 
-/* 模拟时钟（两行控制卡）：淡底整带（复用 .order-estimate 容器语言），置于委托面板首段 */
+/* 模拟时钟（单行仪表条）：左天数 + 右倒计时，底缘 2px 刻线 = 当日计时进度；
+   收尾 10 秒 .urgent 整条红色提醒（淡底 + 倒计时脉冲） */
 #app .sim-clock {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 10px 12px;
-  background-color: var(--tb-hover);
-  border-radius: var(--radius-md);
-}
-
-/* 行 1：时间锚点 + 主操作（窄屏允许换行） */
-#app .sim-clock-head {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  flex-wrap: wrap;
+  padding: 6px 10px 8px;
+  overflow: hidden;
+  background-color: var(--tb-hover);
+  border-radius: var(--radius-sm);
+  transition: background-color 0.2s ease;
 }
 
-/* live：虚拟日期大字（Display-S 级，与 .summary-total 同范式）+ 第 x/N 天 */
-#app .sim-clock-day {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
-#app .sim-day-value {
-  font-family: var(--font-num);
-  font-variant-numeric: tabular-nums;
-  font-size: 22px;
-  font-weight: 700;
-  line-height: 1.2;
-  color: var(--tb-text);
-}
-
+/* 左：第 x/N 个交易日（安静锚点） */
 #app .sim-day-meta {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--tb-text-sub);
 }
 
-/* 行 2：整行计时进度 + 倒计时文案；
-   进度条宽度为数据驱动内联值（同涨跌色例外），禁过渡宽高 */
-#app .sim-clock-track {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
+/* 底缘进度刻线：贴条底绝对定位（脱离 flex 流），宽度为数据驱动内联值（同涨跌色例外），禁过渡宽高 */
 #app .sim-progress {
-  flex: 1;
-  min-width: 40px;
-  height: 6px;
-  overflow: hidden;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
   background-color: var(--tb-border);
-  border-radius: 999px;
 }
 
 #app .sim-progress-fill {
   display: block;
   height: 100%;
   background-color: var(--tb-active);
+  transition: background-color 0.2s ease;
 }
 
+/* 右：倒计时/状态文案 */
 #app .sim-countdown {
-  font-size: 10px;
-  color: var(--tb-text-sub);
-  white-space: nowrap;
-}
-
-/* 已结束胶囊（结算卡另由 .sim-settle 承载；暂停/继续开关随功能收敛至模拟设置页移除） */
-#app .sim-ended-tag {
-  padding: 4px 10px;
   font-size: 11px;
   font-weight: 600;
-  color: var(--tb-text-sub);
+  color: var(--tb-text);
   white-space: nowrap;
-  background-color: var(--tb-bg);
-  border: 1px solid var(--tb-border);
-  border-radius: 999px;
+  transition: color 0.2s ease;
+}
+
+/* 收尾 10 秒：整条点火（淡红底 + 红 字/刻线 + 倒计时脉冲） */
+#app .sim-clock.urgent {
+  background-color: var(--up-bg);
+}
+
+#app .sim-clock.urgent .sim-progress-fill {
+  background-color: var(--up);
+}
+
+#app .sim-clock.urgent .sim-countdown {
+  color: var(--up);
+  animation: klinecharts-sim-urgent 1s ease-in-out infinite;
+}
+
+@keyframes klinecharts-sim-urgent {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.35;
+  }
 }
 
 /* 本局结算：遮罩 + 弹窗（层序：遮罩 1090 / 弹层 1100 < 结算 1150 < Toast 1200） */
@@ -2433,10 +2423,14 @@ body {
 }
 
 #app .sim-settle-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   height: 36px;
   font-size: 14px;
   font-weight: 700;
   color: var(--on-solid);
+  text-decoration: none;
   background-color: var(--tb-active);
   border: none;
   border-radius: var(--radius-md);
@@ -2736,6 +2730,30 @@ body {
 
 #app .sim-run-switch.on .sim-run-knob {
   transform: translateX(20px);
+}
+
+/* 重置账户：破坏性动作，红描边次级按钮（40px，§5；清账重开，自 /simtrade 账户摘要移入） */
+#app .sim-reset-btn {
+  height: 40px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--up);
+  background-color: transparent;
+  border: 1px solid var(--up);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition:
+    background-color 0.2s ease,
+    filter 0.2s ease;
+}
+
+#app .sim-reset-btn:hover:not(:disabled) {
+  background-color: var(--up-bg);
+}
+
+#app .sim-reset-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 @media (max-width: 768px) {

@@ -35,14 +35,14 @@ export const simOrderSchema = z.object({
   name: z.string().trim().max(20).optional()
 })
 
-/** 每交易日真实毫秒（倍速 = REPLAY_SPEED_MS / 档位；1s~60s 整数护栏，档位由前端换算） */
+/** 每交易日真实毫秒（倍速档位见 REPLAY_SPEED_PRESETS_MS；1s~60s 整数护栏） */
 const speedMsField = z
   .number()
   .int()
   .min(1_000, 'speedMs must be 1000-60000ms')
   .max(60_000, 'speedMs must be 1000-60000ms')
 
-/** 模拟交易会话控制（/api/sim/session）：start 可带 speedMs（倍速档位换算），speed 会话内热切换 */
+/** 模拟交易会话控制（/api/sim/session）：start 可带 speedMs（倍速档位），speed 会话内热切换 */
 export const simSessionSchema = z.discriminatedUnion('action', [
   z.object({
     action: z.literal('start'),

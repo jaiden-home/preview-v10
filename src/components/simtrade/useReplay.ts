@@ -49,8 +49,6 @@ export interface UseReplayResult {
   visibleBarsOf: (code: string) => KLineData[]
   /** 标的名称（随视图由服务端带回；无则 null，调用方回退代码） */
   nameOf: (code: string) => string | null
-  /** 重开一局（服务端清会话与账户，boot 以默认区间重新自动开局）；返回是否成功 */
-  restart: () => Promise<boolean>
   /** 引导失败后重试 */
   retry: () => void
   /** 下单响应等即时同步服务端权威状态（账户由调用方处理） */
@@ -64,7 +62,7 @@ export interface UseReplayResult {
  * （AUTO_START_DATE ~ AUTO_END_DATE，开局即起走）自动开局。
  * running 期间由本地时钟（serverNow + lastTickAt + speedMs）派生虚拟日推进——
  * 回放数据不可变且前端已完整持有（历史窗口 + 模拟日），无需轮询；
- * 任何服务端交互（下单/重开）的响应都会校准权威值；暂停/继续由模拟设置页（/admin/simtrade）发起。
+ * 任何服务端交互（下单/会话控制）的响应都会校准权威值；暂停/继续与重置均由模拟设置页（/admin/simtrade）发起。
  * K 线数据按需拉取内存缓存（图表与委托面板展示）。
  * 服务端时钟语义：页面关闭期间 running 照走；刷新后继续（不暂停追帧）。
  */
@@ -230,18 +228,6 @@ export const useReplay = (options: UseReplayOptions): UseReplayResult => {
   /** 标的名称（随视图由服务端带回；无则 null，调用方回退代码） */
   const nameOf = (code: string): string | null => namesRef.current.get(code) ?? null
 
-  const restart = useCallback(async (): Promise<boolean> => {
-    const result = await postSimSession({ action: 'restart' })
-    if (!result?.ok) {
-      return false
-    }
-    syncState(result.state)
-    barsRef.current.clear()
-    pendingRef.current.clear()
-    setBootId((id) => id + 1)
-    return true
-  }, [syncState])
-
   const retry = useCallback(() => {
     setBootId((id) => id + 1)
   }, [])
@@ -269,7 +255,6 @@ export const useReplay = (options: UseReplayOptions): UseReplayResult => {
     quoteOf,
     visibleBarsOf,
     nameOf,
-    restart,
     retry,
     applySimState
   }

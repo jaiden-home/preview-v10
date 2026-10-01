@@ -1,6 +1,6 @@
 // ==================== 加速回放引擎（纯函数，/simtrade 专用） ====================
 // 日原子推进模型：开局选定起始日后，第 1 个交易日立即完成（整根 K 线出现），
-// 此后每过固定 10 秒（REPLAY_SPEED_MS）完成下一个交易日——价格 = 当日收盘，
+// 此后每过档位时长（REPLAY_SPEED_PRESETS_MS，默认 10 秒）完成下一个交易日——价格 = 当日收盘，
 // 走满 dayCount 个交易日即本局结束。
 // 成交时间戳 = 已完成虚拟日 15:00（本地时），dayKeyOf 反解回虚拟日期，
 // account.ts 的 T+1 冻结/解冻与当日盈亏滚动零改动复用。
@@ -15,20 +15,17 @@ export const PRE_START_WINDOW_BARS = 200
 /** 回放单次拉取根数上限（/api/sim/replay zod max 的护栏值；正常会话远小于此） */
 export const REPLAY_FETCH_MAX_BARS = 5000
 
-/** 基准倍速：1x 完成一个交易日的真实毫秒数（10 秒） */
+/** 基准倍速：默认档位 = 1 个交易日 10 秒（无会话 boot 与表单默认值） */
 export const REPLAY_SPEED_MS = 10_000
 
-/** 倍速档位（模拟设置页分段；数值越大推进越快） */
-export const REPLAY_SPEED_MULTIPLIERS = [1, 2, 5, 10] as const
-
-/** 档位 -> 每交易日毫秒 */
-export const speedMsOf = (multiplier: number): number => Math.round(REPLAY_SPEED_MS / multiplier)
+/** 倍速档位（模拟设置页分段；每交易日真实毫秒） */
+export const REPLAY_SPEED_PRESETS_MS = [10_000, 15_000, 30_000, 60_000] as const
 
 /** 每交易日毫秒 -> 就近档位（服务端 speedMs 反查展示用） */
-export const multiplierOf = (speedMs: number): (typeof REPLAY_SPEED_MULTIPLIERS)[number] =>
-  REPLAY_SPEED_MULTIPLIERS.reduce(
-    (best, m) => (Math.abs(speedMsOf(m) - speedMs) < Math.abs(speedMsOf(best) - speedMs) ? m : best),
-    REPLAY_SPEED_MULTIPLIERS[0]
+export const nearestSpeedPresetMs = (speedMs: number): (typeof REPLAY_SPEED_PRESETS_MS)[number] =>
+  REPLAY_SPEED_PRESETS_MS.reduce(
+    (best, p) => (Math.abs(p - speedMs) < Math.abs(best - speedMs) ? p : best),
+    REPLAY_SPEED_PRESETS_MS[0]
   )
 
 /** 自动开局固定区间（含两端；/simtrade 无会话 boot 与设置页默认值共用） */
@@ -39,7 +36,7 @@ export type ReplayStatus = 'running' | 'paused' | 'ended'
 
 export interface ReplayState {
   status: ReplayStatus
-  /** 完成一个交易日的真实毫秒（倍速档位换算，基准 REPLAY_SPEED_MS） */
+  /** 完成一个交易日的真实毫秒（档位见 REPLAY_SPEED_PRESETS_MS） */
   speedMs: number
   /** 锚定标的（开局时的选中标的，提供共享交易日历） */
   anchorCode: string
@@ -90,7 +87,7 @@ export const splitReplayView = (
   return { history: history.slice(-PRE_START_WINDOW_BARS), simDays }
 }
 
-/** 开局：第 1 个交易日立即完成（整根出现）；speedMs 缺省 = 基准 1x */
+/** 开局：第 1 个交易日立即完成（整根出现）；speedMs 缺省 = REPLAY_SPEED_MS（10 秒） */
 export const createReplaySession = (
   anchorCode: string,
   startDate: string,
