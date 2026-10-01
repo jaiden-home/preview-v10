@@ -1294,9 +1294,9 @@ body {
   min-width: 0;
 }
 
-/* 名称与现价 Display-S 同尺寸（v2.47，左右双栈对称；行高 1.2 对齐 .order-price） */
+/* 名称 20px/600（v2.52，原 22px；现价维持 Display-S 22px，行高 1.2 对齐 .order-price） */
 #app .order-name {
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 600;
   line-height: 1.2;
   overflow: hidden;
@@ -1304,11 +1304,11 @@ body {
   white-space: nowrap;
 }
 
-/* 代码与涨跌 Secondary 同尺寸（股票代码 num 等宽，硬性约束 §3） */
+/* 代码与涨跌 Secondary 同尺寸（股票代码 num 等宽，硬性约束 §3；12px 与移动端坞条对齐，v2.51） */
 #app .order-code {
   font-family: var(--font-num);
   font-variant-numeric: tabular-nums;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--tb-text-sub);
 }
 
@@ -1329,7 +1329,7 @@ body {
 
 #app .order-change {
   font-family: var(--font-num);
-  font-size: 11px;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
 
@@ -2070,7 +2070,8 @@ body {
   }
 
   /* 弹层内行情头与交易坞内容重复（名称/代码/现价/涨跌）：移动端隐藏 order-head，
-     坞条即弹层头部；桌面为面板行情段保留（§3.8） */
+     坞条即弹层头部；桌面为面板行情段保留（§3.8）。
+     /simtrade 的融合时钟不随之消失——由 .trade-dock-bar.sim 承接（见坞条样式区，§3.13） */
   #app .order-head {
     display: none;
   }
@@ -2245,6 +2246,42 @@ body {
     padding-bottom: calc(5px + env(safe-area-inset-bottom));
   }
 
+  /* 模拟时钟融合移动端交易坞条（§3.13 v2.50，仅 /simtrade 坞条带 .sim 修饰，/trade 不受影响）：
+     坞条即弹层行情头，承接与桌面 order-head 同款的融合时钟——底缘虚线基线（图表邻接虚线语言，
+     border-box 计入坞高不影响收合位移）+ .sim-head-progress 进度覆盖层贴底自左点亮 +
+     收尾 10 秒 .urgent 背景单次闪烁（复用 klinecharts-sim-flash）+ 左组 .dock-title 内
+     与名称栈 4px 并排的 .sim-clock-badge 环徽记（随组 align-items:center 与 chevron/现价同垂直中轴） */
+  #app .trade-dock-bar.sim {
+    position: relative;
+    box-sizing: border-box;
+    border-bottom: 1px dashed var(--chart-grid);
+  }
+
+  /* 徽记与名称靠在一起：左组 .dock-title（名称栈 + 徽记）以 4px 小间距并排（坞条行距 12px
+     会让直接子元素过疏）；组随坞条 align-items:center 整体居中，徽记与 chevron/现价同垂直中轴，
+     行情栈 margin-left:auto 保持右锚点；min-width 链保证长名称省略号收缩时徽记不被挤丢 */
+  #app .dock-title {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+  }
+
+  #app .trade-dock-bar.sim .dock-quote {
+    margin-left: auto;
+  }
+
+  /* 移动端进度条用实线（1px solid --up，小屏点状虚线不清晰）：点亮段实线完全遮住
+     底缘虚线基线，视觉 = 左实线红 / 右虚线灰；桌面 order-head 仍为同几何虚线 */
+  #app .trade-dock-bar.sim .sim-head-progress {
+    border-bottom-style: solid;
+  }
+
+  #app .trade-dock-bar.sim.urgent {
+    animation: klinecharts-sim-flash 0.8s ease-out;
+  }
+
   #app .dock-chevron {
     flex: none;
     width: 18px;
@@ -2263,12 +2300,14 @@ body {
     flex-direction: column;
     gap: 2px;
     min-width: 0;
+    justify-content: flex-end;
+    min-height: 45px;
   }
 
   #app .dock-name {
-    /* 与 .summary-total（移动端 Display-S 22px）同尺，作弹层头部主标题；
-       行高 1.3 防字腔超行盒被 overflow:hidden 裁切 */
-    font-size: 22px;
+    /* 弹层头部主标题（v2.52 由 22px 收至 18px，坞条内信息密度优先；
+       行高 1.3 防字腔超行盒被 overflow:hidden 裁切） */
+    font-size: 18px;
     font-weight: 700;
     line-height: 1.3;
     overflow: hidden;
@@ -2278,7 +2317,7 @@ body {
 
   #app .dock-code {
     font-family: var(--font-num);
-    font-size: 10px;
+    font-size: 12px;
     line-height: 1.3;
     font-variant-numeric: tabular-nums;
     color: var(--tb-text-sub);
@@ -2303,7 +2342,7 @@ body {
 
   #app .dock-change {
     font-family: var(--font-num);
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 600;
     line-height: 1.2;
     font-variant-numeric: tabular-nums;
@@ -2316,7 +2355,8 @@ body {
    底缘基线虚线（1px dashed --chart-grid）即当日计时进度——覆盖层与基线同几何
    （同为 1px dashed、自左对齐），按进度自左逐点点亮（红 --up，A 股语义），
    idle 视觉与基线完全一致；
-   收尾 10 秒（URGENT_SECONDS）背景单次闪烁 + 标题旁圆形倒计时环徽记 */
+   收尾 10 秒（URGENT_SECONDS）背景单次闪烁 + 标题旁圆形倒计时环徽记。
+   移动端时钟宿主为交易坞条 .trade-dock-bar.sim（v2.50，坞条底缘基线同语言，见 §3.11 媒体查询内） */
 #app .sim-head-progress {
   position: absolute;
   left: 0;

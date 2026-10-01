@@ -13,6 +13,7 @@ import { createReplayFeed } from '@/lib/chart/replay-loader'
 import type { InfoSnapshot } from '@/lib/chart/terminal'
 import type { FundamentalData, QuoteSnapshot } from '@/lib/chart/types'
 import { useReplay } from '@/components/simtrade/useReplay'
+import { SimClockBadge, SimHeadProgress, simClockOf } from '@/components/simtrade/SimClock'
 import { releaseAllFrozen, replayFundamentalOf } from '@/lib/trading/replay'
 import { postSimOrder } from '@/lib/trading/sim-api'
 import OrderPanel from './OrderPanel'
@@ -251,6 +252,9 @@ export default function SimTrading() {
 
   // 交易坞摘要（§3.11）：当前标的现价与涨跌（随行情阶段：实时 / 回放）
   const dockQuote = syntheticQuotes[selectedCode] ?? null
+  // 融合时钟（§3.13）：移动端 order-head 隐藏，坞条（.sim 修饰）为时钟宿主，
+  // 与桌面 OrderPanel 共用 simClockOf 保证两端口径一致
+  const simClock = simClockOf(simState, replay.progress)
   const dockPrice = dockQuote?.price ?? null
   const dockChange =
     dockQuote != null && dockPrice != null && dockQuote.prevClose != null && dockQuote.prevClose > 0
@@ -362,7 +366,8 @@ export default function SimTrading() {
               <div className="trade-chart-body" ref={chartContainerRef} />
             </section>
             {/* 委托面板：桌面为右列单卡（行情头 order-head 融合模拟时钟（v2.46）→ 交易 → 资产）；
-               移动端转悬浮交易坞（收合仅露坞条）+ 底部弹层（§3.11），order-head 含时钟一并隐藏 */}
+               移动端转悬浮交易坞（收合仅露坞条）+ 底部弹层（§3.11），order-head 隐藏、
+               融合时钟由坞条承接（v2.50，与桌面同款） */}
             <section
               id="trade-order-panel"
               className={`trade-card trade-panel${panelOpen ? ' open' : ''}`}
@@ -371,7 +376,7 @@ export default function SimTrading() {
               aria-label={t('委托交易|Order ticket')}
             >
               <button
-                className="trade-dock-bar"
+                className={`trade-dock-bar sim${simClock.urgent ? ' urgent' : ''}`}
                 type="button"
                 aria-expanded={panelOpen}
                 aria-controls="trade-order-panel"
@@ -387,9 +392,14 @@ export default function SimTrading() {
                 >
                   <path d="M6 15l6-6 6 6" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
-                <span className="dock-symbol">
-                  <span className="dock-name">{dockQuote?.name ?? selectedCode}</span>
-                  <span className="dock-code">{selectedCode}</span>
+                {/* 左组：名称栈 + 收尾 10 秒倒计时环徽记小组距并排（徽记与名称靠在一起，
+                    随组 align-items:center 与 chevron/现价同一垂直中轴，§3.13） */}
+                <span className="dock-title">
+                  <span className="dock-symbol">
+                    <span className="dock-name">{dockQuote?.name ?? selectedCode}</span>
+                    <span className="dock-code">{selectedCode}</span>
+                  </span>
+                  {simClock.urgent && <SimClockBadge t={t} remainSec={simClock.remainSec} />}
                 </span>
                 {dockPrice != null && (
                   <span className="dock-quote">
@@ -403,6 +413,8 @@ export default function SimTrading() {
                     )}
                   </span>
                 )}
+                {/* 融合时钟进度：与坞条底缘基线同几何的虚线覆盖层自左逐点亮起（§3.13，同桌面） */}
+                {simClock.running && <SimHeadProgress t={t} pct={simClock.pct} />}
               </button>
               <div className="trade-panel-body">
                 <OrderPanel
