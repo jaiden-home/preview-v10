@@ -1,10 +1,4 @@
-import type {
-  AxisCreateRangeCallback,
-  AxisCreateTicksCallback,
-  AxisTick,
-  IndicatorFigure,
-  KLineData
-} from 'klinecharts'
+import type { AxisCreateRangeCallback, AxisCreateTicksCallback, AxisTick, KLineData } from 'klinecharts'
 import type { Locale } from '../i18n'
 import { PERCENT_Y_AXIS_NAME } from './constants'
 import { calcTimeShareAvg, percentOfPrevClose, priceOfPercent, timeShareState, type TimeShareDatum } from './timeshare'
@@ -63,70 +57,6 @@ export const setupChartRegisters = async (locale: Locale): Promise<void> => {
       ctx.stroke()
       ctx.restore()
       return false
-    }
-  })
-
-  // 覆盖内置 VOL：内置量柱红绿按「开 vs 收」判定，与 K 线（按昨收）在假阴/假阳
-  // 线时不同步；改为与前收比较，量柱颜色与 K 线红绿一致，符合 A 股软件习惯
-  registerIndicator<Record<string, number>, number>({
-    name: 'VOL',
-    shortName: 'VOL',
-    series: 'volume',
-    calcParams: [5, 10, 20],
-    shouldFormatBigNumber: true,
-    precision: 0,
-    minValue: 0,
-    regenerateFigures: (params: number[]): IndicatorFigure<Record<string, number>>[] => {
-      const figures: IndicatorFigure<Record<string, number>>[] = params.map((p, i) => ({
-        key: `ma${i + 1}`,
-        title: `MA${p}: `,
-        type: 'line'
-      }))
-      figures.push({
-        key: 'volume',
-        title: 'VOLUME: ',
-        type: 'bar',
-        baseValue: 0,
-        styles: ({ data, defaultStyles }) => {
-          const bars = (defaultStyles?.bars ?? []) as Array<{
-            upColor?: string
-            downColor?: string
-            noChangeColor?: string
-          }>
-          const current = data.current as { open?: number; close?: number } | null
-          let color = bars[0]?.noChangeColor
-          if (current != null && current.open != null && current.close != null) {
-            if (current.close > current.open) {
-              color = bars[0]?.upColor
-            } else if (current.close < current.open) {
-              color = bars[0]?.downColor
-            }
-          }
-          return { color }
-        }
-      })
-      return figures
-    },
-    calc: (dataList: KLineData[], indicator) => {
-      const params = indicator.calcParams.length > 0 ? indicator.calcParams : [5, 10, 20]
-      const volSums: number[] = []
-      return dataList.map((bar, i) => {
-        const volume = bar.volume ?? 0
-        const vol: Record<string, number> = {
-          volume,
-          // 判定基准用前一根收盘（首根退回当日开盘），量柱红绿与 K 线同步
-          open: dataList[i - 1]?.close ?? bar.open,
-          close: bar.close
-        }
-        params.forEach((p, index) => {
-          volSums[index] = (volSums[index] ?? 0) + volume
-          if (i >= p - 1) {
-            vol[`ma${index + 1}`] = volSums[index] / p
-            volSums[index] -= dataList[i - (p - 1)]?.volume ?? 0
-          }
-        })
-        return vol
-      })
     }
   })
 

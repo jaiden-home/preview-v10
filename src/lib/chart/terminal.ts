@@ -198,11 +198,14 @@ export class ChartTerminal {
   // ==================== A 股配色与 tooltip ====================
 
   private applyCnColorScheme = (): void => {
-    // klinecharts 默认为美股式绿涨红跌（按今开比较），不符合 A 股习惯
+    // 仅覆盖配色：klinecharts 默认绿涨红跌为美股式。判定基准保持库默认
+    // 「今开 vs 今收」（即 A 股阴阳线惯例，通达信/同花顺/东财一致——高开低走
+    // 但收在昨收上方仍为绿「假阴线」）；最新价标线则按「现价 vs 昨收」的
+    // 涨跌语义着色（与信息栏涨跌幅同源，分时下由 syncTimeShareLastPriceMark 单色覆盖）
     this.chart?.setStyles({
       candle: {
         bar: {
-          compareRule: 'previous_close',
+          compareRule: 'current_open',
           upColor: CN_UP_COLOR,
           downColor: CN_DOWN_COLOR,
           upBorderColor: CN_UP_COLOR,
@@ -212,6 +215,7 @@ export class ChartTerminal {
         },
         priceMark: {
           last: {
+            compareRule: 'previous_close',
             upColor: CN_UP_COLOR,
             downColor: CN_DOWN_COLOR,
             noChangeColor: CN_FLAT_COLOR

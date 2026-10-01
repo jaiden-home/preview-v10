@@ -26,13 +26,13 @@
 
 本项目是由原「纯客户端 SPA」改造而来的**全量服务端渲染（SSR）+ BFF 行情代理**架构的 A 股行情终端（K 线预览 + 模拟交易）。核心设计目标：
 
-| 目标                 | 实现手段                                                                                                                      |
-| -------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| **首屏可用**         | 服务端并行拉取实时快照 + 初始日 K（3s 超时兜底），信息表格直出真实行情，图表 init 免首轮网络往返                              |
-| **页面 metadata**    | 首页与 `/trade` 页注入标题与描述（`[symbol]` 动态标的路由与 `generateMetadata` 已随路由收敛移除，标的切换为纯客户端不落 URL） |
-| **上游解耦**         | 腾讯行情统一在服务端聚合：GBK 解码、超时兜底、TTL 缓存、参数校验、按 IP 限流                                                  |
-| **解锁浏览器端能力** | smartbox 联想接口无 CORS 头，经 BFF 代理后支持按**名称/拼音**搜索标的（原 SPA 仅支持 6 位代码）                               |
-| **A 股语义正确**     | 红涨绿跌按昨收判定、量柱颜色与 K 线同步、分时均价口径按个股/指数区分                                                          |
+| 目标                 | 实现手段                                                                                                                             |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| **首屏可用**         | 服务端并行拉取实时快照 + 初始日 K（3s 超时兜底），信息表格直出真实行情，图表 init 免首轮网络往返                                     |
+| **页面 metadata**    | 首页与 `/trade` 页注入标题与描述（`[symbol]` 动态标的路由与 `generateMetadata` 已随路由收敛移除，标的切换为纯客户端不落 URL）        |
+| **上游解耦**         | 腾讯行情统一在服务端聚合：GBK 解码、超时兜底、TTL 缓存、参数校验、按 IP 限流                                                         |
+| **解锁浏览器端能力** | smartbox 联想接口无 CORS 头，经 BFF 代理后支持按**名称/拼音**搜索标的（原 SPA 仅支持 6 位代码）                                      |
+| **A 股语义正确**     | 红涨绿跌、K 线/量柱按「今开 vs 今收」阴阳线惯例（通达信/同花顺/东财一致）、最新价标线与涨跌类信息按昨收、分时均价口径按个股/指数区分 |
 
 **一条贯穿全局的约束**：klinecharts 是 Canvas 库，官方明确不支持服务端初始化。因此架构上强制「**图表不参与 SSR**」——所有 klinecharts 相关模块经动态导入隔离在客户端，服务端只渲染外壳（工具栏 + 信息表格）与数据。
 
@@ -265,7 +265,7 @@ sequenceDiagram
 `ChartTerminal`（`lib/chart/terminal.ts`）把 klinecharts 的命令式 API 与 React 隔离开——React 层只持状态与渲染，命令经方法下发（`setSymbol / applyPeriodKey / toggleMainIndicator / toggleSubIndicator / startDrawing / setTheme / overrideIndicatorParams` …）。
 
 - **init 顺序**：`await import('klinecharts')` → `setupChartRegisters(locale)` → `klinecharts.init(container, { locale, timezone: 'Asia/Shanghai' })` → `setDataLoader` → `setSymbol` → A 股配色 → tooltip 样式 → 创建 MA（candle_pane）/VOL/MACD → `setPeriod(day)` → 十字光标桥 → `emitInfo`。
-- **A 股配色**：`candle.bar.compareRule: 'previous_close'` + 全套红涨绿跌（`#ef2323` / `#14a143`），含边框、影线、最新价标记与指标量柱。
+- **A 股配色**：覆盖库默认的美股式绿涨红跌为红涨绿跌（`#ef2323` / `#14a143`），含边框、影线、最新价标记与指标量柱。判定基准：K 线柱体 `candle.bar.compareRule: 'current_open'`（今开 vs 今收 = A 股阴阳线惯例，假阴/假阳线按阴/阳着色，与通达信/同花顺/东财一致，量柱用内置 VOL 天然同步）；最新价标线 `priceMark.last.compareRule: 'previous_close'`（现价 vs 昨收的涨跌语义，与信息栏涨跌幅同源）。
 - **candle tooltip**：隐藏标题行；MA 名称与数值并入首行（颜色随均线，实时取自主图 MA 状态——改参数、分时移除 MA 时自动跟随）。
 - **destroy**：置 destroyed 标志 → 跑 disposers → `klinecharts.dispose(container)` → `resetTimeShareState()`，防泄漏且不再响应迟到的异步回调。
 
@@ -330,14 +330,13 @@ flowchart LR
 
 ### 5.5 自定义注册（`registers.ts`）
 
-| 注册名          | 类型             | 要点                                                                                           |
-| --------------- | ---------------- | ---------------------------------------------------------------------------------------------- |
-| `cnTimePercent` | Y 轴             | 涨跌幅百分比轴：`realValue ↔ display` 按昨收双向换算，文本 `+x.xx%`                            |
-| `TIME`          | 指标             | 分时均价线（橙色）+ `draw` 内绘制昨收基准虚线（`setLineDash([4,3])`）                          |
-| `VOL`           | 指标（覆盖内置） | 量柱红绿**与前一根收盘比较**（首根退回当日开盘），与 K 线按昨收判定的颜色同步；MA 滑动求和优化 |
-| `MA`            | 指标（覆盖内置） | `calcParams [5,10,30,60]`；tooltip legends 返回空——名称数值并入 candle 首行                    |
-| `TURNOVER`      | 指标             | 换手率近似（`volume / maxVolume × 100`，无流通股本数据的相对值）                               |
-| `AMPLITUDE`     | 指标             | 振幅（`(high − low) / 前收盘 × 100`，首根前取自身开盘）                                        |
+| 注册名          | 类型             | 要点                                                                        |
+| --------------- | ---------------- | --------------------------------------------------------------------------- |
+| `cnTimePercent` | Y 轴             | 涨跌幅百分比轴：`realValue ↔ display` 按昨收双向换算，文本 `+x.xx%`         |
+| `TIME`          | 指标             | 分时均价线（橙色）+ `draw` 内绘制昨收基准虚线（`setLineDash([4,3])`）       |
+| `MA`            | 指标（覆盖内置） | `calcParams [5,10,30,60]`；tooltip legends 返回空——名称数值并入 candle 首行 |
+| `TURNOVER`      | 指标             | 换手率近似（`volume / maxVolume × 100`，无流通股本数据的相对值）            |
+| `AMPLITUDE`     | 指标             | 振幅（`(high − low) / 前收盘 × 100`，首根前取自身开盘）                     |
 
 注册经动态 import 完成且幂等；shortName/title 按调用时 locale 固化（切语言需刷新，已知限制）。
 

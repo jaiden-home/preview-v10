@@ -163,7 +163,7 @@ describe('图表终端控制器', () => {
     }
   })
 
-  it('初始化应用 A 股配色：红涨绿跌并按昨收判定', async () => {
+  it('初始化应用 A 股配色：红涨绿跌，K 线按今开 vs 今收（阴阳线），最新价按昨收', async () => {
     stubJsonFetch({})
     try {
       await createTerminal()
@@ -171,12 +171,16 @@ describe('图表终端控制器', () => {
         expect.objectContaining({
           candle: expect.objectContaining({
             bar: expect.objectContaining({
-              compareRule: 'previous_close',
+              compareRule: 'current_open',
               upColor: '#ef2323',
               downColor: '#14a143'
             }),
             priceMark: expect.objectContaining({
-              last: expect.objectContaining({ upColor: '#ef2323', downColor: '#14a143' })
+              last: expect.objectContaining({
+                compareRule: 'previous_close',
+                upColor: '#ef2323',
+                downColor: '#14a143'
+              })
             })
           }),
           indicator: expect.objectContaining({
@@ -319,7 +323,7 @@ describe('图表终端控制器', () => {
       expect(mockChart.setStyles).toHaveBeenCalledWith(
         expect.objectContaining({
           candle: expect.objectContaining({
-            bar: expect.objectContaining({ compareRule: 'previous_close' })
+            bar: expect.objectContaining({ compareRule: 'current_open' })
           })
         })
       )
