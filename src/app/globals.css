@@ -1506,6 +1506,7 @@ body {
   padding: 6px 12px;
   border-radius: var(--radius-md);
   background-color: var(--tb-hover);
+  justify-items: center;
 }
 
 #app .estimate-cell {
