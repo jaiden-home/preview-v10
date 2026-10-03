@@ -431,6 +431,19 @@ export default function SimTrading() {
                 />
                 <TradeSummary t={t} account={account} equity={equity} />
               </div>
+              {/* 交易 Toast（§3.9 v2.53）：成交/拒单反馈在委托面板内弹出（本页全部反馈均为交易反馈） */}
+              {notice != null && (
+                <div className={`trade-toast panel ${notice.kind}`} role="status">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" aria-hidden="true">
+                    {notice.kind === 'ok' ? (
+                      <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
+                    ) : (
+                      <path d="M7 7l10 10M17 7L7 17" strokeLinecap="round" />
+                    )}
+                  </svg>
+                  <span>{notice.text}</span>
+                </div>
+              )}
             </section>
             <section className="trade-card trade-records">
               {/* 移动端（§3.11）：滑块式分段（.tabs-thumb 平移），桌面为常规标签按钮 */}
@@ -463,19 +476,6 @@ export default function SimTrading() {
 
       {/* 移动端弹层遮罩（桌面经 CSS 恒不显示） */}
       {panelOpen && <div className="trade-sheet-mask" aria-hidden="true" onClick={() => setPanelOpen(false)} />}
-
-      {notice != null && (
-        <div className={`trade-toast ${notice.kind}`} role="status">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" aria-hidden="true">
-            {notice.kind === 'ok' ? (
-              <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
-            ) : (
-              <path d="M7 7l10 10M17 7L7 17" strokeLinecap="round" />
-            )}
-          </svg>
-          <span>{notice.text}</span>
-        </div>
-      )}
     </div>
   )
 }

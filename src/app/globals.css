@@ -1228,6 +1228,7 @@ body {
 /* ---- 委托面板：行情 + 委托表单 + 账户摘要同卡（右侧列单卡三段式，v2.9 起资产殿后） ---- */
 
 #app .trade-panel {
+  position: relative; /* 交易 Toast（.trade-toast.panel）定位宿主（§3.9 v2.53） */
   grid-column: 2;
   grid-row: 1;
   display: flex;
@@ -1737,6 +1738,22 @@ body {
   background-color: var(--up);
 }
 
+/* 交易 Toast（§3.9 v2.53）：成交/拒单反馈锚定委托面板卡内顶部居中悬浮，
+   其余规格（图标/配色/入场/消隐）与全局 Toast 一致；移动端于弹层内坞条下方弹出（见下方媒体查询） */
+#app .trade-toast.panel {
+  position: absolute;
+  top: 8px;
+  bottom: auto; /* 重置基类 bottom: 28px——top/bottom 同时非 auto 会纵向拉伸铺满卡内 */
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  /* left: 50% 计入 shrink-to-fit 可用宽（只剩半卡宽，长文案会被折成多行）——
+     显式 max-content 按内容定宽，超长才被 max-width 截断换行 */
+  width: max-content;
+  max-width: calc(100% - 24px);
+  pointer-events: none;
+}
+
 @keyframes klinecharts-trade-toast-in {
   from {
     opacity: 0;
@@ -2053,6 +2070,11 @@ body {
 
   #app .trade-panel.open {
     transform: translateY(0);
+  }
+
+  /* 交易 Toast 随底部弹层：面板（fixed）即定位宿主，Toast 于展开坞条之下弹出（§3.9 v2.53） */
+  #app .trade-toast.panel {
+    top: calc(var(--dock-h-open) + 8px);
   }
 
   /* 弹层遮罩：复用 .modal-mask 同款定位，底色减淡（0.3），层级低于弹层与 Toast */

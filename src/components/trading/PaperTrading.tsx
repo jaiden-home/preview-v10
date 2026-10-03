@@ -35,6 +35,8 @@ const DEFAULT_TRADING_SYMBOL = { market: 'sh', ticker: '600519' }
 interface TradeNotice {
   kind: 'ok' | 'err'
   text: string
+  /** 弹出层级（§3.9 v2.53）：trade = 交易反馈（委托面板内 Toast）；global = 账户级反馈（页面底部 Toast） */
+  scope: 'trade' | 'global'
 }
 
 /**
@@ -202,14 +204,15 @@ export default function PaperTrading() {
       { prevClose: quote?.prevClose ?? null, lastPrice: quote?.price ?? null }
     )
     if (outcome.kind === 'rejected') {
-      setNotice({ kind: 'err', text: t(outcome.rejection.message) })
+      setNotice({ kind: 'err', text: t(outcome.rejection.message), scope: 'trade' })
       return
     }
     if (outcome.kind === 'executed') {
       setAccount(outcome.account)
       setNotice({
         kind: 'ok',
-        text: `${orderSide === 'buy' ? t('买入|Buy') : t('卖出|Sell')} ${selectedCode} ${qty}${t('股|shares')} @ ${outcome.price.toFixed(2)} ${t('已成交|filled')}`
+        text: `${orderSide === 'buy' ? t('买入|Buy') : t('卖出|Sell')} ${selectedCode} ${qty}${t('股|shares')} @ ${outcome.price.toFixed(2)} ${t('已成交|filled')}`,
+        scope: 'trade'
       })
     }
   }
@@ -225,7 +228,7 @@ export default function PaperTrading() {
       return
     }
     setAccount(createInitialAccount())
-    setNotice({ kind: 'ok', text: t('账户已重置|Account reset') })
+    setNotice({ kind: 'ok', text: t('账户已重置|Account reset'), scope: 'global' })
   }
 
   return (
@@ -332,6 +335,19 @@ export default function PaperTrading() {
                 />
                 <TradeSummary t={t} account={account} equity={equity} onReset={handleReset} />
               </div>
+              {/* 交易 Toast（§3.9 v2.53）：成交/拒单反馈在委托面板内弹出 */}
+              {notice != null && notice.scope === 'trade' && (
+                <div className={`trade-toast panel ${notice.kind}`} role="status">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" aria-hidden="true">
+                    {notice.kind === 'ok' ? (
+                      <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
+                    ) : (
+                      <path d="M7 7l10 10M17 7L7 17" strokeLinecap="round" />
+                    )}
+                  </svg>
+                  <span>{notice.text}</span>
+                </div>
+              )}
             </section>
             <section className="trade-card trade-records">
               {/* 移动端（§3.11）：滑块式分段（.tabs-thumb 平移），桌面为常规标签按钮 */}
@@ -365,7 +381,8 @@ export default function PaperTrading() {
       {/* 移动端弹层遮罩（桌面经 CSS 恒不显示） */}
       {panelOpen && <div className="trade-sheet-mask" aria-hidden="true" onClick={() => setPanelOpen(false)} />}
 
-      {notice != null && (
+      {/* 全局 Toast（§3.9 v2.53）：仅账户级/系统级反馈，交易反馈见委托面板内 */}
+      {notice != null && notice.scope === 'global' && (
         <div className={`trade-toast ${notice.kind}`} role="status">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" aria-hidden="true">
             {notice.kind === 'ok' ? (
