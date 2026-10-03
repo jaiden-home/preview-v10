@@ -20,18 +20,14 @@ import {
   calcEquity,
   createInitialAccount,
   dayKeyOf,
-  executeBuy,
-  executeSell,
-  fillPriceOf,
   loadAccount,
   loadSelectedSymbol,
-  round2,
   saveAccount,
   unfreezePositions,
-  validateOrder,
-  type TradeSide,
   type TradingAccount
 } from '@/lib/trading/account'
+import { applyTradeEvent } from '@/lib/trading/events'
+import { round2, type TradeSide } from '@/lib/trading/rules'
 
 /** 模拟交易默认标的（首页默认为上证指数，不可交易） */
 const DEFAULT_TRADING_SYMBOL = { market: 'sh', ticker: '600519' }
@@ -191,29 +187,31 @@ export default function PaperTrading() {
       return
     }
     const quote = quotes[selectedCode]
-    const name = quote?.name ?? selectedCode
-    const lastPrice = quote?.price ?? null
-    const error = validateOrder({
+    // UI → 用户事件 → 事件引擎（规则校验 + 现价成交 + 账务），与 /simtrade 服务端结算同一管线
+    const outcome = applyTradeEvent(
       account,
-      side: orderSide,
-      code: selectedCode,
-      price,
-      qty,
-      prevClose: quote?.prevClose ?? null,
-      lastPrice
-    })
-    if (error != null) {
-      setNotice({ kind: 'err', text: t(error.message) })
+      {
+        type: 'place_order',
+        side: orderSide,
+        code: selectedCode,
+        name: quote?.name ?? selectedCode,
+        price,
+        qty,
+        ts: Date.now()
+      },
+      { prevClose: quote?.prevClose ?? null, lastPrice: quote?.price ?? null }
+    )
+    if (outcome.kind === 'rejected') {
+      setNotice({ kind: 'err', text: t(outcome.rejection.message) })
       return
     }
-    // 现价成交规则：可成交委托一律按现价成交（买 ≥ 现价、卖 ≤ 现价）
-    const fillPrice = fillPriceOf(price, lastPrice)
-    const order = { code: selectedCode, name, price: fillPrice, qty, ts: Date.now() }
-    setAccount(orderSide === 'buy' ? executeBuy(account, order) : executeSell(account, order))
-    setNotice({
-      kind: 'ok',
-      text: `${orderSide === 'buy' ? t('买入|Buy') : t('卖出|Sell')} ${selectedCode} ${qty}${t('股|shares')} @ ${fillPrice.toFixed(2)} ${t('已成交|filled')}`
-    })
+    if (outcome.kind === 'executed') {
+      setAccount(outcome.account)
+      setNotice({
+        kind: 'ok',
+        text: `${orderSide === 'buy' ? t('买入|Buy') : t('卖出|Sell')} ${selectedCode} ${qty}${t('股|shares')} @ ${outcome.price.toFixed(2)} ${t('已成交|filled')}`
+      })
+    }
   }
 
   const handleReset = () => {

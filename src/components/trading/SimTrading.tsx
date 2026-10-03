@@ -23,13 +23,11 @@ import TradeSummary from './TradeSummary'
 import {
   REPLAY_SYMBOL_STORAGE_KEY,
   calcEquity,
-  fillPriceOf,
   loadSelectedSymbol,
-  round2,
   unfreezePositions,
-  type TradeSide,
   type TradingAccount
 } from '@/lib/trading/account'
+import { fillPriceOf, round2, type TradeSide } from '@/lib/trading/rules'
 
 /** 极速模拟默认标的（sh600999 招商证券；锚定共享交易日历，不可交易标的会被下单校验拦截） */
 const DEFAULT_TRADING_SYMBOL = { market: 'sh', ticker: '600999' }

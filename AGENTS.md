@@ -27,7 +27,7 @@ A 股行情预览 + 模拟交易的 Web 终端：Next.js 16（App Router，stand
 - `components/home/`：首页入口组件（`HomeLanding`：看板 / 交易两张入口卡片）。
 - `lib/chart/`：环境无关的图表域逻辑（`ChartTerminal` 命令式控制器、`DataLoader`、分时状态机、纯函数及测试）。对 klinecharts 一律动态 `import()`，**禁止进入服务端模块图**。
 - `lib/server/`：仅服务端（`market-service` 数据源编排、`provider/tencent` 腾讯实现、`trading/` 模拟交易服务域【contract/registry/engine + local（node:sqlite 持久化），/simtrade 账务与回放会话权威结算】、TTLCache、限流、zod、pino），禁止被客户端引用。
-- `lib/trading/account.ts`：模拟交易纯函数（整手买入、T+1、涨跌停、佣金/印花税），带测试；`replay.ts` 回放引擎纯函数；`protocol.ts` + `sim-api.ts` 为 /api/sim 传输协议与客户端请求封装（环境无关，两端共用）。
+- `lib/trading/`：模拟交易域（环境无关，两端共用，均带测试）——`rules.ts` 买卖规则纯函数（标的准入、涨跌停、费用、下单校验、成交价）；`events.ts` 用户交易事件 + 事件引擎（init_order / select_side / place_order → 规则校验 → 成交，初始化默认委托最大可买，客户端 /trade 与服务端 /simtrade 共用管线）；`account.ts` 账务纯函数（整手买入、T+1、权益）+ localStorage 持久化；`replay.ts` 回放引擎纯函数；`protocol.ts` + `sim-api.ts` 为 /api/sim 传输协议与客户端请求封装。
 - `proxy.ts` / `instrumentation*.ts`：边缘 404 与 `x-request-id` 注入、启动日志与优雅停机。
 
 ## 必读文档（按任务选读）

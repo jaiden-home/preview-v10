@@ -2,7 +2,8 @@
 
 import type { Translate } from '@/lib/i18n'
 import type { QuoteSnapshot } from '@/lib/chart/types'
-import { fmtMoney, fmtPct, fmtSignedMoney, round2, type Position } from '@/lib/trading/account'
+import { fmtMoney, fmtPct, fmtSignedMoney, type Position } from '@/lib/trading/account'
+import { round2 } from '@/lib/trading/rules'
 
 interface PositionsTableProps {
   t: Translate

@@ -2,23 +2,18 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import {
   INITIAL_CASH,
   calcEquity,
-  calcFees,
   createInitialAccount,
   dayKeyOf,
   executeBuy,
   executeSell,
-  fillPriceOf,
-  isTradableCode,
-  limitPricesOf,
-  limitRatioOf,
   loadAccount,
   loadSelectedSymbol,
-  maxBuyQty,
+  orderContextOf,
   saveAccount,
   saveSelectedSymbol,
-  unfreezePositions,
-  validateOrder
+  unfreezePositions
 } from './account'
+import { calcFees, validateOrder } from './rules'
 
 // 2024-06-03（周一）与次日，本地时区内的固定时间戳
 const DAY1 = new Date(2024, 5, 3, 10, 0, 0).getTime()
@@ -31,46 +26,6 @@ const order = (overrides: Partial<Parameters<typeof executeBuy>[1]> = {}) => ({
   qty: 100,
   ts: DAY1,
   ...overrides
-})
-
-describe('交易费用', () => {
-  it('佣金按万 2.5 计且最低 5 元，买入无印花税', () => {
-    // 大额：佣金 25 + 过户费 1
-    expect(calcFees('buy', 100_000)).toBe(26)
-    // 小额触发最低佣金 5 元
-    expect(calcFees('buy', 1000)).toBe(5.01)
-  })
-
-  it('卖出加收印花税（万 5）', () => {
-    // 佣金 25 + 过户费 1 + 印花税 50
-    expect(calcFees('sell', 100_000)).toBe(76)
-  })
-})
-
-describe('标的与涨跌停', () => {
-  it('识别可交易个股前缀（排除指数/ETF）', () => {
-    expect(isTradableCode('sh600519')).toBe(true)
-    expect(isTradableCode('sh688981')).toBe(true)
-    expect(isTradableCode('sz000001')).toBe(true)
-    expect(isTradableCode('sz300750')).toBe(true)
-    expect(isTradableCode('bj430047')).toBe(true)
-    expect(isTradableCode('sh000001')).toBe(false)
-    expect(isTradableCode('sz399001')).toBe(false)
-    expect(isTradableCode('sh510300')).toBe(false)
-  })
-
-  it('按板块返回涨跌幅限制', () => {
-    expect(limitRatioOf('sh600519')).toBe(0.1)
-    expect(limitRatioOf('sz000001')).toBe(0.1)
-    expect(limitRatioOf('sh688981')).toBe(0.2)
-    expect(limitRatioOf('sz300750')).toBe(0.2)
-    expect(limitRatioOf('bj430047')).toBe(0.3)
-  })
-
-  it('涨跌停价按昨收计算并保留两位', () => {
-    expect(limitPricesOf(10, 'sh600519')).toEqual({ upper: 11, lower: 9 })
-    expect(limitPricesOf(33.33, 'sh600519')).toEqual({ upper: 36.66, lower: 30 })
-  })
 })
 
 describe('买入执行', () => {
@@ -117,7 +72,14 @@ describe('T+1 与卖出执行', () => {
   it('当日买入不可卖，次日解冻后可卖', () => {
     let account = executeBuy(createInitialAccount(DAY1), order({ price: 100, qty: 200 }))
     expect(
-      validateOrder({ account, side: 'sell', code: 'sh600519', price: 100, qty: 100, prevClose: null })?.message
+      validateOrder({
+        ...orderContextOf(account),
+        side: 'sell',
+        code: 'sh600519',
+        price: 100,
+        qty: 100,
+        prevClose: null
+      })?.message
     ).toContain('T+1')
 
     const unfrozen = unfreezePositions(account, dayKeyOf(DAY2))
@@ -149,98 +111,16 @@ describe('T+1 与卖出执行', () => {
   })
 })
 
-describe('下单校验', () => {
-  it('指数不可交易', () => {
-    expect(
-      validateOrder({
-        account: createInitialAccount(DAY1),
-        side: 'buy',
-        code: 'sh000001',
-        price: 3000,
-        qty: 100,
-        prevClose: null
-      })
-    ).toMatchObject({ code: 'not_tradable', message: expect.stringContaining('不支持模拟交易') })
-  })
-
-  it('涨跌停边界校验', () => {
-    const account = createInitialAccount(DAY1)
-    const input = { account, side: 'buy' as const, code: 'sh600519', qty: 100, prevClose: 100 }
-    expect(validateOrder({ ...input, price: 110.01 })).toMatchObject({
-      code: 'price_limit',
-      message: expect.stringContaining('涨跌停')
-    })
-    expect(validateOrder({ ...input, price: 89.99 })).toMatchObject({ code: 'price_limit' })
-    expect(validateOrder({ ...input, price: 110 })).toBeNull()
-    expect(validateOrder({ ...input, price: 90 })).toBeNull()
-  })
-
-  it('买入整手与资金校验', () => {
-    const account = createInitialAccount(DAY1)
-    expect(
-      validateOrder({ account, side: 'buy', code: 'sh600519', price: 100, qty: 150, prevClose: null })?.message
-    ).toContain('100 股')
-    expect(
-      validateOrder({ account, side: 'buy', code: 'sh600519', price: 9999, qty: 100, prevClose: null })?.message
-    ).toContain('资金不足')
-    expect(
-      validateOrder({ account, side: 'buy', code: 'sh600519', price: 100, qty: -100, prevClose: null })
-    ).toMatchObject({ code: 'invalid_qty' })
-    expect(validateOrder({ account, side: 'buy', code: 'sh600519', price: 100, qty: 100, prevClose: null })).toBeNull()
-  })
-
-  it('现价成交：委托价劣于现价不能成交（买 < 现价 / 卖 > 现价），等于现价可成交', () => {
-    const buy = {
-      account: createInitialAccount(DAY1),
-      side: 'buy' as const,
-      code: 'sh600519',
-      qty: 100,
-      prevClose: null,
-      lastPrice: 110
-    }
-    expect(validateOrder({ ...buy, price: 109.99 })).toMatchObject({ code: 'price_unfillable' })
-    expect(validateOrder({ ...buy, price: 110 })).toBeNull()
-    expect(validateOrder({ ...buy, price: 110.01 })).toBeNull()
-
-    const held = unfreezePositions(
+describe('下单校验上下文', () => {
+  it('orderContextOf 投影可用现金与各标的可卖数量（T+1 可卖）', () => {
+    const account = unfreezePositions(
       executeBuy(createInitialAccount(DAY1), order({ price: 100, qty: 100 })),
       dayKeyOf(DAY2)
     )
-    const sell = { account: held, side: 'sell' as const, code: 'sh600519', qty: 100, prevClose: null, lastPrice: 100 }
-    expect(validateOrder({ ...sell, price: 100.01 })).toMatchObject({ code: 'price_unfillable' })
-    expect(validateOrder({ ...sell, price: 100 })).toBeNull()
-    expect(validateOrder({ ...sell, price: 99.9 })).toBeNull()
-  })
-
-  it('缺现价时跳过可成交校验（按委托价成交）', () => {
-    expect(
-      validateOrder({
-        account: createInitialAccount(DAY1),
-        side: 'buy',
-        code: 'sh600519',
-        price: 90,
-        qty: 100,
-        prevClose: null,
-        lastPrice: null
-      })
-    ).toBeNull()
-  })
-
-  it('fillPriceOf：有现价按现价成交，缺行情回退委托价', () => {
-    expect(fillPriceOf(105, 100)).toBe(100)
-    expect(fillPriceOf(95, 100)).toBe(100)
-    expect(fillPriceOf(105, null)).toBe(105)
-    expect(fillPriceOf(105, 0)).toBe(105)
-  })
-
-  it('最大可买为整手且费用后不超资金', () => {
-    const cash = 10_000
-    const qty = maxBuyQty(cash, 10)
-    expect(qty % 100).toBe(0)
-    const amount = round(qty * 10)
-    expect(amount).toBeGreaterThan(0)
-    expect(amount + calcFees('buy', amount)).toBeLessThanOrEqual(cash)
-    expect(maxBuyQty(50, 10)).toBe(0)
+    expect(orderContextOf(account)).toEqual({
+      cash: account.cash,
+      availableQty: { sh600519: 100 }
+    })
   })
 })
 

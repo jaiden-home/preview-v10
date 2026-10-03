@@ -1,20 +1,13 @@
 // ==================== 模拟交易域逻辑（纯函数 + localStorage 持久化） ====================
-// A 股规则：100 股一手买入、T+1 卖出、涨跌停校验、佣金/印花税/过户费。
-// 全部为环境无关纯函数，可被 SSR 与客户端共同引用（持久化函数仅客户端调用）。
+// 账户账务与持仓：整手买入执行、T+1 冻结解冻、已实现盈亏、权益与持久化。
+// 买卖规则（标的准入/涨跌停/费用/下单校验）见 rules.ts；本文件全部为环境无关纯函数，
+// 可被 SSR 与客户端共同引用（持久化函数仅客户端调用）。
 
 import type { SymbolRef } from '@/lib/chart/types'
+import { LOT_SIZE, calcFees, round2, type OrderValidationContext, type TradeSide } from './rules'
 
 /** 初始虚拟资金（100 万） */
 export const INITIAL_CASH = 1_000_000
-
-/** 佣金费率（万 2.5，双边） */
-export const COMMISSION_RATE = 0.00025
-/** 单笔最低佣金（元） */
-export const COMMISSION_MIN = 5
-/** 印花税率（万 5，仅卖出双边中的卖方） */
-export const STAMP_TAX_RATE = 0.0005
-/** 过户费率（十万分之 1，双边） */
-export const TRANSFER_FEE_RATE = 0.00001
 
 /** 成交记录上限（约束 localStorage 体积） */
 export const MAX_TRADE_RECORDS = 200
@@ -26,11 +19,7 @@ const SYMBOL_STORAGE_KEY = 'klinecharts-paper-symbol'
 export const REPLAY_ACCOUNT_STORAGE_KEY = 'klinecharts-paper-account-replay'
 export const REPLAY_SYMBOL_STORAGE_KEY = 'klinecharts-paper-symbol-replay'
 
-export const round2 = (n: number): number => Math.round(n * 100) / 100
-
 // ==================== 类型 ====================
-
-export type TradeSide = 'buy' | 'sell'
 
 export interface TradeRecord {
   id: string
@@ -101,51 +90,6 @@ const dayStartOf = (ts: number): number => {
   return new Date(y, m - 1, d).getTime()
 }
 
-/** A 股个股可交易前缀（指数/ETF 等不在模拟交易范围） */
-const STOCK_TICKER_PATTERN: Record<string, RegExp> = {
-  sh: /^(60|68)/,
-  sz: /^(00|30)/,
-  bj: /^(43|83|87|88|92)/
-}
-
-/** 是否为可模拟交易的 A 股个股（排除指数 sh000/sz399 与 ETF 等） */
-export const isTradableCode = (code: string): boolean => {
-  const pattern = STOCK_TICKER_PATTERN[code.slice(0, 2)]
-  return pattern?.test(code.slice(2)) ?? false
-}
-
-/** 涨跌幅限制：主板 ±10%，科创板/创业板 ±20%，北交所 ±30% */
-export const limitRatioOf = (code: string): number => {
-  if (code.startsWith('sh68') || code.startsWith('sz30')) {
-    return 0.2
-  }
-  if (code.startsWith('bj')) {
-    return 0.3
-  }
-  return 0.1
-}
-
-export interface PriceLimits {
-  upper: number
-  lower: number
-}
-
-export const limitPricesOf = (prevClose: number, code: string): PriceLimits => {
-  const ratio = limitRatioOf(code)
-  return { upper: round2(prevClose * (1 + ratio)), lower: round2(prevClose * (1 - ratio)) }
-}
-
-/** 交易费用：佣金（最低 5 元）+ 过户费（双边）+ 印花税（仅卖出） */
-export const calcFees = (side: TradeSide, amount: number): number => {
-  if (amount <= 0) {
-    return 0
-  }
-  const commission = Math.max(amount * COMMISSION_RATE, COMMISSION_MIN)
-  const transfer = amount * TRANSFER_FEE_RATE
-  const stamp = side === 'sell' ? amount * STAMP_TAX_RATE : 0
-  return round2(commission + transfer + stamp)
-}
-
 // ==================== 账户与执行 ====================
 
 export const createInitialAccount = (ts: number = Date.now()): TradingAccount => ({
@@ -179,7 +123,7 @@ const appendTrade = (account: TradingAccount, record: Omit<TradeRecord, 'id'>): 
 /** 买入：摊薄成本含费用；新买入股数当日冻结（T+1）。调用方需先通过 validateOrder */
 export const executeBuy = (account: TradingAccount, order: OrderInput): TradingAccount => {
   const { code, name, price, qty, ts } = order
-  if (qty <= 0 || qty % 100 !== 0 || price <= 0) {
+  if (qty <= 0 || qty % LOT_SIZE !== 0 || price <= 0) {
     throw new Error(`invalid buy order: ${code} ${price} x ${qty}`)
   }
   const today = dayKeyOf(ts)
@@ -255,117 +199,16 @@ export const executeSell = (account: TradingAccount, order: OrderInput): Trading
   }
 }
 
-// ==================== 校验 ====================
-
-export interface OrderValidationInput {
-  account: TradingAccount
-  side: TradeSide
-  code: string
-  price: number
-  qty: number
-  /** 昨收（null 时跳过涨跌停校验） */
-  prevClose: number | null
-  /** 现价/今收（null 时跳过可成交校验，按委托价成交） */
-  lastPrice?: number | null
-}
-
-/** 下单校验拒绝码（服务端错误响应与前端提示共用） */
-export type OrderRejectCode =
-  | 'not_tradable'
-  | 'invalid_price'
-  | 'price_limit'
-  | 'price_unfillable'
-  | 'invalid_qty'
-  | 'lot_size'
-  | 'insufficient_cash'
-  | 'insufficient_qty'
-
-export interface OrderRejection {
-  code: OrderRejectCode
-  /** 双语文案键（zh|en），前端 t() 直出 */
-  message: string
-}
+// ==================== 校验上下文 ====================
 
 /**
- * 下单校验，返回拒绝原因（code + 双语文案键）或 null（通过）。
- * 买入：可交易标的 / 价格有效且在涨跌停内 / 委托价不低于现价（可成交） / 整手 / 资金充足。
- * 卖出：另校验可卖数量与委托价不高于现价。
+ * 账户 → 下单校验上下文（rules.validateOrder 的账户投影）：
+ * 可用现金 + 各标的可卖数量（T+1 后可用）。跨日调用前先 unfreezePositions。
  */
-export const validateOrder = (input: OrderValidationInput): OrderRejection | null => {
-  const { account, side, code, price, qty, prevClose, lastPrice = null } = input
-  if (!isTradableCode(code)) {
-    return { code: 'not_tradable', message: '指数与该类标的暂不支持模拟交易|Indexes are not tradable in paper trading' }
-  }
-  if (!Number.isFinite(price) || price <= 0) {
-    return { code: 'invalid_price', message: '请输入有效价格|Invalid price' }
-  }
-  if (prevClose != null && prevClose > 0) {
-    const { upper, lower } = limitPricesOf(prevClose, code)
-    if (price > upper || price < lower) {
-      return {
-        code: 'price_limit',
-        message: `超出涨跌停范围（${lower.toFixed(2)} ~ ${upper.toFixed(2)}）|Out of price limit range (${lower.toFixed(2)} ~ ${upper.toFixed(2)})`
-      }
-    }
-  }
-  // 现价成交规则：买入委托价低于现价、卖出委托价高于现价 → 不能成交
-  if (lastPrice != null && lastPrice > 0) {
-    if (side === 'buy' ? price < lastPrice : price > lastPrice) {
-      return {
-        code: 'price_unfillable',
-        message:
-          side === 'buy'
-            ? `委托价低于现价 ${lastPrice.toFixed(2)}，不能成交|Order price is below market ${lastPrice.toFixed(2)}; cannot fill`
-            : `委托价高于现价 ${lastPrice.toFixed(2)}，不能成交|Order price is above market ${lastPrice.toFixed(2)}; cannot fill`
-      }
-    }
-  }
-  if (!Number.isInteger(qty) || qty <= 0) {
-    return { code: 'invalid_qty', message: '请输入有效数量|Invalid quantity' }
-  }
-  if (side === 'buy') {
-    if (qty % 100 !== 0) {
-      return { code: 'lot_size', message: '买入数量须为 100 股的整数倍|Buy quantity must be in multiples of 100' }
-    }
-    const amount = round2(price * qty)
-    const fee = calcFees('buy', amount)
-    if (amount + fee > account.cash + 1e-6) {
-      return { code: 'insufficient_cash', message: '可用资金不足|Insufficient cash' }
-    }
-    return null
-  }
-  const held = account.positions.find((p) => p.code === code)
-  if (held == null || held.availableQty < qty) {
-    return {
-      code: 'insufficient_qty',
-      message: '可卖数量不足（当日买入 T+1 可卖）|Insufficient available quantity (T+1 rule)'
-    }
-  }
-  return null
-}
-
-/**
- * 成交价：有现价时一律按现价成交（委托价优于现价的部分让渡给对手方，
- * 与真实限价单撮合一致），缺行情回退委托价。调用前需先通过 validateOrder。
- */
-export const fillPriceOf = (price: number, lastPrice: number | null): number =>
-  lastPrice != null && lastPrice > 0 ? lastPrice : price
-
-/** 最大可买数量（股，整手，扣除预估费用） */
-export const maxBuyQty = (cash: number, price: number): number => {
-  if (price <= 0) {
-    return 0
-  }
-  let lots = Math.floor(cash / (price * 100))
-  while (lots > 0) {
-    const amount = round2(price * lots * 100)
-    if (amount + calcFees('buy', amount) <= cash) {
-      break
-    }
-    lots -= 1
-  }
-  return lots * 100
-}
+export const orderContextOf = (account: TradingAccount): OrderValidationContext => ({
+  cash: account.cash,
+  availableQty: Object.fromEntries(account.positions.map((p) => [p.code, p.availableQty]))
+})
 
 // ==================== 权益 ====================
 

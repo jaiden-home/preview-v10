@@ -1,18 +1,10 @@
 // ==================== 模拟交易撮合编排（可注入行情源与时钟，纯逻辑可测） ====================
-// 复用 lib/trading 环境无关纯函数（account.ts 账务规则 / replay.ts 回放模型）做服务端权威结算：
-// 服务端时钟结算（虚拟日推进 + 跨日账务）、下单校验执行、开局编排。持久化由 provider 层负责。
+// 复用 lib/trading 环境无关纯函数（rules.ts 买卖规则 / events.ts 事件引擎 / account.ts 账务 / replay.ts 回放模型）
+// 做服务端权威结算：服务端时钟结算（虚拟日推进 + 跨日账务）、下单校验执行、开局编排。持久化由 provider 层负责。
 
 import type { KLineData } from 'klinecharts'
-import {
-  calcEquity,
-  dayKeyOf,
-  executeBuy,
-  executeSell,
-  fillPriceOf,
-  unfreezePositions,
-  validateOrder,
-  type TradingAccount
-} from '@/lib/trading/account'
+import { calcEquity, dayKeyOf, unfreezePositions, type TradingAccount } from '@/lib/trading/account'
+import { applyPlaceOrder } from '@/lib/trading/events'
 import {
   REPLAY_FETCH_MAX_BARS,
   REPLAY_SPEED_MS,
@@ -147,21 +139,16 @@ export const placeOrderEngine = async (
   const name = order.name ?? (await source.liveQuote(order.code))?.name ?? order.code
   const ts = virtualTsOf(calendar[sess.dayIndex - 1] ?? sess.startDate)
 
-  const rejection = validateOrder({
-    account: base,
-    side: order.side,
-    code: order.code,
-    price: order.price,
-    qty: order.qty,
-    prevClose,
-    lastPrice: quote.price
-  })
-  if (rejection != null) {
-    throw new SimTradingError(rejection.code, rejection.message)
+  // 校验 + 定价 + 成交走事件引擎（与客户端 /trade 同一管线：rules.validateOrder → fillPriceOf → 账务执行）
+  const outcome = applyPlaceOrder(
+    base,
+    { type: 'place_order', side: order.side, code: order.code, name, price: order.price, qty: order.qty, ts },
+    { prevClose, lastPrice: quote.price }
+  )
+  if (outcome.kind === 'rejected') {
+    throw new SimTradingError(outcome.rejection.code, outcome.rejection.message)
   }
-  const input = { code: order.code, name, price: fillPriceOf(order.price, quote.price), qty: order.qty, ts }
-  const executed = order.side === 'buy' ? executeBuy(base, input) : executeSell(base, input)
-  return { account: executed, session: sess, sessionChanged: settled.changed }
+  return { account: outcome.account, session: sess, sessionChanged: settled.changed }
 }
 
 // ==================== 会话控制 ====================

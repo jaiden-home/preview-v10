@@ -178,6 +178,44 @@ describe('placeOrderEngine（下单编排）', () => {
     ).rejects.toMatchObject({ simCode: 'price_unfillable' })
   })
 
+  it('同虚拟日买入不可卖（T+1），推进虚拟日后可卖', async () => {
+    const started = await startSessionEngine(
+      createInitialAccount(D1),
+      { anchorCode: 'sh600519', startDate: '2024-06-03' },
+      0,
+      replaySource
+    )
+    // 虚拟日 1（2024-06-03）买入：now 未满 speedMs，会话停在 dayIndex=1
+    const bought = await placeOrderEngine(
+      started.account,
+      started.session,
+      { side: 'buy', code: 'sh600519', price: 100, qty: 100 },
+      5_000,
+      replaySource
+    )
+    expect(bought.account.positions[0]).toMatchObject({ qty: 100, availableQty: 0 })
+    // 同虚拟日卖出（now 仍 < 10_000 未推进）→ T+1 拒单
+    await expect(
+      placeOrderEngine(
+        bought.account,
+        bought.session ?? started.session,
+        { side: 'sell', code: 'sh600519', price: 100, qty: 100 },
+        9_000,
+        replaySource
+      )
+    ).rejects.toMatchObject({ simCode: 'insufficient_qty' })
+    // 推进到虚拟日 2（now ≥ 10_000）→ 解冻可卖
+    const sold = await placeOrderEngine(
+      bought.account,
+      bought.session ?? started.session,
+      { side: 'sell', code: 'sh600519', price: 110, qty: 100 },
+      11_000,
+      replaySource
+    )
+    expect(sold.account.positions).toHaveLength(0)
+    expect(sold.session?.dayIndex).toBe(2)
+  })
+
   it('paused/ended 拒单（session_not_running）', async () => {
     for (const status of ['paused', 'ended'] as const) {
       await expect(

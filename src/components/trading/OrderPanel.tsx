@@ -3,16 +3,17 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Translate } from '@/lib/i18n'
 import type { QuoteSnapshot } from '@/lib/chart/types'
+import { fmtMoney, type TradingAccount } from '@/lib/trading/account'
+import { applyTradeEvent } from '@/lib/trading/events'
 import {
   calcFees,
-  fmtMoney,
+  fractionQtyOf,
   isTradableCode,
   limitPricesOf,
   maxBuyQty,
   round2,
-  type TradeSide,
-  type TradingAccount
-} from '@/lib/trading/account'
+  type TradeSide
+} from '@/lib/trading/rules'
 import type { ReplayState } from '@/lib/trading/replay'
 import { SimClockBadge, SimHeadProgress, simClockOf } from '@/components/simtrade/SimClock'
 
@@ -31,7 +32,9 @@ interface OrderPanelProps {
 }
 
 /**
- * 买/卖委托面板：现价跟随、整手快捷仓位、费用预估；校验与成交在父组件完成。
+ * 买/卖委托面板：现价跟随、委托价变化联动数量、初始化/切换侧别默认填量、
+ * 1/n 比例仓随基数联动（价格/资金/可卖变化按比例重算）、费用预估；
+ * 初始化与切换买卖派发事件（init_order / select_side），下单校验与成交由父组件走事件引擎。
  * /simtrade 传入 simState/simProgress 时模拟时钟融合 order-head（UI_SPEC §3.13）：
  * 底缘基线虚线即当日计时进度（覆盖层同几何虚线自左逐点亮起），收尾 10 秒
  * 背景单次闪烁 + 标题旁圆形倒计时环徽记（弧随剩余秒数收缩），日推进即消失；
@@ -56,22 +59,84 @@ export default function OrderPanel({
   const tradable = isTradableCode(code)
   const position = account.positions.find((p) => p.code === code)
   const livePrice = quote?.price ?? null
+  const availableQty = position?.availableQty ?? 0
 
-  // 切换标的时清空输入并恢复价格跟随
+  // 数量输入状态标记（ref 而非 state：effect 内同步读取，不受 setState 批处理时序影响）
+  const qtyInitRef = useRef(false) // 当前标的是否已初始化默认委托量
+  const qtyFracRef = useRef(1) // 仓位比例（1 = 全仓；1/2、1/3、1/4 仓选择后随基数联动重算）
+  const qtyManualRef = useRef(false) // 用户是否手动输入数量（固定，不参与联动）
+
+  // 切换标的时清空输入、恢复价格跟随，并重置数量模式（新标的默认全仓自动态）
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setPrice('')
     setQty('')
     setPriceDirty(false)
+    qtyInitRef.current = false
+    qtyFracRef.current = 1
+    qtyManualRef.current = false
   }, [code])
 
-  // 未手动改价时跟随最新现价
+  // 未手动改价时跟随最新现价；买侧委托数量随委托价按当前比例联动
+  // （比例仓基数 = 新价最大可买；卖侧可卖量与价格无关不动）
   useEffect(() => {
     if (!priceDirty && livePrice != null) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setPrice(livePrice.toFixed(2))
+      if (!qtyManualRef.current && side === 'buy') {
+        const outcome = applyTradeEvent(
+          account,
+          { type: 'select_side', side, code, frac: qtyFracRef.current },
+          { prevClose: quote?.prevClose ?? null, lastPrice: livePrice }
+        )
+        if (outcome.kind === 'side_selected') {
+          setQty(outcome.suggestedQty > 0 ? `${outcome.suggestedQty}` : '')
+        }
+      }
     }
+    // 依赖只关心行情价格；side/account/quote 为当次渲染快照
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [livePrice, priceDirty])
+
+  // 卖侧基数联动：可卖数量变化（跨日 T+1 解冻 / 服务端结算 / 成交）时，
+  // 按当前仓位比例（全仓 / 1/n 仓）重算委托数量；手动输入不覆盖。
+  // 首次挂载只记录基线（初始默认全仓由 init_order 负责）
+  const availBaseRef = useRef<number | null>(null)
+  useEffect(() => {
+    if (availBaseRef.current === availableQty) {
+      return
+    }
+    const first = availBaseRef.current === null
+    availBaseRef.current = availableQty
+    if (first || qtyManualRef.current || side !== 'sell') {
+      return
+    }
+    const suggested = fractionQtyOf(availableQty, qtyFracRef.current)
+    setQty(suggested > 0 ? `${suggested}` : '')
+    // 依赖只关心可卖数量；side/比例 refs 为最新快照
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [availableQty])
+
+  // 初始化委托数量：行情首个可用快照派发 init_order 事件，默认填入当前侧
+  // 最大可买（买）/ 可卖（卖）。ref 判定同步生效（清空 effect 先声明先执行，
+  // 切标的的同一轮 effects 内即可完成初始化）；手动输入过则不覆盖
+  useEffect(() => {
+    if (livePrice == null || qtyInitRef.current || qtyManualRef.current) {
+      return
+    }
+    qtyInitRef.current = true
+    const outcome = applyTradeEvent(
+      account,
+      { type: 'init_order', side, code },
+      { prevClose: quote?.prevClose ?? null, lastPrice: livePrice }
+    )
+    if (outcome.kind === 'order_initialized') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setQty(outcome.suggestedQty > 0 ? `${outcome.suggestedQty}` : '')
+    }
+    // 依赖只关心行情到达与标的切换；side/account/quote 为当次渲染快照
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [livePrice, code])
 
   const priceNum = Number.parseFloat(price)
   const qtyNum = Number.parseInt(qty, 10)
@@ -87,7 +152,6 @@ export default function OrderPanel({
   const priceClass = change == null || change.abs === 0 ? 'flat' : change.abs > 0 ? 'up' : 'down'
 
   const buyMax = livePrice != null ? maxBuyQty(account.cash, livePrice) : 0
-  const availableQty = position?.availableQty ?? 0
 
   // 涨跌停与侧别上下文（最大可买 / 可卖数量）以三枚描边小格区分展示；
   // 可用资金不重复展示（摘要栅格已有）；缺行情时以 -- 占位保持布局稳定
@@ -98,30 +162,43 @@ export default function OrderPanel({
   // 融合时钟派生（/simtrade，与移动端交易坞条共用 SimClock）：进度点亮段 + 收尾倒计时
   const { running: simRunning, pct: simPct, remainSec, urgent } = simClockOf(simState, simProgress)
 
-  // 快捷仓位（买卖同款 1/n 仓）：按最大可买/可卖取整手；
-  // 全仓买入 = 最大可买（整手），全仓卖出 = 全部可卖（可含零股）
+  // 快捷仓位（买卖同款 1/n 仓）：走事件引擎按当前基数 × 比例取整手——
+  // 全仓买入 = 最大可买（整手），全仓卖出 = 全部可卖（可含零股）。
+  // 记录比例后数量随基数联动（价格/资金/可卖变化时按比例重算），买卖同规则
   const applyFraction = (frac: number) => {
-    const base = side === 'buy' ? buyMax : availableQty
-    if (base <= 0) {
-      setQty('')
+    qtyFracRef.current = frac
+    qtyManualRef.current = false
+    const outcome = applyTradeEvent(
+      account,
+      { type: 'select_side', side, code, frac },
+      { prevClose: quote?.prevClose ?? null, lastPrice: livePrice }
+    )
+    if (outcome.kind === 'side_selected') {
+      setQty(outcome.suggestedQty > 0 ? `${outcome.suggestedQty}` : '')
+    }
+  }
+
+  // 切换买/卖：走事件引擎重算新侧建议委托数量（买 = 现价最大可买整手 / 卖 = T+1 可卖）
+  // 并同步数量输入；保留已选比例（1/n 仓跨侧同样按新侧基数联动）
+  const switchSide = (next: TradeSide) => {
+    const outcome = applyTradeEvent(
+      account,
+      { type: 'select_side', side: next, code, frac: qtyFracRef.current },
+      { prevClose: quote?.prevClose ?? null, lastPrice: livePrice }
+    )
+    if (outcome.kind !== 'side_selected') {
       return
     }
-    const target = frac >= 1 ? base : Math.floor((base * frac) / 100) * 100
-    setQty(target > 0 ? `${target}` : '')
-  }
-
-  // 切换买/卖：按账户与现价重算新侧可委托最大数量并同步到数量输入（为 0 清空）
-  const switchSide = (next: TradeSide) => {
-    if (next !== side) {
-      onSideChange(next)
+    if (outcome.side !== side) {
+      onSideChange(outcome.side)
     }
-    const max = next === 'buy' ? buyMax : availableQty
-    setQty(max > 0 ? `${max}` : '')
+    qtyManualRef.current = false
+    setQty(outcome.suggestedQty > 0 ? `${outcome.suggestedQty}` : '')
   }
 
-  // 成交后（成交记录新增）同样重算当前侧可委托最大数量；首挂不触发。
+  // 成交后（成交记录新增）同样按当前比例重算当前侧可委托数量；首挂不触发。
   // 依赖故意只挂 lastTradeId：读当次渲染的 side/buyMax/availableQty 快照，
-  // 避免把行情/账户纳入依赖导致轮询反复重置数量输入。
+  // 避免把行情/账户纳入依赖导致轮询反复重置数量输入。重填为建议值 → 回到自动态。
   const lastTradeId = account.trades[0]?.id ?? ''
   const lastTradeIdRef = useRef<string | null>(null)
   useEffect(() => {
@@ -133,8 +210,10 @@ export default function OrderPanel({
       return
     }
     lastTradeIdRef.current = lastTradeId
-    const max = side === 'buy' ? buyMax : availableQty
-    setQty(max > 0 ? `${max}` : '')
+    const base = side === 'buy' ? buyMax : availableQty
+    const suggested = fractionQtyOf(base, qtyFracRef.current)
+    qtyManualRef.current = false
+    setQty(suggested > 0 ? `${suggested}` : '')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastTradeId])
 
@@ -213,6 +292,18 @@ export default function OrderPanel({
                 onChange={(event) => {
                   setPriceDirty(true)
                   setPrice(event.target.value)
+                  // 手改委托价联动买侧数量（按当前比例以新委托价重算基数）
+                  const nextPrice = Number.parseFloat(event.target.value)
+                  if (!qtyManualRef.current && side === 'buy' && Number.isFinite(nextPrice) && nextPrice > 0) {
+                    const outcome = applyTradeEvent(
+                      account,
+                      { type: 'select_side', side, code, frac: qtyFracRef.current },
+                      { prevClose: quote?.prevClose ?? null, lastPrice: livePrice, orderPrice: nextPrice }
+                    )
+                    if (outcome.kind === 'side_selected') {
+                      setQty(outcome.suggestedQty > 0 ? `${outcome.suggestedQty}` : '')
+                    }
+                  }
                 }}
               />
             </label>
@@ -232,7 +323,10 @@ export default function OrderPanel({
                 placeholder="0"
                 value={qty}
                 disabled={livePrice == null}
-                onChange={(event) => setQty(event.target.value)}
+                onChange={(event) => {
+                  qtyManualRef.current = true
+                  setQty(event.target.value)
+                }}
               />
             </label>
           </div>

@@ -4,7 +4,8 @@
 // 日后接入真实交易接口时，替换的是服务端 provider 实现，本协议与前端展示层不动。
 
 import type { KLineData } from 'klinecharts'
-import type { OrderRejectCode, TradeSide, TradingAccount } from './account'
+import type { TradingAccount } from './account'
+import type { OrderRejectCode, TradeSide } from './rules'
 import type { ReplayState } from './replay'
 
 /** 服务端回放会话：ReplayState + 服务端时钟锚点（lastTickAt 起的墙钟流逝 = 虚拟日推进） */
