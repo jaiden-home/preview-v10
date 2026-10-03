@@ -23,6 +23,7 @@ import TradeSummary from './TradeSummary'
 import {
   REPLAY_SYMBOL_STORAGE_KEY,
   calcEquity,
+  fillPriceOf,
   loadSelectedSymbol,
   round2,
   unfreezePositions,
@@ -303,9 +304,11 @@ export default function SimTrading() {
       return
     }
     replay.applySimState(result.state)
+    // 成交价 = 回放现价（服务端权威结算同口径：买 ≥ 现价、卖 ≤ 现价，一律按现价成交）
+    const fillPrice = fillPriceOf(price, quote.price)
     setNotice({
       kind: 'ok',
-      text: `${orderSide === 'buy' ? t('买入|Buy') : t('卖出|Sell')} ${selectedCode} ${qty}${t('股|shares')} @ ${price.toFixed(2)} ${t('已成交|filled')}`
+      text: `${orderSide === 'buy' ? t('买入|Buy') : t('卖出|Sell')} ${selectedCode} ${qty}${t('股|shares')} @ ${fillPrice.toFixed(2)} ${t('已成交|filled')}`
     })
   }
 

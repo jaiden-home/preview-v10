@@ -22,6 +22,7 @@ import {
   dayKeyOf,
   executeBuy,
   executeSell,
+  fillPriceOf,
   loadAccount,
   loadSelectedSymbol,
   round2,
@@ -191,23 +192,27 @@ export default function PaperTrading() {
     }
     const quote = quotes[selectedCode]
     const name = quote?.name ?? selectedCode
+    const lastPrice = quote?.price ?? null
     const error = validateOrder({
       account,
       side: orderSide,
       code: selectedCode,
       price,
       qty,
-      prevClose: quote?.prevClose ?? null
+      prevClose: quote?.prevClose ?? null,
+      lastPrice
     })
     if (error != null) {
       setNotice({ kind: 'err', text: t(error.message) })
       return
     }
-    const order = { code: selectedCode, name, price, qty, ts: Date.now() }
+    // 现价成交规则：可成交委托一律按现价成交（买 ≥ 现价、卖 ≤ 现价）
+    const fillPrice = fillPriceOf(price, lastPrice)
+    const order = { code: selectedCode, name, price: fillPrice, qty, ts: Date.now() }
     setAccount(orderSide === 'buy' ? executeBuy(account, order) : executeSell(account, order))
     setNotice({
       kind: 'ok',
-      text: `${orderSide === 'buy' ? t('买入|Buy') : t('卖出|Sell')} ${selectedCode} ${qty}${t('股|shares')} @ ${price.toFixed(2)} ${t('已成交|filled')}`
+      text: `${orderSide === 'buy' ? t('买入|Buy') : t('卖出|Sell')} ${selectedCode} ${qty}${t('股|shares')} @ ${fillPrice.toFixed(2)} ${t('已成交|filled')}`
     })
   }
 

@@ -120,6 +120,64 @@ describe('placeOrderEngine（下单编排）', () => {
     ).rejects.toMatchObject({ simCode: 'price_limit' })
   })
 
+  it('现价成交（买入）：委托价 ≥ 现价按现价成交，< 现价拒单（price_unfillable）', async () => {
+    // dayIndex=3 → 现价 120 / 前收 110（±10% = 99 ~ 121）
+    const exec = await placeOrderEngine(
+      createInitialAccount(D1),
+      session({ dayIndex: 3 }),
+      { side: 'buy', code: 'sh600519', price: 121, qty: 100 },
+      0,
+      replaySource
+    )
+    expect(exec.account.trades[0]).toMatchObject({ side: 'buy', price: 120, qty: 100 })
+    await expect(
+      placeOrderEngine(
+        createInitialAccount(D1),
+        session({ dayIndex: 3 }),
+        { side: 'buy', code: 'sh600519', price: 119, qty: 100 },
+        0,
+        replaySource
+      )
+    ).rejects.toMatchObject({ simCode: 'price_unfillable' })
+  })
+
+  it('现价成交（卖出）：委托价 ≤ 现价按现价成交，> 现价拒单（price_unfillable）', async () => {
+    // 真实日期建仓 → 开局视为历史持仓全部可卖
+    const realTs = new Date(2026, 0, 15, 10).getTime()
+    const account = executeBuy(createInitialAccount(realTs), {
+      code: 'sh600519',
+      name: '贵州茅台',
+      price: 100,
+      qty: 100,
+      ts: realTs
+    })
+    const started = await startSessionEngine(
+      account,
+      { anchorCode: 'sh600519', startDate: '2024-06-03' },
+      0,
+      replaySource
+    )
+    // dayIndex=1 → 现价 100（首日无前收，涨跌停跳过）
+    const exec = await placeOrderEngine(
+      started.account,
+      started.session,
+      { side: 'sell', code: 'sh600519', price: 99, qty: 100 },
+      0,
+      replaySource
+    )
+    expect(exec.account.trades[0]).toMatchObject({ side: 'sell', price: 100, qty: 100 })
+    expect(exec.account.positions).toHaveLength(0)
+    await expect(
+      placeOrderEngine(
+        started.account,
+        started.session,
+        { side: 'sell', code: 'sh600519', price: 101, qty: 100 },
+        0,
+        replaySource
+      )
+    ).rejects.toMatchObject({ simCode: 'price_unfillable' })
+  })
+
   it('paused/ended 拒单（session_not_running）', async () => {
     for (const status of ['paused', 'ended'] as const) {
       await expect(

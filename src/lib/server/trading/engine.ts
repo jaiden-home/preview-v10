@@ -8,6 +8,7 @@ import {
   dayKeyOf,
   executeBuy,
   executeSell,
+  fillPriceOf,
   unfreezePositions,
   validateOrder,
   type TradingAccount
@@ -134,6 +135,7 @@ export const placeOrderEngine = async (
   }
 
   // 现价/前收 = 回放行情（最新完成日收盘 + 前收），成交时间戳 = 虚拟日 15:00
+  // 现价成交规则：委托价劣于现价（买 < 现价 / 卖 > 现价）拒单，可成交委托一律按现价成交
   const anchorBars = await source.replayBars(sess.anchorCode)
   const calendar = calendarFrom(anchorBars, sess.startDate)
   const bars = sess.anchorCode === order.code ? anchorBars : await source.replayBars(order.code)
@@ -151,12 +153,13 @@ export const placeOrderEngine = async (
     code: order.code,
     price: order.price,
     qty: order.qty,
-    prevClose
+    prevClose,
+    lastPrice: quote.price
   })
   if (rejection != null) {
     throw new SimTradingError(rejection.code, rejection.message)
   }
-  const input = { code: order.code, name, price: order.price, qty: order.qty, ts }
+  const input = { code: order.code, name, price: fillPriceOf(order.price, quote.price), qty: order.qty, ts }
   const executed = order.side === 'buy' ? executeBuy(base, input) : executeSell(base, input)
   return { account: executed, session: sess, sessionChanged: settled.changed }
 }

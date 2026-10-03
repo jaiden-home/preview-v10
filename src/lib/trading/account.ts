@@ -265,6 +265,8 @@ export interface OrderValidationInput {
   qty: number
   /** 昨收（null 时跳过涨跌停校验） */
   prevClose: number | null
+  /** 现价/今收（null 时跳过可成交校验，按委托价成交） */
+  lastPrice?: number | null
 }
 
 /** 下单校验拒绝码（服务端错误响应与前端提示共用） */
@@ -272,6 +274,7 @@ export type OrderRejectCode =
   | 'not_tradable'
   | 'invalid_price'
   | 'price_limit'
+  | 'price_unfillable'
   | 'invalid_qty'
   | 'lot_size'
   | 'insufficient_cash'
@@ -285,11 +288,11 @@ export interface OrderRejection {
 
 /**
  * 下单校验，返回拒绝原因（code + 双语文案键）或 null（通过）。
- * 买入：可交易标的 / 价格有效且在涨跌停内 / 整手 / 资金充足。
- * 卖出：另校验可卖数量。
+ * 买入：可交易标的 / 价格有效且在涨跌停内 / 委托价不低于现价（可成交） / 整手 / 资金充足。
+ * 卖出：另校验可卖数量与委托价不高于现价。
  */
 export const validateOrder = (input: OrderValidationInput): OrderRejection | null => {
-  const { account, side, code, price, qty, prevClose } = input
+  const { account, side, code, price, qty, prevClose, lastPrice = null } = input
   if (!isTradableCode(code)) {
     return { code: 'not_tradable', message: '指数与该类标的暂不支持模拟交易|Indexes are not tradable in paper trading' }
   }
@@ -302,6 +305,18 @@ export const validateOrder = (input: OrderValidationInput): OrderRejection | nul
       return {
         code: 'price_limit',
         message: `超出涨跌停范围（${lower.toFixed(2)} ~ ${upper.toFixed(2)}）|Out of price limit range (${lower.toFixed(2)} ~ ${upper.toFixed(2)})`
+      }
+    }
+  }
+  // 现价成交规则：买入委托价低于现价、卖出委托价高于现价 → 不能成交
+  if (lastPrice != null && lastPrice > 0) {
+    if (side === 'buy' ? price < lastPrice : price > lastPrice) {
+      return {
+        code: 'price_unfillable',
+        message:
+          side === 'buy'
+            ? `委托价低于现价 ${lastPrice.toFixed(2)}，不能成交|Order price is below market ${lastPrice.toFixed(2)}; cannot fill`
+            : `委托价高于现价 ${lastPrice.toFixed(2)}，不能成交|Order price is above market ${lastPrice.toFixed(2)}; cannot fill`
       }
     }
   }
@@ -328,6 +343,13 @@ export const validateOrder = (input: OrderValidationInput): OrderRejection | nul
   }
   return null
 }
+
+/**
+ * 成交价：有现价时一律按现价成交（委托价优于现价的部分让渡给对手方，
+ * 与真实限价单撮合一致），缺行情回退委托价。调用前需先通过 validateOrder。
+ */
+export const fillPriceOf = (price: number, lastPrice: number | null): number =>
+  lastPrice != null && lastPrice > 0 ? lastPrice : price
 
 /** 最大可买数量（股，整手，扣除预估费用） */
 export const maxBuyQty = (cash: number, price: number): number => {

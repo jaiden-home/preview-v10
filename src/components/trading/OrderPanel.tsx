@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Translate } from '@/lib/i18n'
 import type { QuoteSnapshot } from '@/lib/chart/types'
 import {
@@ -110,6 +110,34 @@ export default function OrderPanel({
     setQty(target > 0 ? `${target}` : '')
   }
 
+  // 切换买/卖：按账户与现价重算新侧可委托最大数量并同步到数量输入（为 0 清空）
+  const switchSide = (next: TradeSide) => {
+    if (next !== side) {
+      onSideChange(next)
+    }
+    const max = next === 'buy' ? buyMax : availableQty
+    setQty(max > 0 ? `${max}` : '')
+  }
+
+  // 成交后（成交记录新增）同样重算当前侧可委托最大数量；首挂不触发。
+  // 依赖故意只挂 lastTradeId：读当次渲染的 side/buyMax/availableQty 快照，
+  // 避免把行情/账户纳入依赖导致轮询反复重置数量输入。
+  const lastTradeId = account.trades[0]?.id ?? ''
+  const lastTradeIdRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (lastTradeIdRef.current == null) {
+      lastTradeIdRef.current = lastTradeId
+      return
+    }
+    if (lastTradeIdRef.current === lastTradeId) {
+      return
+    }
+    lastTradeIdRef.current = lastTradeId
+    const max = side === 'buy' ? buyMax : availableQty
+    setQty(max > 0 ? `${max}` : '')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastTradeId])
+
   const handleSubmit = () => {
     if (!valid) {
       return
@@ -151,7 +179,7 @@ export default function OrderPanel({
           type="button"
           role="tab"
           aria-selected={side === 'buy'}
-          onClick={() => onSideChange('buy')}
+          onClick={() => switchSide('buy')}
         >
           {t('买入|Buy')}
         </button>
@@ -160,7 +188,7 @@ export default function OrderPanel({
           type="button"
           role="tab"
           aria-selected={side === 'sell'}
-          onClick={() => onSideChange('sell')}
+          onClick={() => switchSide('sell')}
         >
           {t('卖出|Sell')}
         </button>
@@ -259,7 +287,7 @@ export default function OrderPanel({
           </div>
 
           <button className={`order-submit ${side}`} type="button" disabled={!valid} onClick={handleSubmit}>
-            {side === 'buy' ? t('买入|Buy') : t('卖出|Sell')} {code.slice(2)}
+            {side === 'buy' ? t('买入|Buy') : t('卖出|Sell')}
           </button>
         </>
       ) : (

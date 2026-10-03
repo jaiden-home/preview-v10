@@ -7,6 +7,7 @@ import {
   dayKeyOf,
   executeBuy,
   executeSell,
+  fillPriceOf,
   isTradableCode,
   limitPricesOf,
   limitRatioOf,
@@ -186,6 +187,50 @@ describe('下单校验', () => {
       validateOrder({ account, side: 'buy', code: 'sh600519', price: 100, qty: -100, prevClose: null })
     ).toMatchObject({ code: 'invalid_qty' })
     expect(validateOrder({ account, side: 'buy', code: 'sh600519', price: 100, qty: 100, prevClose: null })).toBeNull()
+  })
+
+  it('现价成交：委托价劣于现价不能成交（买 < 现价 / 卖 > 现价），等于现价可成交', () => {
+    const buy = {
+      account: createInitialAccount(DAY1),
+      side: 'buy' as const,
+      code: 'sh600519',
+      qty: 100,
+      prevClose: null,
+      lastPrice: 110
+    }
+    expect(validateOrder({ ...buy, price: 109.99 })).toMatchObject({ code: 'price_unfillable' })
+    expect(validateOrder({ ...buy, price: 110 })).toBeNull()
+    expect(validateOrder({ ...buy, price: 110.01 })).toBeNull()
+
+    const held = unfreezePositions(
+      executeBuy(createInitialAccount(DAY1), order({ price: 100, qty: 100 })),
+      dayKeyOf(DAY2)
+    )
+    const sell = { account: held, side: 'sell' as const, code: 'sh600519', qty: 100, prevClose: null, lastPrice: 100 }
+    expect(validateOrder({ ...sell, price: 100.01 })).toMatchObject({ code: 'price_unfillable' })
+    expect(validateOrder({ ...sell, price: 100 })).toBeNull()
+    expect(validateOrder({ ...sell, price: 99.9 })).toBeNull()
+  })
+
+  it('缺现价时跳过可成交校验（按委托价成交）', () => {
+    expect(
+      validateOrder({
+        account: createInitialAccount(DAY1),
+        side: 'buy',
+        code: 'sh600519',
+        price: 90,
+        qty: 100,
+        prevClose: null,
+        lastPrice: null
+      })
+    ).toBeNull()
+  })
+
+  it('fillPriceOf：有现价按现价成交，缺行情回退委托价', () => {
+    expect(fillPriceOf(105, 100)).toBe(100)
+    expect(fillPriceOf(95, 100)).toBe(100)
+    expect(fillPriceOf(105, null)).toBe(105)
+    expect(fillPriceOf(105, 0)).toBe(105)
   })
 
   it('最大可买为整手且费用后不超资金', () => {
