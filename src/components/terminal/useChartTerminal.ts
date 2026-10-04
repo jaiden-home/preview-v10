@@ -5,6 +5,7 @@ import type { DataLoader, KLineData } from 'klinecharts'
 import { ChartTerminal, type InfoSnapshot } from '@/lib/chart/terminal'
 import { DEFAULT_PERIOD_KEY, type PeriodKey } from '@/lib/chart/constants'
 import type { FundamentalData, QuoteSnapshot } from '@/lib/chart/types'
+import type { SignalPoint } from '@/lib/trading/signal'
 import { readLocaleFromHash } from '@/lib/i18n'
 
 /** 当前是否深色主题：#app.dark 类是唯一事实源（客户端导航不重建根节点，主题类随 DOM 保留到下一页面） */
@@ -118,6 +119,11 @@ export function useChartTerminal(options: UseChartTerminalOptions) {
     terminalRef.current?.setFundamental(data)
   }
 
+  /** 注入/清除极速模拟买卖点徽记（回放页专用，本地单一用户；见 ChartTerminal.setSimSignals） */
+  const setSimSignals = (points: SignalPoint[] | null) => {
+    terminalRef.current?.setSimSignals(points)
+  }
+
   const toggleTheme = () => {
     // 每次从 DOM 取反（而非本地 state）：跨页客户端导航后本组件重建，state 会失真
     const root = document.getElementById('app')
@@ -183,6 +189,7 @@ export function useChartTerminal(options: UseChartTerminalOptions) {
   return {
     setSymbol,
     setFundamental,
+    setSimSignals,
     toggleTheme,
     periodKey,
     changePeriod,

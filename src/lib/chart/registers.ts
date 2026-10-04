@@ -2,6 +2,7 @@ import type { AxisCreateRangeCallback, AxisCreateTicksCallback, AxisTick, KLineD
 import type { Locale } from '../i18n'
 import { PERCENT_Y_AXIS_NAME } from './constants'
 import { shadowStubRects } from './min-shadow'
+import { SIGNAL_BADGE_FONT, SIGNAL_TEXT_COLOR, signalColorOf, signalMarkerOf, simSignalState } from './sim-signal'
 import { calcTimeShareAvg, percentOfPrevClose, priceOfPercent, timeShareState, type TimeShareDatum } from './timeshare'
 
 /**
@@ -91,6 +92,62 @@ export const setupChartRegisters = async (locale: Locale): Promise<void> => {
           ctx.fillStyle = rect.color
           ctx.fillRect(rect.x, rect.y, rect.width, rect.height)
         }
+      }
+      ctx.restore()
+      return false
+    }
+  })
+
+  // 极速模拟买卖点徽记（挂主图）：对信号日 K 线柱低点下方（买 B）/高点上方（卖 S）
+  // 绘制语义色圆形徽记（买 = --up 红实底、卖 = --tb-active 蓝实底、白字 --on-solid）。
+  // 信号点经 ChartTerminal.setSimSignals 写入模块态（仅 /simtrade 注入，其余页空态零绘制）；
+  // 仅日周期渲染（周/月聚合柱时间戳与信号日不对应，避免错位）；
+  // 不出图例不出 tooltip（与 MIN_SHADOW 同范式）
+  registerIndicator<Record<string, never>>({
+    name: 'SIM_SIGNAL',
+    shortName: '',
+    series: 'price',
+    calcParams: [],
+    figures: [],
+    calc: (dataList: KLineData[]) => dataList.map(() => ({})),
+    createTooltipDataSource: () => ({
+      name: '',
+      calcParamsText: '',
+      features: [],
+      legends: []
+    }),
+    draw: ({ ctx, chart, xAxis, yAxis }) => {
+      const { points, dark } = simSignalState
+      if (points.size === 0) {
+        return false
+      }
+      const period = chart.getPeriod()
+      if (period == null || period.type !== 'day') {
+        return false
+      }
+      const dataList = chart.getDataList()
+      const { from, to } = chart.getVisibleRange()
+      ctx.save()
+      ctx.font = SIGNAL_BADGE_FONT
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      for (let i = from; i < to; i++) {
+        const bar = dataList[i]
+        if (bar == null) {
+          continue
+        }
+        const side = points.get(bar.timestamp)
+        if (side == null) {
+          continue
+        }
+        const x = xAxis.convertTimestampToPixel(bar.timestamp)
+        const marker = signalMarkerOf(bar, side, (price) => yAxis.convertToPixel(price), x)
+        ctx.beginPath()
+        ctx.arc(marker.x, marker.y, marker.r, 0, Math.PI * 2)
+        ctx.fillStyle = signalColorOf(marker.side, dark)
+        ctx.fill()
+        ctx.fillStyle = SIGNAL_TEXT_COLOR
+        ctx.fillText(marker.text, marker.x, marker.y + 0.5)
       }
       ctx.restore()
       return false

@@ -15,6 +15,7 @@ import type { FundamentalData, QuoteSnapshot } from '@/lib/chart/types'
 import { useReplay } from '@/components/simtrade/useReplay'
 import { SimClockBadge, SimHeadProgress, simClockOf } from '@/components/simtrade/SimClock'
 import { releaseAllFrozen, replayFundamentalOf } from '@/lib/trading/replay'
+import { dailySignals } from '@/lib/trading/signal'
 import { msg } from '@/lib/trading/messages'
 import { postSimOrder } from '@/lib/trading/sim-api'
 import OrderPanel from './OrderPanel'
@@ -179,6 +180,19 @@ export default function SimTrading() {
     feedRef.current = { code: selectedCode, startDate: simState.startDate, dayIndex: simState.dayIndex }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- chart/feed/replay 方法逐渲染重建，入依赖会每帧重跑
   }, [replay.phase, replay.error, replay.state, replay.barsVersion, selectedCode])
+
+  // 买卖点提示（§3.13，规则见 lib/trading/signal.ts）：
+  // 随虚拟日推进对全部已完成模拟日因果求值（起始日前历史只作上下文不出点），
+  // 在日 K 柱上标记 B（买/红）/S（卖/蓝）徽记——最后一枚即「当日」提示，
+  // 当日无信号则不标记；纯客户端本地展示（对单一用户生效，不入服务端账务）
+  useEffect(() => {
+    if (replay.phase !== 'live' || replay.error || simState == null) {
+      chart.setSimSignals(null)
+      return
+    }
+    chart.setSimSignals(dailySignals(replay.visibleBarsOf(selectedCode), simState.startDate))
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- visibleBarsOf 读回放缓存，随 state/barsVersion 变化；simState 对象身份每秒重建，按 dayIndex 判变
+  }, [replay.phase, replay.error, simState?.dayIndex, replay.barsVersion, selectedCode])
 
   // 信息表格基本面补数：拉现时行情快照（按标的缓存，异步到达后 setState），
   // 不进实时现价/昨收——委托面板行情恒为回放口径（syntheticQuotes）

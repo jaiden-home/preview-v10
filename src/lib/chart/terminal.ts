@@ -35,8 +35,10 @@ import {
 } from './timeshare'
 import { setupChartRegisters } from './registers'
 import { createDataLoader } from './data-loader'
+import { resetSimSignalState, simSignalState } from './sim-signal'
 import { parseCnBarTime } from './utils'
 import type { Locale } from '../i18n'
+import type { SignalPoint } from '../trading/signal'
 
 /** 信息表格快照（控制器 → React 单向数据流） */
 export interface InfoSnapshot {
@@ -85,9 +87,13 @@ export class ChartTerminal {
   private destroyed = false
   /** 当前是否处于紧凑价格轴形态（移动端视口） */
   private compactAxis = false
+  /** 已注入的买卖点签名（判重：点集未变不触发重绘） */
+  private simSignalsKey = ''
 
   constructor(private readonly options: ChartTerminalOptions) {
     this.latestFundamental = options.initialQuote?.fundamental ?? {}
+    // 徽记底色随主题（卖出蓝 = --tb-active 双值），初始主题与画布一致
+    simSignalState.dark = options.dark === true
   }
 
   // ==================== 生命周期 ====================
@@ -138,6 +144,8 @@ export class ChartTerminal {
     chart.createIndicator({ name: 'MA', paneId: 'candle_pane' }, true)
     // 亚像素影线补画：K 线模式常驻（分时进入时移除、退出时重建）
     chart.createIndicator({ name: 'MIN_SHADOW', paneId: 'candle_pane' }, true)
+    // 极速模拟买卖点徽记：常驻空态（信号点仅 /simtrade 经 setSimSignals 注入）
+    chart.createIndicator({ name: 'SIM_SIGNAL', paneId: 'candle_pane' }, true)
     chart.createIndicator({ name: 'VOL' })
     chart.createIndicator({ name: 'MACD' })
     chart.setPeriod({ span: 1, type: 'day' })
@@ -161,6 +169,7 @@ export class ChartTerminal {
     }
     this.chart = null
     resetTimeShareState()
+    resetSimSignalState()
   }
 
   /** 容器盒尺寸变化时重算画布布局（klinecharts 不会自动跟随容器伸缩，由钩子的 ResizeObserver 调用） */
@@ -183,6 +192,24 @@ export class ChartTerminal {
   setFundamental(data: FundamentalData): void {
     this.latestFundamental = data
     this.emitInfo()
+  }
+
+  // ==================== 极速模拟买卖点标记 ====================
+
+  /**
+   * 注入/清除买卖点徽记（/simtrade 专用：信号点为客户端本地对单一用户的展示口径，
+   * 不入服务端账务）。随虚拟日推进补点——最后一枚即「当日」提示；null/空 = 清空。
+   * 点集判重后写入模块态并强制重绘（日推进本有增量重绘，此处兜底开局/换标的等时序）。
+   */
+  setSimSignals(points: SignalPoint[] | null): void {
+    const next = points ?? []
+    const key = next.map((p) => `${p.timestamp}:${p.signal}`).join(',')
+    if (this.simSignalsKey === key) {
+      return
+    }
+    this.simSignalsKey = key
+    simSignalState.points = new Map(next.map((p) => [p.timestamp, p.signal]))
+    this.chart?.resize()
   }
 
   private refreshQuote = async (symbol: { market: string; ticker: string }): Promise<void> => {
@@ -717,6 +744,8 @@ export class ChartTerminal {
     this.chart?.setStyles(dark ? 'dark' : 'light')
     // 主题切换会整体替换样式，A 股配色与分时面积图样式需重新应用
     this.applyCnColorScheme()
+    // 买卖点徽记底色随主题（卖出蓝 = --tb-active 双值）
+    simSignalState.dark = dark
     // 紧凑价格轴样式同理，随主题样式整体替换后恢复
     this.syncAxisCompactness(true)
     if (timeShareState.active) {
