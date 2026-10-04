@@ -280,3 +280,95 @@ describe('dailySignals（卖出 S3：持仓期放量 ≥ 前日 3 倍记收盘�
     ])
   })
 })
+
+describe('dailySignals（卖出 S4：持仓期最高价创半年新高记收盘基准，其后首次连续 3 日收盘低于基准 → 第三日标 S）', () => {
+  /** 120 根平盘铺垫（close 10 / high 10.5）供半年回看成形 */
+  const wideFlats = () => flats(120)
+
+  /** 替换第 replaceIndex 根为指定 bar 的铺垫 */
+  const flatsWith = (replaceIndex: number, replaced: KLineData) =>
+    flats(120).map((b, i) => (i === replaceIndex ? replaced : b))
+
+  it('B 日自身创半年新高即记基准，随后连续三日低于基准 → 第三日标 S', () => {
+    // B@122（high 14.1 > 回看内全部 10.5 → 基准 = B 日收盘 13.6）；第 123/124/125 日收
+    // 13.0/12.8/12.6 连续三日低于 13.6（高于止损 11.6、高于 MA30、无放量）→ S@125 由 S4 产生
+    const bars = [
+      ...wideFlats(),
+      strong(120, 11.2),
+      strong(121, 12.4),
+      strong(122, 13.6),
+      bar(123, 13.2, 13.5, 12.9, 13.0),
+      bar(124, 13.0, 13.3, 12.7, 12.8),
+      bar(125, 12.8, 13.1, 12.5, 12.6)
+    ]
+    expect(dailySignals(bars, key(0))).toEqual([
+      { timestamp: ts(122), signal: 'buy' },
+      { timestamp: ts(125), signal: 'sell' }
+    ])
+  })
+
+  it('三日均低于基准但非逐日下跌（第二日收涨）仍触发（口径 = 对基准比较）', () => {
+    // 基准 13.6；第 123/124/125 日收 13.0/13.2/12.9：第二日虽收涨但仍低于基准 → 连续三日破位 → S@125
+    const bars = [
+      ...wideFlats(),
+      strong(120, 11.2),
+      strong(121, 12.4),
+      strong(122, 13.6),
+      bar(123, 13.2, 13.5, 12.9, 13.0),
+      bar(124, 13.1, 13.4, 12.9, 13.2),
+      bar(125, 13.0, 13.3, 12.7, 12.9)
+    ]
+    expect(dailySignals(bars, key(0))).toEqual([
+      { timestamp: ts(122), signal: 'buy' },
+      { timestamp: ts(125), signal: 'sell' }
+    ])
+  })
+
+  it('中间一日收复基准（收盘 ≥ 基准）清零计数，不足三日不出 S', () => {
+    // 基准 13.6；13.0（1）→ 13.7 收复清零 → 13.0（1）→ 12.8（2）→ 不满三日
+    const bars = [
+      ...wideFlats(),
+      strong(120, 11.2),
+      strong(121, 12.4),
+      strong(122, 13.6),
+      bar(123, 13.2, 13.5, 12.9, 13.0),
+      bar(124, 13.5, 13.9, 13.0, 13.7),
+      bar(125, 13.2, 13.5, 12.9, 13.0),
+      bar(126, 13.0, 13.3, 12.7, 12.8)
+    ]
+    expect(dailySignals(bars, key(0))).toEqual([{ timestamp: ts(122), signal: 'buy' }])
+  })
+
+  it('未创半年新高不记基准 → 三日走低不触发（空仓期旧高点封顶）', () => {
+    // 第 5 日留下 high 20 的长上影（空仓期高点）；B@122 的 14.1 在回看内未创新高 → 无基准
+    const bars = [
+      ...flatsWith(5, bar(5, 19.5, 20, 9.5, 10)),
+      strong(120, 11.2),
+      strong(121, 12.4),
+      strong(122, 13.6),
+      bar(123, 13.2, 13.5, 12.9, 13.0),
+      bar(124, 13.0, 13.3, 12.7, 12.8),
+      bar(125, 12.8, 13.1, 12.5, 12.6)
+    ]
+    expect(dailySignals(bars, key(0))).toEqual([{ timestamp: ts(122), signal: 'buy' }])
+  })
+
+  it('持仓期内后续新高同样重记基准（新基准替换旧基准）', () => {
+    // 第 100 日留下 high 15（B 前高点）；B@122 的 14.1 未创新高；
+    // 第 123 日 high 15.5 创半年新高 → 基准 = 当日收盘 13.0；第 124/125/126 日收 12.8/12.6/12.4 低于 13.0 → S@126
+    const bars = [
+      ...flatsWith(100, bar(100, 14.5, 15, 9.5, 10)),
+      strong(120, 11.2),
+      strong(121, 12.4),
+      strong(122, 13.6),
+      bar(123, 13.2, 15.5, 12.9, 13.0),
+      bar(124, 13.0, 13.3, 12.7, 12.8),
+      bar(125, 12.8, 13.1, 12.5, 12.6),
+      bar(126, 12.6, 12.9, 12.3, 12.4)
+    ]
+    expect(dailySignals(bars, key(0))).toEqual([
+      { timestamp: ts(122), signal: 'buy' },
+      { timestamp: ts(126), signal: 'sell' }
+    ])
+  })
+})

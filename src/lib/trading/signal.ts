@@ -18,6 +18,10 @@ const BUY_TAIL_GAIN_MIN = 0.01
 const SELL_MA_DAYS = 30
 /** 卖出 S3 放量倍数：当日成交量 ≥ 前一交易日的 3 倍 */
 const SELL_SPIKE_RATIO = 3
+/** 卖出 S4 新高回看根数：120 个交易日 ≈ 半年（A 股年均 242 个交易日） */
+const SELL_HIGH_LOOKBACK_BARS = 120
+/** 卖出 S4 破位离场天数：连续 3 个交易日收盘低于新高日基准 */
+const SELL_DROP_DAYS = 3
 
 /**
  * 逐日买卖点求值（纯函数，环境无关）：极速模拟页「当日买入点 / 卖出点」提示的规则域。
@@ -43,6 +47,11 @@ const SELL_SPIKE_RATIO = 3
  * 的 3 倍时记录当日收盘价为观察基准（多枚基准以最近一枚为准），此后首次
  * 出现连续两日收盘低于该基准，第二日离场；基准随仓位生命周期走——离场
  * 即复位，下一对 B/S 重新观察（空仓期与起始日前的放量不记录）。
+ * S4 高位破位：**持仓期**（B 日及之后，空仓不观察）当日最高价创近 120 个交易
+ * 日（约半年）新高时记录当日收盘价为观察基准（多枚新高以最近一枚为准），
+ * 此后首次出现连续 3 个交易日收盘均低于该基准，第三日离场；基准随仓位
+ * 生命周期走——离场即复位，下一对 B/S 重新观察（空仓期与起始日前的新高
+ * 不记录）。
  * B 必须先于 S（无 B 不判 S）；B/S 同日冲突时 B 优先（开仓日不判 S）；
  * S 后空仓，待下一枚 B 重新武装。
  */
@@ -57,6 +66,10 @@ export const dailySignals = (bars: KLineData[], startDate: string): SignalPoint[
   let stopLow: number | null = null
   /** S3 观察基准：本持仓期内最近一枚放量日（量 ≥ 前日 3 倍）的收盘价；null = 尚无基准 */
   let spikeClose: number | null = null
+  /** S4 观察基准：本持仓期内最近一次半年新高日的收盘价；null = 尚无基准 */
+  let highClose: number | null = null
+  /** S4 破位计数：基准之后连续收盘低于基准的天数 */
+  let dropDays = 0
 
   for (let i = 1; i < bars.length; i++) {
     const bar = bars[i]!
@@ -79,9 +92,13 @@ export const dailySignals = (bars: KLineData[], startDate: string): SignalPoint[
       ) {
         points.push({ timestamp: bar.timestamp, signal: 'buy' })
         stopLow = prev.low
-        // 开仓日自身放量即基准（B 日属持仓期第一天）
+        // 开仓日自身放量即基准 / 创半年新高即记基准（B 日属持仓期第一天）
         if (volumeSpiked) {
           spikeClose = bar.close
+        }
+        if (isHalfYearHigh(bars, i)) {
+          highClose = bar.close
+          dropDays = 0
         }
       }
       continue
@@ -89,17 +106,28 @@ export const dailySignals = (bars: KLineData[], startDate: string): SignalPoint[
     if (volumeSpiked) {
       spikeClose = bar.close
     }
+    // S4 观察：新半年新高重记基准并清零；已武装时累计连续低于基准的收盘天数（收复基准即清零）
+    if (isHalfYearHigh(bars, i)) {
+      highClose = bar.close
+      dropDays = 0
+    } else if (highClose != null) {
+      dropDays = bar.close < highClose ? dropDays + 1 : 0
+    }
     // S1 止损：收盘跌破 B 点前一日最低；S2 趋势离场：连续两日收盘低于 MA30；
-    // S3 放量破位：连续两日收盘跌破最近放量基准（基准当日收盘即基准，不会自触发）
+    // S3 放量破位：连续两日收盘跌破最近放量基准（基准当日收盘即基准，不会自触发）；
+    // S4 高位破位：连续 3 日收盘跌破最近半年新高基准（基准当日收盘即基准，不会自触发）
     if (
       bar.close < stopLow ||
       (belowMa(i) && belowMa(i - 1)) ||
-      (spikeClose != null && bar.close < spikeClose && prev.close < spikeClose)
+      (spikeClose != null && bar.close < spikeClose && prev.close < spikeClose) ||
+      dropDays >= SELL_DROP_DAYS
     ) {
       points.push({ timestamp: bar.timestamp, signal: 'sell' })
       stopLow = null
-      // 基准随离场复位：下一对 B/S 从新放量重新观察
+      // S3 基准 / S4 基准随离场复位：下一对 B/S 重新观察
       spikeClose = null
+      highClose = null
+      dropDays = 0
     }
   }
   return points
@@ -121,6 +149,20 @@ const isStrongRun = (bars: KLineData[], i: number): boolean => {
 const tailGainOf = (bars: KLineData[], i: number): number => {
   const base = bars[i - BUY_RUN_DAYS + 1]!.close
   return (bars[i]!.close - base) / base
+}
+
+/** i 日最高价是否创近 SELL_HIGH_LOOKBACK_BARS 个交易日（约半年）新高（严格高于回看内全部高点） */
+const isHalfYearHigh = (bars: KLineData[], i: number): boolean => {
+  if (i < SELL_HIGH_LOOKBACK_BARS) {
+    return false
+  }
+  const high = bars[i]!.high
+  for (let j = i - SELL_HIGH_LOOKBACK_BARS; j < i; j++) {
+    if (bars[j]!.high >= high) {
+      return false
+    }
+  }
+  return true
 }
 
 /** 简单移动平均（前 period-1 根窗口不足为 NaN） */
