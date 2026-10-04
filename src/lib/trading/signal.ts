@@ -12,7 +12,9 @@ export interface SignalPoint {
 
 /** 买入规则窗口长度：连续 3 日 */
 const BUY_RUN_DAYS = 3
-/** 卖出 S2 均线周期：30 日收盘均线 */
+/** 买入强度门槛：后两个交易日累计涨幅 ≥ 1% */
+const BUY_TAIL_GAIN_MIN = 0.01
+/** 卖出 S2 均线周期：30 日收盘均线（亦为买入门槛②「第 3 日收盘 ≥ 均线」的周期） */
 const SELL_MA_DAYS = 30
 /** 卖出 S3 放量倍数：当日成交量 ≥ 前一交易日的 3 倍 */
 const SELL_SPIKE_RATIO = 3
@@ -29,7 +31,9 @@ const SELL_SPIKE_RATIO = 3
  *
  * 买入（B）：**空仓时**（无未配对的 S），当日为「连续 3 日强涨」的第 3 日——
  * 窗口内每日**最高价高于上一交易日的最高价**且**收盘价高于上一交易日的收盘价**
- * （三日比较：高点过高点、收盘过收盘）。
+ * （三日比较：高点过高点、收盘过收盘），并须同时满足两项强化条件：
+ * ① 后两个交易日累计涨幅 ≥ 1%（第 3 日收盘相对窗口首日收盘）；
+ * ② 第 3 日收盘价 ≥ 30 日均线（MA30 窗口不足不判定）。
  *
  * 卖出（S）：**B/S 成对交替**——B 后进入持仓态，S 出现前不再标 B（强势延续
  * 只续持、不加仓标记）；持仓期逐日判定，先触发者离场（一枚 B 对一枚 S）——
@@ -62,9 +66,17 @@ export const dailySignals = (bars: KLineData[], startDate: string): SignalPoint[
     const volumeSpiked = prevVol > 0 && (bar.volume ?? 0) >= prevVol * SELL_SPIKE_RATIO
 
     if (stopLow == null) {
-      // B：空仓 + 连续 3 日（高点过高点、收盘过收盘）的第 3 日——起始日起开仓并记止损基准，
-      // 开仓日不判 S；起始日前的强涨不开仓（不出点也不进入持仓态，策略自起始日起始）
-      if (i >= BUY_RUN_DAYS && isStrongRun(bars, i) && dayKeyOf(bar.timestamp) >= startDate) {
+      // B：空仓 + 连续 3 日（高点过高点、收盘过收盘）第 3 日 + 两项强化条件——
+      // ① 后两个交易日累计涨幅 ≥ 1%（第 3 日收盘 vs 窗口首日收盘）② 第 3 日收盘 ≥ MA30；
+      // 起始日起开仓并记止损基准，开仓日不判 S；起始日前的强涨不开仓（策略自起始日起始）
+      if (
+        i >= BUY_RUN_DAYS &&
+        isStrongRun(bars, i) &&
+        tailGainOf(bars, i) >= BUY_TAIL_GAIN_MIN &&
+        Number.isFinite(ma[i]!) &&
+        bar.close >= ma[i]! &&
+        dayKeyOf(bar.timestamp) >= startDate
+      ) {
         points.push({ timestamp: bar.timestamp, signal: 'buy' })
         stopLow = prev.low
         // 开仓日自身放量即基准（B 日属持仓期第一天）
@@ -103,6 +115,12 @@ const isStrongRun = (bars: KLineData[], i: number): boolean => {
     }
   }
   return true
+}
+
+/** 买入窗口「后两个交易日」累计涨幅：第 3 日收盘相对窗口首日收盘 */
+const tailGainOf = (bars: KLineData[], i: number): number => {
+  const base = bars[i - BUY_RUN_DAYS + 1]!.close
+  return (bars[i]!.close - base) / base
 }
 
 /** 简单移动平均（前 period-1 根窗口不足为 NaN） */
