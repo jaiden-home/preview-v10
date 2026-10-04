@@ -437,10 +437,12 @@ describe('fetchKLines 缓存路由', () => {
     expect(bars.map((d) => d.close)).toEqual([2, 1])
   })
 
-  it('上游失败向上抛出且不污染缓存，下次请求重试', async () => {
+  it('上游失败向上抛出且不污染缓存，下次请求重试（fqkline 双域名各失败一次即整体上抛）', async () => {
     const rows = [dayRow('2026-09-15', 15)]
+    let failLeft = 2
     const fetchMock = vi.fn(async (_url: string) => {
-      if (fetchMock.mock.calls.length === 1) {
+      if (failLeft > 0) {
+        failLeft -= 1
         throw new Error('upstream down')
       }
       return fqDay(rows)
@@ -451,7 +453,7 @@ describe('fetchKLines 缓存路由', () => {
       'upstream down'
     )
     const bars = await provider.fetchKLines(symbol, dayPeriod, ts('2026-09-15'), ts('2026-09-16'))
-    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(fetchMock).toHaveBeenCalledTimes(3)
     expect(bars.map((d) => d.close)).toEqual([15])
   })
 
@@ -607,5 +609,32 @@ describe('tencent provider 契约', () => {
     expect(snapshot.open).toBe(1699)
     expect(snapshot.high).toBe(1712)
     expect(snapshot.low).toBe(1660)
+  })
+
+  it('fqkline 首选域名 501（风控漂移）时回退次选域名成功', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.startsWith('https://web.ifzq.gtimg.cn')) {
+          // 风控验证页：非 2xx，fetchJson 抛 UpstreamError
+          return { ok: false, status: 501, json: async () => ({}) }
+        }
+        return {
+          ok: true,
+          json: async () => ({
+            data: { sh600519: { qfqday: [['2026-09-16', '10.00', '16', '11.00', '9.00', '1000']] } }
+          })
+        }
+      })
+    )
+    const provider = createTencentProvider()
+    const bars = await provider.fetchKLines(
+      { market: 'sh', ticker: '600519' },
+      { span: 1, type: 'day' },
+      Date.parse('2026-09-15T00:00:00Z'),
+      Date.parse('2026-09-17T00:00:00Z')
+    )
+    expect(bars).toHaveLength(1)
+    expect(bars[0]!.close).toBe(16)
   })
 })

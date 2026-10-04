@@ -19,6 +19,22 @@ const fetchKlineRows = async (code: string, periodKey: string, url: string): Pro
   return parseTencentKlines(rows)
 }
 
+// fqkline 双域名互备：上游风控在 web. 前缀与无前缀域名间间歇漂移（501 + 验证页跳转），
+// 单点锁定任一域名都不可靠，失败即换下一个域名重试；mkline 仅无前缀域名可用（单域名）。
+const FQKLINE_HOSTS = ['https://web.ifzq.gtimg.cn', 'https://ifzq.gtimg.cn']
+
+const fetchFqkline = async (code: string, periodKey: string, path: string): Promise<KLineData[]> => {
+  let lastError: unknown
+  for (const host of FQKLINE_HOSTS) {
+    try {
+      return await fetchKlineRows(code, periodKey, `${host}${path}`)
+    } catch (error) {
+      lastError = error
+    }
+  }
+  throw lastError
+}
+
 /**
  * 近端原始 K 线（每 code×上游周期一份，全体用户共享）。
  * 缓存不过滤窗口、不截断、不聚合——依赖 from/to 的裁剪一律放在缓存外，
@@ -26,12 +42,12 @@ const fetchKlineRows = async (code: string, periodKey: string, url: string): Pro
  */
 const fetchRawKLines = (cache: TTLCache<KLineData[]>, code: string, periodKey: string): Promise<KLineData[]> =>
   cache.getOrLoad(`tencent:kline:raw:${code}:${periodKey}`, async () => {
-    // 分钟线接口仅支持 m1/m5/m15/m30/m60；用 /^m\d/ 匹配，避免 'month' 误入分钟接口。
-    // fqkline 走 web. 前缀域名（无前缀的 ifzq.gtimg.cn 已开始返回 501）；mkline 仅无前缀域名可用
-    const url = /^m\d/.test(periodKey)
-      ? `https://ifzq.gtimg.cn/appstock/app/kline/mkline?param=${code},${periodKey},,640`
-      : `https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=${code},${periodKey},,,640,qfq`
-    return fetchKlineRows(code, periodKey, url)
+    // 分钟线接口仅支持 m1/m5/m15/m30/m60；用 /^m\d/ 匹配，避免 'month' 误入分钟接口
+    if (/^m\d/.test(periodKey)) {
+      const url = `https://ifzq.gtimg.cn/appstock/app/kline/mkline?param=${code},${periodKey},,640`
+      return fetchKlineRows(code, periodKey, url)
+    }
+    return fetchFqkline(code, periodKey, `/appstock/app/fqkline/get?param=${code},${periodKey},,,640,qfq`)
   })
 
 /**
@@ -51,8 +67,11 @@ const fetchHistoricalKLines = (
     async () => {
       // 腾讯接口带 end 日期时会漏掉"当天"这根 bar（end 写成未来日期也一样），窗口覆盖今天时 end 必须留空
       const endParam = formatTencentDate(to) === formatTencentDate(Date.now()) ? '' : formatTencentDate(to)
-      const url = `https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=${code},${periodKey},${formatTencentDate(from)},${endParam},640,qfq`
-      const rows = await fetchKlineRows(code, periodKey, url)
+      const rows = await fetchFqkline(
+        code,
+        periodKey,
+        `/appstock/app/fqkline/get?param=${code},${periodKey},${formatTencentDate(from)},${endParam},640,qfq`
+      )
       return rows.filter((d) => d.timestamp >= from && d.timestamp <= to).slice(-BAR_LIMIT)
     },
     getEnv().CACHE_KLINE_HIST_TTL_MS
