@@ -18,6 +18,8 @@ import {
   nearestSpeedPresetMs
 } from '@/lib/trading/replay'
 import { fetchSimState, postSimSession } from '@/lib/trading/sim-api'
+import TradeToast from '@/components/trading/TradeToast'
+import { useNotice } from '@/components/trading/useNotice'
 
 /** 与 /simtrade 默认锚定标的一致（sh600999 招商证券） */
 const DEFAULT_CODE = 'sh600999'
@@ -25,11 +27,6 @@ const DEFAULT_NAME = '招商证券'
 
 /** 本地时钟节拍（running 时 1s 一拍，本地派生状态卡展示，与服务端零口径漂移） */
 const TICK_MS = 1_000
-
-interface TradeNotice {
-  kind: 'ok' | 'err'
-  text: string
-}
 
 /** 会话区间右端 = 回放视图最后一个模拟日（服务端算好的实际交易日） */
 const endDayOf = (state: SimState): string | null => {
@@ -58,7 +55,8 @@ export default function SimSettings() {
   const [speedMs, setSpeedMs] = useState<number>(REPLAY_SPEED_MS)
 
   const [busy, setBusy] = useState(false)
-  const [notice, setNotice] = useState<TradeNotice | null>(null)
+  // 操作结果 Toast（§3.9 全局层：本页反馈均为页面级）
+  const { notice, notify } = useNotice()
 
   // 标的搜索下拉
   const [pickOpen, setPickOpen] = useState(false)
@@ -130,15 +128,6 @@ export default function SimSettings() {
     return () => clearTimeout(timer)
   }, [q])
 
-  // 成交提示 3s 自动消隐
-  useEffect(() => {
-    if (notice == null) {
-      return
-    }
-    const timer = setTimeout(() => setNotice(null), 3000)
-    return () => clearTimeout(timer)
-  }, [notice])
-
   // ---------------- 派生态（与服务端 advanceSessionBy 同口径） ----------------
 
   const rawSession = snapshot?.state.session ?? null
@@ -196,14 +185,15 @@ export default function SimSettings() {
     if (res != null && res.ok) {
       adopt(res.state)
       if (okText != null) {
-        setNotice({ kind: 'ok', text: okText })
+        notify('ok', okText, 'global')
       }
       return true
     }
-    setNotice({
-      kind: 'err',
-      text: res != null && !res.ok ? res.message : t('操作失败，请稍候重试|Action failed, please retry')
-    })
+    notify(
+      'err',
+      res != null && !res.ok ? res.message : t('操作失败，请稍候重试|Action failed, please retry'),
+      'global'
+    )
     return false
   }
 
@@ -224,12 +214,13 @@ export default function SimSettings() {
     if (startRes != null && startRes.ok && startRes.state.session != null) {
       adopt(startRes.state)
       syncForm(startRes.state)
-      setNotice({ kind: 'ok', text: okText })
+      notify('ok', okText, 'global')
     } else {
-      setNotice({
-        kind: 'err',
-        text: startRes != null && !startRes.ok ? startRes.message : t('保存失败，请稍候重试|Save failed, please retry')
-      })
+      notify(
+        'err',
+        startRes != null && !startRes.ok ? startRes.message : t('保存失败，请稍候重试|Save failed, please retry'),
+        'global'
+      )
       setReloadId((v) => v + 1)
     }
   }
@@ -570,18 +561,7 @@ export default function SimSettings() {
         </div>
       )}
 
-      {notice != null && (
-        <div className={`trade-toast ${notice.kind}`} role="status">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" aria-hidden="true">
-            {notice.kind === 'ok' ? (
-              <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
-            ) : (
-              <path d="M7 7l10 10M17 7L7 17" strokeLinecap="round" />
-            )}
-          </svg>
-          <span>{notice.text}</span>
-        </div>
-      )}
+      {notice != null && <TradeToast notice={notice} />}
     </div>
   )
 }

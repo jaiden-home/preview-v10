@@ -3,6 +3,8 @@
 // 不依赖任何账户模型——校验所需的现金与可卖数量由调用方注入 OrderValidationContext，
 // 可被 SSR、客户端与服务端（lib/server/trading）共同引用与独立测试。
 
+import { msg } from './messages'
+
 /** 佣金费率（万 2.5，双边） */
 export const COMMISSION_RATE = 0.00025
 /** 单笔最低佣金（元） */
@@ -138,17 +140,17 @@ export interface OrderRejection {
 export const validateOrder = (input: OrderValidationInput): OrderRejection | null => {
   const { cash, availableQty, side, code, price, qty, prevClose, lastPrice = null } = input
   if (!isTradableCode(code)) {
-    return { code: 'not_tradable', message: '指数与该类标的暂不支持模拟交易|Indexes are not tradable in paper trading' }
+    return { code: 'not_tradable', message: msg('not_tradable') }
   }
   if (!Number.isFinite(price) || price <= 0) {
-    return { code: 'invalid_price', message: '请输入有效价格|Invalid price' }
+    return { code: 'invalid_price', message: msg('invalid_price') }
   }
   if (prevClose != null && prevClose > 0) {
     const { upper, lower } = limitPricesOf(prevClose, code)
     if (price > upper || price < lower) {
       return {
         code: 'price_limit',
-        message: `超出涨跌停范围（${lower.toFixed(2)} ~ ${upper.toFixed(2)}）|Out of price limit range (${lower.toFixed(2)} ~ ${upper.toFixed(2)})`
+        message: msg('price_limit', { lower: lower.toFixed(2), upper: upper.toFixed(2) })
       }
     }
   }
@@ -161,31 +163,30 @@ export const validateOrder = (input: OrderValidationInput): OrderRejection | nul
     if (side === 'buy' ? orderPx < marketPx : orderPx > marketPx) {
       return {
         code: 'price_unfillable',
-        message:
-          side === 'buy'
-            ? `委托价低于现价 ${marketPx.toFixed(2)}，不能成交|Order price is below market ${marketPx.toFixed(2)}; cannot fill`
-            : `委托价高于现价 ${marketPx.toFixed(2)}，不能成交|Order price is above market ${marketPx.toFixed(2)}; cannot fill`
+        message: msg(side === 'buy' ? 'price_unfillable_buy' : 'price_unfillable_sell', {
+          px: marketPx.toFixed(2)
+        })
       }
     }
   }
   if (!Number.isInteger(qty) || qty <= 0) {
-    return { code: 'invalid_qty', message: '请输入有效数量|Invalid quantity' }
+    return { code: 'invalid_qty', message: msg('invalid_qty') }
   }
   if (side === 'buy') {
     if (qty % LOT_SIZE !== 0) {
-      return { code: 'lot_size', message: '买入数量须为 100 股的整数倍|Buy quantity must be in multiples of 100' }
+      return { code: 'lot_size', message: msg('lot_size') }
     }
     const amount = round2(price * qty)
     const fee = calcFees('buy', amount)
     if (amount + fee > cash + 1e-6) {
-      return { code: 'insufficient_cash', message: '可用资金不足|Insufficient cash' }
+      return { code: 'insufficient_cash', message: msg('insufficient_cash') }
     }
     return null
   }
   if ((availableQty[code] ?? 0) < qty) {
     return {
       code: 'insufficient_qty',
-      message: '可卖数量不足（当日买入 T+1 可卖）|Insufficient available quantity (T+1 rule)'
+      message: msg('insufficient_qty')
     }
   }
   return null

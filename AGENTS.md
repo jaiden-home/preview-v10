@@ -23,11 +23,11 @@ A 股行情预览 + 模拟交易的 Web 终端：Next.js 16（App Router，stand
 
 - `app/`：路由层。`page.tsx` 首页（看板与模拟交易两个页面入口）、`dashboard/` 行情看板页（原首页终端，默认上证指数）、`trade/` 模拟交易页、`simtrade/` 极速模拟页、`api/` BFF 九接口（kline / timeshare / quote / search / sim-state / sim-orders / sim-session / sim-replay / healthz）、`globals.css` **唯一样式文件**。
 - `components/terminal/`：行情终端组件（`TradingTerminal` 及工具栏 / 信息表格 / 指标弹窗，图表生命周期统一在 `useChartTerminal`）。
-- `components/trading/`：模拟交易组件（`PaperTrading` / `TradeSummary` / `OrderPanel` / `PositionsTable` / `TradesTable`）。
+- `components/trading/`：模拟交易组件（`PaperTrading` / `TradeSummary` / `OrderPanel` / `PositionsTable` / `TradesTable`，`useNotice` + `TradeToast` 为 Toast 通知 hook 与双轨呈现组件）。
 - `components/home/`：首页入口组件（`HomeLanding`：看板 / 交易两张入口卡片）。
 - `lib/chart/`：环境无关的图表域逻辑（`ChartTerminal` 命令式控制器、`DataLoader`、分时状态机、纯函数及测试）。对 klinecharts 一律动态 `import()`，**禁止进入服务端模块图**。
 - `lib/server/`：仅服务端（`market-service` 数据源编排、`provider/tencent` 腾讯实现、`trading/` 模拟交易服务域【contract/registry/engine + local（node:sqlite 持久化），/simtrade 账务与回放会话权威结算】、TTLCache、限流、zod、pino），禁止被客户端引用。
-- `lib/trading/`：模拟交易域（环境无关，两端共用，均带测试）——`rules.ts` 买卖规则纯函数（标的准入、涨跌停、费用、下单校验、成交价）；`events.ts` 用户交易事件 + 事件引擎（init_order / select_side / place_order → 规则校验 → 成交，初始化默认委托最大可买，客户端 /trade 与服务端 /simtrade 共用管线）；`account.ts` 账务纯函数（整手买入、T+1、权益）+ localStorage 持久化；`replay.ts` 回放引擎纯函数；`protocol.ts` + `sim-api.ts` 为 /api/sim 传输协议与客户端请求封装。
+- `lib/trading/`：模拟交易域（环境无关，两端共用，均带测试）——`rules.ts` 买卖规则纯函数（标的准入、涨跌停、费用、下单校验、成交价）；`events.ts` 用户交易事件 + 事件引擎（init_order / select_side / place_order → 规则校验 → 成交，初始化默认委托最大可买，客户端 /trade 与服务端 /simtrade 共用管线）；`account.ts` 账务纯函数（整手买入、T+1、权益）+ localStorage 持久化；`replay.ts` 回放引擎纯函数；`messages.ts` 交易消息目录（code → `'中文|English'` 双语文案单一来源，`msg()` 支持 `{key}` 插值——rules/engine/组件共用，服务端拒单与客户端预检口径一致）；`protocol.ts` + `sim-api.ts` 为 /api/sim 传输协议与客户端请求封装。
 - `proxy.ts` / `instrumentation*.ts`：边缘 404 与 `x-request-id` 注入、启动日志与优雅停机。
 
 ## 必读文档（按任务选读）

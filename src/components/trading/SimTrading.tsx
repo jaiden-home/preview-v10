@@ -15,11 +15,14 @@ import type { FundamentalData, QuoteSnapshot } from '@/lib/chart/types'
 import { useReplay } from '@/components/simtrade/useReplay'
 import { SimClockBadge, SimHeadProgress, simClockOf } from '@/components/simtrade/SimClock'
 import { releaseAllFrozen, replayFundamentalOf } from '@/lib/trading/replay'
+import { msg } from '@/lib/trading/messages'
 import { postSimOrder } from '@/lib/trading/sim-api'
 import OrderPanel from './OrderPanel'
 import PositionsTable from './PositionsTable'
 import TradesTable from './TradesTable'
 import TradeSummary from './TradeSummary'
+import TradeToast from './TradeToast'
+import { useNotice } from './useNotice'
 import {
   REPLAY_SYMBOL_STORAGE_KEY,
   calcEquity,
@@ -31,11 +34,6 @@ import { fillPriceOf, round2, type TradeSide } from '@/lib/trading/rules'
 
 /** 极速模拟默认标的（sh600999 招商证券；锚定共享交易日历，不可交易标的会被下单校验拦截） */
 const DEFAULT_TRADING_SYMBOL = { market: 'sh', ticker: '600999' }
-
-interface TradeNotice {
-  kind: 'ok' | 'err'
-  text: string
-}
 
 /**
  * 极速模拟页（/simtrade）：虚拟时钟 + 历史 K 线回放（UI_SPEC §3.13）。
@@ -60,7 +58,8 @@ export default function SimTrading() {
   const [selected, setSelected] = useState(DEFAULT_TRADING_SYMBOL)
   const [side, setSide] = useState<TradeSide>('buy')
   const [tab, setTab] = useState<'positions' | 'trades'>('positions')
-  const [notice, setNotice] = useState<TradeNotice | null>(null)
+  // Toast 通知（§3.9 双轨）：本页全部反馈均为交易反馈（trade），在委托面板内弹出
+  const { notice, notify } = useNotice()
   // 移动端底部弹层（交易坞）展开态；桌面无交易坞，恒为收合（§3.11）
   const [panelOpen, setPanelOpen] = useState(false)
   const [info, setInfo] = useState<InfoSnapshot>(() => ({
@@ -136,15 +135,6 @@ export default function SimTrading() {
     }
     return map
   }, [replay, replayCodes])
-
-  // 成交提示 3s 自动消隐
-  useEffect(() => {
-    if (notice == null) {
-      return
-    }
-    const timer = setTimeout(() => setNotice(null), 3000)
-    return () => clearTimeout(timer)
-  }, [notice])
 
   // 弹层展开时 Escape 收起
   useEffect(() => {
@@ -271,17 +261,11 @@ export default function SimTrading() {
     }
     const quote = syntheticQuotes[selectedCode]
     if (quote == null) {
-      setNotice({ kind: 'err', text: t('行情加载中，请稍候|Quotes loading, please wait') })
+      notify('err', t(msg('quote_unavailable')), 'trade')
       return
     }
     if (simState != null && simState.status !== 'running') {
-      setNotice({
-        kind: 'err',
-        text:
-          simState.status === 'ended'
-            ? t('本局已结束，请到「模拟设置」重开|Session ended; restart it in Simulation Settings')
-            : t('已暂停，请到「模拟设置」开启后下单|Paused; enable it in Simulation Settings to trade')
-      })
+      notify('err', t(msg(simState.status === 'ended' ? 'session_ended' : 'session_paused')), 'trade')
       return
     }
     submittingRef.current = true
@@ -294,20 +278,27 @@ export default function SimTrading() {
     })
     submittingRef.current = false
     if (result == null) {
-      setNotice({ kind: 'err', text: t('网络异常，请稍候重试|Network error, please retry') })
+      notify('err', t(msg('network_error')), 'trade')
       return
     }
     if (!result.ok) {
-      setNotice({ kind: 'err', text: t(result.message) })
+      notify('err', t(result.message), 'trade')
       return
     }
     replay.applySimState(result.state)
     // 成交价 = 回放现价（服务端权威结算同口径：买 ≥ 现价、卖 ≤ 现价，一律按现价成交）
     const fillPrice = fillPriceOf(price, quote.price)
-    setNotice({
-      kind: 'ok',
-      text: `${orderSide === 'buy' ? t('买入|Buy') : t('卖出|Sell')} ${selectedCode} ${qty}${t('股|shares')} @ ${fillPrice.toFixed(2)} ${t('已成交|filled')}`
-    })
+    notify(
+      'ok',
+      t(
+        msg(orderSide === 'buy' ? 'order_filled_buy' : 'order_filled_sell', {
+          code: selectedCode,
+          qty,
+          price: fillPrice.toFixed(2)
+        })
+      ),
+      'trade'
+    )
   }
 
   return (
@@ -432,18 +423,7 @@ export default function SimTrading() {
                 <TradeSummary t={t} account={account} equity={equity} />
               </div>
               {/* 交易 Toast（§3.9 v2.53）：成交/拒单反馈在委托面板内弹出（本页全部反馈均为交易反馈） */}
-              {notice != null && (
-                <div className={`trade-toast panel ${notice.kind}`} role="status">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" aria-hidden="true">
-                    {notice.kind === 'ok' ? (
-                      <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
-                    ) : (
-                      <path d="M7 7l10 10M17 7L7 17" strokeLinecap="round" />
-                    )}
-                  </svg>
-                  <span>{notice.text}</span>
-                </div>
-              )}
+              {notice != null && <TradeToast notice={notice} />}
             </section>
             <section className="trade-card trade-records">
               {/* 移动端（§3.11）：滑块式分段（.tabs-thumb 平移），桌面为常规标签按钮 */}

@@ -5,6 +5,7 @@
 import type { KLineData } from 'klinecharts'
 import { calcEquity, dayKeyOf, unfreezePositions, type TradingAccount } from '@/lib/trading/account'
 import { applyPlaceOrder } from '@/lib/trading/events'
+import { msg } from '@/lib/trading/messages'
 import {
   REPLAY_FETCH_MAX_BARS,
   REPLAY_SPEED_MS,
@@ -115,15 +116,10 @@ export const placeOrderEngine = async (
   const { account: base, session: sess } = settled
   if (sess == null) {
     // 无会话 = 自动开局在途（或开局失败），不可按实时价交易
-    throw new SimTradingError('no_active_session', '正在开局，请稍候|Session is starting, please wait')
+    throw new SimTradingError('no_active_session', msg('no_active_session'))
   }
   if (sess.status !== 'running') {
-    throw new SimTradingError(
-      'session_not_running',
-      sess.status === 'ended'
-        ? '本局已结束，点「再来一局」重开|Session ended, press Play again to restart'
-        : '已暂停，请到「模拟设置」开启后下单|Paused; enable it in Simulation Settings to trade'
-    )
+    throw new SimTradingError('session_not_running', msg(sess.status === 'ended' ? 'session_ended' : 'session_paused'))
   }
 
   // 现价/前收 = 回放行情（最新完成日收盘 + 前收），成交时间戳 = 虚拟日 15:00
@@ -133,7 +129,7 @@ export const placeOrderEngine = async (
   const bars = sess.anchorCode === order.code ? anchorBars : await source.replayBars(order.code)
   const quote = replayQuoteOf(bars, sess.dayIndex, calendar)
   if (quote == null) {
-    throw new SimTradingError('quote_unavailable', '行情加载中，请稍候|Quotes loading, please wait')
+    throw new SimTradingError('quote_unavailable', msg('quote_unavailable'))
   }
   const prevClose = quote.prevClose
   const name = order.name ?? (await source.liveQuote(order.code))?.name ?? order.code
@@ -188,14 +184,11 @@ export const startSessionEngine = async (
 ): Promise<{ account: TradingAccount; session: SimSession }> => {
   const bars = await source.replayBars(params.anchorCode)
   if (bars.length < 3) {
-    throw new SimTradingError('insufficient_history', '回放数据不足，无法开始模拟|Insufficient replay data to start')
+    throw new SimTradingError('insufficient_history', msg('insufficient_history'))
   }
   const calendar = calendarFrom(bars, params.startDate, params.endDate)
   if (calendar.length < 2) {
-    throw new SimTradingError(
-      'insufficient_history',
-      '交易日不足，请调整起始/结束日期|Not enough trading days; adjust the dates'
-    )
+    throw new SimTradingError('insufficient_history', msg('insufficient_days'))
   }
   const session: SimSession = {
     ...createReplaySession(params.anchorCode, params.startDate, calendar.length, params.speedMs ?? REPLAY_SPEED_MS),

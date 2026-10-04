@@ -27,17 +27,13 @@ import {
   type TradingAccount
 } from '@/lib/trading/account'
 import { applyTradeEvent } from '@/lib/trading/events'
+import { msg } from '@/lib/trading/messages'
 import { round2, type TradeSide } from '@/lib/trading/rules'
+import TradeToast from './TradeToast'
+import { useNotice } from './useNotice'
 
 /** 模拟交易默认标的（首页默认为上证指数，不可交易） */
 const DEFAULT_TRADING_SYMBOL = { market: 'sh', ticker: '600519' }
-
-interface TradeNotice {
-  kind: 'ok' | 'err'
-  text: string
-  /** 弹出层级（§3.9 v2.53）：trade = 交易反馈（委托面板内 Toast）；global = 账户级反馈（页面底部 Toast） */
-  scope: 'trade' | 'global'
-}
 
 /**
  * 模拟交易页：本地虚拟账户（localStorage 持久化）+ BFF 行情 3s 轮询。
@@ -53,7 +49,8 @@ export default function PaperTrading() {
   const [quotes, setQuotes] = useState<Record<string, QuoteSnapshot>>({})
   const [side, setSide] = useState<TradeSide>('buy')
   const [tab, setTab] = useState<'positions' | 'trades'>('positions')
-  const [notice, setNotice] = useState<TradeNotice | null>(null)
+  // Toast 通知（§3.9 双轨）：交易反馈（trade）在委托面板内弹出，账户级（global）页面底部弹出
+  const { notice, notify } = useNotice()
   // 移动端底部弹层（交易坞）展开态；桌面无交易坞，恒为收合（§3.11）
   const [panelOpen, setPanelOpen] = useState(false)
   const [info, setInfo] = useState<InfoSnapshot>(() => ({
@@ -96,15 +93,6 @@ export default function PaperTrading() {
       saveAccount(account)
     }
   }, [account])
-
-  // 成交提示 3s 自动消隐
-  useEffect(() => {
-    if (notice == null) {
-      return
-    }
-    const timer = setTimeout(() => setNotice(null), 3000)
-    return () => clearTimeout(timer)
-  }, [notice])
 
   // 弹层展开时 Escape 收起
   useEffect(() => {
@@ -204,16 +192,22 @@ export default function PaperTrading() {
       { prevClose: quote?.prevClose ?? null, lastPrice: quote?.price ?? null }
     )
     if (outcome.kind === 'rejected') {
-      setNotice({ kind: 'err', text: t(outcome.rejection.message), scope: 'trade' })
+      notify('err', t(outcome.rejection.message), 'trade')
       return
     }
     if (outcome.kind === 'executed') {
       setAccount(outcome.account)
-      setNotice({
-        kind: 'ok',
-        text: `${orderSide === 'buy' ? t('买入|Buy') : t('卖出|Sell')} ${selectedCode} ${qty}${t('股|shares')} @ ${outcome.price.toFixed(2)} ${t('已成交|filled')}`,
-        scope: 'trade'
-      })
+      notify(
+        'ok',
+        t(
+          msg(orderSide === 'buy' ? 'order_filled_buy' : 'order_filled_sell', {
+            code: selectedCode,
+            qty,
+            price: outcome.price.toFixed(2)
+          })
+        ),
+        'trade'
+      )
     }
   }
 
@@ -228,7 +222,7 @@ export default function PaperTrading() {
       return
     }
     setAccount(createInitialAccount())
-    setNotice({ kind: 'ok', text: t('账户已重置|Account reset'), scope: 'global' })
+    notify('ok', t(msg('account_reset')), 'global')
   }
 
   return (
@@ -336,18 +330,7 @@ export default function PaperTrading() {
                 <TradeSummary t={t} account={account} equity={equity} onReset={handleReset} />
               </div>
               {/* 交易 Toast（§3.9 v2.53）：成交/拒单反馈在委托面板内弹出 */}
-              {notice != null && notice.scope === 'trade' && (
-                <div className={`trade-toast panel ${notice.kind}`} role="status">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" aria-hidden="true">
-                    {notice.kind === 'ok' ? (
-                      <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
-                    ) : (
-                      <path d="M7 7l10 10M17 7L7 17" strokeLinecap="round" />
-                    )}
-                  </svg>
-                  <span>{notice.text}</span>
-                </div>
-              )}
+              {notice != null && notice.scope === 'trade' && <TradeToast notice={notice} />}
             </section>
             <section className="trade-card trade-records">
               {/* 移动端（§3.11）：滑块式分段（.tabs-thumb 平移），桌面为常规标签按钮 */}
@@ -382,18 +365,7 @@ export default function PaperTrading() {
       {panelOpen && <div className="trade-sheet-mask" aria-hidden="true" onClick={() => setPanelOpen(false)} />}
 
       {/* 全局 Toast（§3.9 v2.53）：仅账户级/系统级反馈，交易反馈见委托面板内 */}
-      {notice != null && notice.scope === 'global' && (
-        <div className={`trade-toast ${notice.kind}`} role="status">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" aria-hidden="true">
-            {notice.kind === 'ok' ? (
-              <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
-            ) : (
-              <path d="M7 7l10 10M17 7L7 17" strokeLinecap="round" />
-            )}
-          </svg>
-          <span>{notice.text}</span>
-        </div>
-      )}
+      {notice != null && notice.scope === 'global' && <TradeToast notice={notice} />}
     </div>
   )
 }

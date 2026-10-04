@@ -1,6 +1,7 @@
 // ==================== 模拟交易 BFF 请求封装（仅客户端） ====================
 // 失败返回 null / 业务拒绝体，由调用方兜底；账户与会话的权威状态一律来自服务端响应。
 
+import { msg } from './messages'
 import type { SimOrderInput, SimOrderResult, SimSessionAction, SimSessionResult, SimState } from './protocol'
 
 /** 账户 + 会话快照（页面初始化与 live 轮询） */
@@ -46,7 +47,7 @@ export const postSimSession = async (action: SimSessionAction): Promise<SimSessi
     })
     if (response.status === 422) {
       const body = (await response.json()) as { error?: { message?: string } }
-      return { ok: false, message: body.error?.message ?? '开局失败，请稍候重试|Failed to start, please retry' }
+      return { ok: false, message: body.error?.message ?? msg('start_failed') }
     }
     if (!response.ok) {
       return null
