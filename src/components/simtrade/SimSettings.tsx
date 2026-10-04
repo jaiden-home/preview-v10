@@ -334,26 +334,27 @@ export default function SimSettings() {
 
   return (
     <div className="sim-settings-page">
-      <div className="toolbar">
-        <div className="toolbar-item">
-          <Link className="tb-btn tb-clear" href="/simtrade">
-            ← {t('返回模拟|Back to simulation')}
-          </Link>
+      {/* 单一滚动容器：工具栏为首子元素随内容一起滚动（不固定悬浮） */}
+      <div className="trade-scroll">
+        <div className="toolbar">
+          <div className="toolbar-item">
+            <Link className="tb-btn tb-clear" href="/simtrade">
+              ← {t('返回模拟|Back to simulation')}
+            </Link>
+          </div>
+          <ThemeToggle t={t} onToggle={toggleTheme} />
         </div>
-        <ThemeToggle t={t} onToggle={toggleTheme} />
-      </div>
 
-      {loadError ? (
-        <div className="trade-loading">
-          {t('加载失败|Failed to load')}
-          <button type="button" className="tb-btn sim-retry-btn" onClick={() => setReloadId((v) => v + 1)}>
-            {t('重试|Retry')}
-          </button>
-        </div>
-      ) : snapshot == null ? (
-        <div className="trade-loading">{t('加载中|Loading')}…</div>
-      ) : (
-        <div className="trade-scroll">
+        {loadError ? (
+          <div className="trade-loading">
+            {t('加载失败|Failed to load')}
+            <button type="button" className="tb-btn sim-retry-btn" onClick={() => setReloadId((v) => v + 1)}>
+              {t('重试|Retry')}
+            </button>
+          </div>
+        ) : snapshot == null ? (
+          <div className="trade-loading">{t('加载中|Loading')}…</div>
+        ) : (
           <div className="sim-settings">
             {/* 卡 1：模拟设置（标的 / 区间 / 倍速） */}
             <section className="trade-card sim-set-card">
@@ -558,8 +559,8 @@ export default function SimSettings() {
               </button>
             </section>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {notice != null && <TradeToast notice={notice} />}
     </div>

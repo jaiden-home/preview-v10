@@ -303,27 +303,27 @@ export default function SimTrading() {
 
   return (
     <div className={`trade-page${panelOpen ? ' sheet-open' : ''}`}>
-      <div className="toolbar">
-        <div className="toolbar-item">
-          <Link className="tb-btn tb-clear" href="/dashboard">
-            ← {t('返回行情|Back to chart')}
-          </Link>
+      {/* 单一滚动容器：工具栏为首子元素随内容一起滚动（不固定悬浮），避免嵌套滚动导致面板内容被裁剪 */}
+      <div className="trade-scroll">
+        <div className="toolbar">
+          <div className="toolbar-item">
+            <Link className="tb-btn tb-clear" href="/dashboard">
+              ← {t('返回行情|Back to chart')}
+            </Link>
+          </div>
+          <ThemeToggle t={t} onToggle={chart.toggleTheme} id="theme-btn-top" itemClassName="theme-at-top" />
         </div>
-        <ThemeToggle t={t} onToggle={chart.toggleTheme} id="theme-btn-top" itemClassName="theme-at-top" />
-      </div>
 
-      {replay.error ? (
-        <div className="trade-loading">
-          {t('回放开局失败|Failed to start replay')}
-          <button type="button" className="tb-btn sim-retry-btn" onClick={replay.retry}>
-            {t('重试|Retry')}
-          </button>
-        </div>
-      ) : account == null || equity == null || replay.phase === 'boot' ? (
-        <div className="trade-loading">{t('加载中|Loading')}…</div>
-      ) : (
-        /* 单一滚动容器：工具栏固定，主区整体滚动（避免嵌套滚动导致面板内容被裁剪） */
-        <div className="trade-scroll">
+        {replay.error ? (
+          <div className="trade-loading">
+            {t('回放开局失败|Failed to start replay')}
+            <button type="button" className="tb-btn sim-retry-btn" onClick={replay.retry}>
+              {t('重试|Retry')}
+            </button>
+          </div>
+        ) : account == null || equity == null || replay.phase === 'boot' ? (
+          <div className="trade-loading">{t('加载中|Loading')}…</div>
+        ) : (
           <div className="trade-main">
             <section className="trade-card trade-chart">
               <div className="trade-chart-toolbar">
@@ -451,8 +451,8 @@ export default function SimTrading() {
               )}
             </section>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* 移动端弹层遮罩（桌面经 CSS 恒不显示） */}
       {panelOpen && <div className="trade-sheet-mask" aria-hidden="true" onClick={() => setPanelOpen(false)} />}

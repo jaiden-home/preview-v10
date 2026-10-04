@@ -20,13 +20,13 @@ export default function HomeLanding() {
 
   return (
     <div className="home-page">
-      <div className="toolbar">
-        <div className="toolbar-item">
-          <span className="home-brand">KLineChart</span>
-        </div>
-        <ThemeToggle t={t} onToggle={toggleTheme} />
-      </div>
       <div className="home-main">
+        <div className="toolbar">
+          <div className="toolbar-item">
+            <span className="home-brand">KLineChart</span>
+          </div>
+          <ThemeToggle t={t} onToggle={toggleTheme} />
+        </div>
         <div className="home-hero">
           <h1 className="home-hero-title">{t('A股行情与模拟交易|A-Share Charts & Paper Trading')}</h1>
           <p className="home-hero-sub">{t('选择一个入口开始|Pick an entry to get started')}</p>

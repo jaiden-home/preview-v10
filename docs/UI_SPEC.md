@@ -21,14 +21,14 @@
 
 ## 1. 总则与实现约定
 
-| 约定         | 说明                                                                                                                                                                                                                            |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 样式方案     | 纯全局 CSS，单一文件 `src/app/globals.css`                                                                                                                                                                                      |
-| 命名空间     | 所有选择器带 `#app` 前缀（`layout.tsx` 的 `<div id="app">` 提供隔离）                                                                                                                                                           |
-| 主题机制     | 深色 = 根节点 `#app.dark`，仅切换 CSS 变量值，不改结构                                                                                                                                                                          |
-| 图表内部样式 | klinecharts 画布内（轴/蜡烛/指标）由 `src/lib/chart/terminal.ts` 管理，颜色常量在 `src/lib/chart/constants.ts`，CSS 不干预                                                                                                      |
-| 页面骨架     | `#app`（100vh/dvh 纵向 flex）→ 顶部 `.toolbar` → 页面内容。卡片化页面（如交易页）内容包一层 `.trade-page`（淡色底 `--page-tint`）衬托卡片，工具栏之下用 `.trade-scroll` 作**唯一滚动容器**（禁止在主区/面板再嵌 overflow 滚动） |
-| 布局单位     | 间距以 2px 为基进位（2/3/4/6/8/10/12/14/16/18）；页面级栅格 gap 与 padding = `12px`（移动端 `8px`）                                                                                                                             |
+| 约定         | 说明                                                                                                                                                                                                                                                                       |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 样式方案     | 纯全局 CSS，单一文件 `src/app/globals.css`                                                                                                                                                                                                                                 |
+| 命名空间     | 所有选择器带 `#app` 前缀（`layout.tsx` 的 `<div id="app">` 提供隔离）                                                                                                                                                                                                      |
+| 主题机制     | 深色 = 根节点 `#app.dark`，仅切换 CSS 变量值，不改结构                                                                                                                                                                                                                     |
+| 图表内部样式 | klinecharts 画布内（轴/蜡烛/指标）由 `src/lib/chart/terminal.ts` 管理，颜色常量在 `src/lib/chart/constants.ts`，CSS 不干预                                                                                                                                                 |
+| 页面骨架     | `#app`（100vh/dvh 纵向 flex）→ 页面内容。卡片化页面（如交易页）内容包一层 `.trade-page`（淡色底 `--page-tint`）衬托卡片，其内 `.trade-scroll` 作**唯一滚动容器**——顶部 `.toolbar` 为其首个子元素、随内容一起滚动（不固定悬浮，v2.56）（禁止在主区/面板再嵌 overflow 滚动） |
+| 布局单位     | 间距以 2px 为基进位（2/3/4/6/8/10/12/14/16/18）；页面级栅格 gap 与 padding = `12px`（移动端 `8px`）                                                                                                                                                                        |
 
 ## 2. 设计令牌（Design Tokens）
 
@@ -141,7 +141,7 @@
 
 ### 3.1 页面骨架与卡片
 
-- 卡片化页面（交易页）：内容包 `.trade-page`（`flex: 1; min-height: 0; flex-column; background: var(--page-tint)`），卡片浮于其上；工具栏之下的 `.trade-scroll`（`flex: 1; min-height: 0; overflow-y: auto`）承载全部内容滚动，卡片随内容自然撑高。
+- 卡片化页面（交易页）：内容包 `.trade-page`（`flex: 1; min-height: 0; flex-column; background: var(--page-tint)`），卡片浮于其上；`.trade-scroll`（`flex: 1; min-height: 0; overflow-y: auto` + 纵向 flex）承载全部内容滚动，顶部 `.toolbar` 为其首个子元素、随内容一起滚动（不固定悬浮，v2.56），卡片随内容自然撑高（`.trade-main`/`.sim-settings` `flex: none` 不参与弹性分配）。
 - 卡片 `.trade-card`：`--tb-bg` + `1px solid --tb-border` + `--radius-lg` + `var(--shadow-card)`。卡片内首行若是工具栏，底部加结构实线。
 - 终端页（行情页）不铺卡片，保持通栏：toolbar → info-table → 图表。
 
@@ -156,6 +156,7 @@
 
 ### 3.3 工具栏（.toolbar / .trade-chart-toolbar）
 
+- 页面顶部 `.toolbar` 位于各页唯一滚动容器内（首子元素），随内容一起滚动、不固定悬浮（v2.56）；行情页（终端）无页面滚动，工具栏自然常驻。
 - 横向 flex、可换行、`gap: 2px`、`padding: 8px 12px`、背景 `--tb-bg`、底部结构实线。
 - `.tb-btn`：`12px`、`padding: 5px 10px`、圆角 `--radius-sm`、透明底。
 - 主操作（`.tb-symbol`）：600 字重 + `--tb-active` 文 + `--tb-active-bg` 胶囊。
@@ -218,7 +219,7 @@
 
 ### 3.12 首页入口页（.home-page，v2.25）
 
-- 结构：`.home-page`（复用卡片化页面范式：`--page-tint` 画布 + 顶部工具栏）→ `.home-main`（唯一滚动容器，垂直水平居中，纵向 `gap: 18px`、`padding: 18px 12px`）→ `.home-hero`（Display-S `22/700` 标题 + Base 副文案，居中）+ `.home-grid`（双列等宽入口卡 2×2，`gap: 12px`、`max-width: 640px`；≤768px 转单列 `max-width: 360px` 窄幅、侧距 `8px`）。
+- 结构：`.home-page`（复用卡片化页面范式：`--page-tint` 画布）→ `.home-main`（唯一滚动容器，顶部 `.toolbar` 为首子元素随内容滚动（`align-self: stretch` 横向铺满，v2.56）；hero / 栅格经 auto 边距（hero `margin-top: auto` + 栅格 `margin-bottom: auto`）在工具栏之下的剩余空间垂直居中 + 水平居中，内容超高时 auto 归零自顶滚动，纵向 `gap: 18px`、`padding: 18px 12px`）→ `.home-hero`（Display-S `22/700` 标题 + Base 副文案，居中）+ `.home-grid`（双列等宽入口卡 2×2，`gap: 12px`、`max-width: 640px`；≤768px 转单列 `max-width: 360px` 窄幅、侧距 `8px`）。
 - 工具栏：品牌名 `.home-brand`（Title 级静态文本，非按钮）左锚点 + 主题开关推右；首页无图表，主题切换为独立实现（同款 `#app.dark` + `.theme-switching` 抑制过渡，不经 useChartTerminal）。
 - 入口卡 `.home-card`（整卡链接）：`.trade-card` 同款壳（`--tb-bg` + `1px --tb-border` + `--radius-lg` + `--shadow-card`，`padding: 16px 18px`、纵向 `gap: 8px`）；悬停描边换强调色 + 阴影升 `--shadow-pop`（仅 `border-color / box-shadow / color` 过渡）。
 - 卡内结构：头行 `.home-card-head`（左 `.home-card-icon` 40px 淡底圆角块 `--radius-md` + 内联 SVG 22px `stroke: currentColor`；右 `.home-card-arrow` 14px 次要色箭头，悬停随卡换强调色）→ 标题 Title `13/600` → 副文案 Secondary `11px` 次要色。
@@ -239,7 +240,7 @@
 
 极速模拟的参数设置页：**标的 / 日期区间 / 倍速 / 开始暂停开关 / 重置账户**的本局配置与控制中枢；**入口 = 首页「模拟设置」卡（§3.12，`.home-card.settings`）**，模拟页内不设入口（顶部工具栏「← 返回模拟」文字链返回 `/simtrade`）。
 
-- **页面骨架 `.sim-settings-page`**：复用卡片化页面范式（`--page-tint` 画布 + 顶部 `.toolbar`（左「返回模拟」文字链 + 右主题开关，主题为独立实现同首页），**不套用 `.trade-page`**——移动端不隐藏工具栏）；其下 `.trade-scroll`（唯一滚动容器）承载 `.sim-settings`（纵向 `gap: 12px`、`padding: 12px`、`max-width: 560px` 居中，移动端 `padding: 8px`）内两张 `.trade-card`。
+- **页面骨架 `.sim-settings-page`**：复用卡片化页面范式（`--page-tint` 画布 + 顶部 `.toolbar`（左「返回模拟」文字链 + 右主题开关，主题为独立实现同首页），**不套用 `.trade-page`**——移动端不隐藏工具栏）；`.trade-scroll`（唯一滚动容器，工具栏为首子元素随内容滚动，v2.56）承载 `.sim-settings`（纵向 `gap: 12px`、`padding: 12px`、`max-width: 560px` 居中，移动端 `padding: 8px`）内两张 `.trade-card`。
 - **卡 1「模拟设置」`.sim-set-card`**（`padding: 14px 16px`，纵向 `gap: 12px`）：卡头 `.sim-set-head`（Title 13/600 + 底部结构实线，`padding-bottom: 8px`）；字段区纵向 `gap: 12px`——
   - 模拟标的：搜索选择器 `.sim-pick`（`position: relative`）+ 触发按钮 `.sim-pick-btn`（36px、`--tb-bg` + `--tb-border` 描边 + `--radius-sm`，左名称 12/600 + 右代码 Secondary/num，右端下箭头次要色图标）+ 复用 `.dropdown/.search-box/.symbol-list/.symbol-row` 下拉搜索范式（300ms 防抖 `/api/search`，空查询展示 `DEFAULT_SYMBOLS`，点击行即选定）。
   - 起始/结束日期：双列日期输入 `.sim-set-input`（`type="date"`，§3.4 标准输入规格 + `--font-num`，36px；起始日 `max` = 结束日、结束日 `min` = 起始日互约束；结束日清空 = 回放至数据尽头）。
@@ -324,6 +325,7 @@
 | v2.53 | **Toast 双轨：交易反馈收敛至委托面板内弹出（§3.9，/trade 与 /simtrade 同步）**：新增 `.trade-toast.panel` 变体——下单成交/拒单等交易 Toast 锚定委托面板卡（`#trade-order-panel`）内顶部居中悬浮（`.trade-panel` 补 `position: relative` 作桌面定位宿主；移动端随底部弹层、于展开坞条下方弹出，共享 1100 层级）；账户级反馈（「账户已重置」）与设置页操作结果维持全局 Toast（页面底部居中，1200 不变）；/trade `TradeNotice` 增 `scope` 字段区分两层，/simtrade 全部为交易反馈、Toast 渲染整体移入面板；其余规格（图标/配色/入场/3s 消隐）两层一致；§3.9/§3.13 同步更新                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | v2.54 | 费用预估 `.order-estimate` 三列格内容改居中对齐（§3.8，`justify-items: center`），与 `.order-limits` 小格居中口径一致                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | v2.55 | **交易消息目录化 + 拒单文案去路径指引（§3.13）**：新增 `lib/trading/messages.ts`——交易域全部用户文案收敛为 code → `'中文                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | English'` 双语目录单一来源（`msg()`支持`{key}`插值），rules / engine / sim-api 产生端与三页组件（PaperTrading / SimTrading / SimSettings）接入；新增`useNotice`hook（TradeNotice 状态 + 3s 消隐内聚）与`TradeToast`组件（按 scope 出`.panel` 修饰），三页删除各自重复的接口/状态/定时器/Toast JSX；「本局已结束」「已暂停」拒单文案不再指「模拟设置」——改「本局已结束，请等待新的开局」「已暂停，请等待新的开局后再下单」（服务端与预检同口径）；§3.13 同步更新 |
+| v2.56 | **顶部工具栏随页面滚动（全部页面，不再固定悬浮）**：各页唯一滚动容器（`.trade-scroll` / `.home-main`）把顶部 `.toolbar` 收编为首子元素，随内容一起滚走（此前固定于视口顶部）；`.trade-scroll` 转纵向 flex（加载/错误态 `.trade-loading` 弹性填充保持垂直居中，`.trade-main`/`.sim-settings` 补 `flex: none`），首页 hero / 栅格改 auto 边距居中（工具栏置顶，内容超高时可自顶滚动，兼修 flex 居中溢出顶部不可达），交易页移动端隐藏选择器 `.trade-page > .toolbar` 改后代选择器；§1/§3.1/§3.3/§3.12/§3.14 同步更新                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 
 ## 7. AI 交付前检查清单
 

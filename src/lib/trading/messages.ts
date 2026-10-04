@@ -10,7 +10,7 @@ export const TRADE_MESSAGES = {
   // —— 下单校验拒单（code 与 OrderRejectCode 对应）——
   not_tradable: '指数与该类标的暂不支持模拟交易|Indexes are not tradable in paper trading',
   invalid_price: '请输入有效价格|Invalid price',
-  price_limit: '超出涨跌停范围（{lower} ~ {upper})|Out of price limit range ({lower} ~ {upper})',
+  price_limit: '超出涨跌停范围（{lower} ~ {upper}）|Out of price limit range ({lower} ~ {upper})',
   price_unfillable_buy: '委托价低于现价 {px}，不能成交|Order price is below market {px}; cannot fill',
   price_unfillable_sell: '委托价高于现价 {px}，不能成交|Order price is above market {px}; cannot fill',
   invalid_qty: '请输入有效数量|Invalid quantity',

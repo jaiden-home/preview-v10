@@ -867,7 +867,9 @@ body {
   white-space: nowrap;
 }
 
-/* 内容区：垂直水平居中，纵向两组（hero / 入口栅格）；内容超出时可滚动（唯一滚动容器） */
+/* 内容区（唯一滚动容器）：顶部工具栏随内容一起滚动（不固定悬浮），
+   hero / 入口栅格经 auto 边距在工具栏之下的剩余空间垂直居中、水平居中；
+   内容超出时 auto 边距归零、自顶滚动 */
 #app .home-main {
   flex: 1;
   min-height: 0;
@@ -875,12 +877,17 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
   gap: 18px;
   padding: 18px 12px;
 }
 
+/* 顶部工具栏横向铺满（覆盖父级 align-items: center 的收缩包裹） */
+#app .home-main > .toolbar {
+  align-self: stretch;
+}
+
 #app .home-hero {
+  margin-top: auto;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -904,8 +911,9 @@ body {
   color: var(--tb-text-sub);
 }
 
-/* 入口栅格：双卡等宽居中，页面级 gap 12px */
+/* 入口栅格：双卡等宽居中，页面级 gap 12px；auto 下边距参与剩余空间居中（见 .home-main） */
 #app .home-grid {
+  margin-bottom: auto;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
@@ -1056,12 +1064,15 @@ body {
   background-color: var(--page-tint);
 }
 
-/* 单一滚动容器：工具栏固定，其下（汇总卡 + 主区）整体滚动；
+/* 唯一滚动容器：顶部工具栏为首子元素，随内容一起滚动（不固定悬浮）；
+   纵向 flex 使加载态 .trade-loading 弹性填充居中；
    禁止在主区/面板再嵌 overflow，避免底部内容被静默裁剪 */
 #app .trade-scroll {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
 }
 
 /* ---- 账户摘要（委托面板末段，v2.9 起资产殿后）：hero + 2×2 指标栅格 ---- */
@@ -1150,6 +1161,7 @@ body {
 /* 主区：行情图表 + 委托面板（上排），持仓/记录（下排通栏）；
    高度由内容自然撑开，滚动交给外层 .trade-scroll（不在此处滚） */
 #app .trade-main {
+  flex: none;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 360px;
   /* 首行高度由面板内容驱动（保底 410px），图表等高跟随：
@@ -1785,8 +1797,8 @@ body {
     --dock-h-open: calc(56px + env(safe-area-inset-bottom));
   }
 
-  /* 顶部工具栏整体隐藏：返回与主题开关均已并入图表工具栏（§3.11） */
-  #app .trade-page > .toolbar {
+  /* 顶部工具栏整体隐藏（随内容滚动的首子元素，后代选择器匹配）：返回与主题开关均已并入图表工具栏（§3.11） */
+  #app .trade-page .toolbar {
     display: none;
   }
 
@@ -2500,6 +2512,7 @@ body {
 
 /* 内容列：窄幅居中（设置表单页，非数据密集页） */
 #app .sim-settings {
+  flex: none;
   display: flex;
   flex-direction: column;
   gap: 12px;
