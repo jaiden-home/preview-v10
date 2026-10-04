@@ -50,13 +50,13 @@ const DEFAULT_TRADING_SYMBOL = { market: 'sh', ticker: '600999' }
  * （与图表一致，仅随虚拟日推进变化）；T+1/涨跌停按虚拟日结算（服务端）。
  * 信息表格基本面 = 现时行情快照按回放口径回溯（replayFundamentalOf：振幅/换手率当日精确、
  * 市值/市盈/市净/均价按收盘比例近似），经 chart.setFundamental 注入，不混入实时现价。
- * 选中标的仍用独立 localStorage key，与 /trade 互不干扰。
+ * 开局标的偏好用独立 localStorage key，与 /trade 互不干扰；本局展示标的以服务端会话锚为权威。
  */
 export default function SimTrading() {
   const { locale, t } = useLocale()
 
   const [account, setAccount] = useState<TradingAccount | null>(null)
-  const [selected, setSelected] = useState(DEFAULT_TRADING_SYMBOL)
+  const [storedSelected, setStoredSelected] = useState(DEFAULT_TRADING_SYMBOL)
   const [side, setSide] = useState<TradeSide>('buy')
   const [tab, setTab] = useState<'positions' | 'trades'>('positions')
   // Toast 通知（§3.9 双轨）：本页全部反馈均为交易反馈（trade），在委托面板内弹出
@@ -78,7 +78,8 @@ export default function SimTrading() {
     dayIndex: -1
   })
   const chartContainerRef = useRef<HTMLDivElement>(null)
-  const selectedCode = `${selected.market}${selected.ticker}`
+  // 开局锚候选（localStorage 偏好）：仅在无会话自动开局时作为开局标的
+  const storedCode = `${storedSelected.market}${storedSelected.ticker}`
   // 现时行情快照（信息表格回放基本面的回溯基准）：按标的缓存，换标的时一次拉取
   const quoteCacheRef = useRef<Map<string, QuoteSnapshot>>(new Map())
   const [fundQuote, setFundQuote] = useState<{ code: string; quote: QuoteSnapshot } | null>(null)
@@ -92,12 +93,21 @@ export default function SimTrading() {
         .join(','),
     [account]
   )
-  const replayCodes = useMemo(
-    () => [selectedCode, ...positionKey.split(',').filter(Boolean)],
-    [selectedCode, positionKey]
-  )
-  const replay = useReplay({ anchorCode: selectedCode, codes: replayCodes, onAccountSync: setAccount })
+  const replayCodes = useMemo(() => [storedCode, ...positionKey.split(',').filter(Boolean)], [storedCode, positionKey])
+  const replay = useReplay({ anchorCode: storedCode, codes: replayCodes, onAccountSync: setAccount })
   const simState = replay.state
+
+  // 本局标的校准（渲染期同步派生）：模拟标的以服务端会话锚为权威（/admin/simtrade
+  // 重开换标的，§3.14），live 首渲染即取会话锚——杜绝先用旧标的建图再切换的空载窗口
+  // （旧标的的数据永不会进 feed，先建图会令 klinecharts 首次 load 空转超时回调节空图表）；
+  // localStorage 偏好仅在无会话自动开局时作为开局锚，图表/委托面板/交易坞随
+  // selectedCode 全链路切换（换标的数据走 /api/sim/replay?symbol=）
+  const anchorCode = replay.phase === 'live' ? (simState?.anchorCode ?? null) : null
+  const selected =
+    anchorCode != null && anchorCode !== storedCode
+      ? { market: anchorCode.slice(0, 2), ticker: anchorCode.slice(2) }
+      : storedSelected
+  const selectedCode = `${selected.market}${selected.ticker}`
 
   // 回放图表：注入式数据源（周期/指标/画线全功能复用），不拉实时行情
   const feed = useMemo(() => createReplayFeed(), [])
@@ -112,15 +122,21 @@ export default function SimTrading() {
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setSelected(loadSelectedSymbol(REPLAY_SYMBOL_STORAGE_KEY) ?? DEFAULT_TRADING_SYMBOL)
+    setStoredSelected(loadSelectedSymbol(REPLAY_SYMBOL_STORAGE_KEY) ?? DEFAULT_TRADING_SYMBOL)
   }, [])
 
   // 委托面板行情 = 回放行情
   // （现价 = 最新完成日收盘、昨收 = 回放前收，与图表一致，仅随虚拟日推进变化；
   //   名称随回放视图由服务端带回，无则回退代码）
+  // 覆盖面 = 校准后的选中 + 持仓（锚校准后 selectedCode 可能不同于开局锚候选 storedCode，
+  // 后者仅作无会话开局锚，不参与行情展示）
+  const quoteCodes = useMemo(
+    () => [selectedCode, ...positionKey.split(',').filter(Boolean)],
+    [selectedCode, positionKey]
+  )
   const syntheticQuotes = useMemo(() => {
     const map: Record<string, QuoteSnapshot> = {}
-    for (const code of replayCodes) {
+    for (const code of quoteCodes) {
       const quote = replay.quoteOf(code)
       if (quote == null) {
         continue
@@ -135,7 +151,7 @@ export default function SimTrading() {
       }
     }
     return map
-  }, [replay, replayCodes])
+  }, [replay, quoteCodes])
 
   // 弹层展开时 Escape 收起
   useEffect(() => {
