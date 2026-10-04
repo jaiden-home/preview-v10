@@ -8,6 +8,8 @@ const RESERVED_ROOT_SEGMENTS = new Set([
   'robots.txt',
   'trade',
   'dashboard',
+  'market',
+  'screener',
   'simtrade',
   'admin'
 ])

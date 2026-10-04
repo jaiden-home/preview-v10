@@ -34,8 +34,12 @@ Next.js App Router 的应用根目录，包含全部页面路由与 BFF 接口�
   - `timeshare/`：分时数据（当日分钟线 + 昨收基准）。
   - `quote/`：实时快照（名称/现价/昨收 + 基本面估值）。
   - `search/`：标的搜索（6 位代码精确匹配 + smartbox 名称/拼音联想）。
+  - `market/`：行情中心总览（`board/sort/dir` 板块榜视图 + `symbols` 自选批量 → `{ indices, ranking, watches }`）。
+  - `screener/`：量化选股运行（`POST`：conditions 条件组合 + from/asOf 日期区间 → 分片渐进 `{ done, computed, total, items }`；股票池固定沪深主板）。
   - `healthz/`：健康检查（`{ status, uptime, timestamp }`，供 Docker HEALTHCHECK 与探活使用）。
-- `dashboard/`：行情看板页（原首页终端整体迁移，默认上证指数，服务端直出首屏行情与日 K）。
+- `dashboard/`：行情看板页（原首页终端整体迁移，默认上证指数，服务端直出首屏行情与日 K；支持 `?symbol=` 深链，非法代码回退默认）。
+- `market/`：行情中心页（指数概览 + 官方板块榜 + 自选收藏，SSR 直供默认视图 + 客户端 3s 轮询）。
+- `screener/`：量化选股页（纯客户端：条件组合器 + 模板 + 分片运行轮询，策略本地持久化）。
 - `trade/`：模拟交易页（客户端虚拟账户 + BFF 行情轮询）。
 - `simtrade/`：极速模拟页（历史回放 + 虚拟时钟，账务由 `/api/sim/*` BFF 权威结算）。
 - `admin/`：管理命名空间；`admin/simtrade/` 模拟设置页（标的 / 起止日期 / 倍速 / 开始暂停开关）。
@@ -43,9 +47,14 @@ Next.js App Router 的应用根目录，包含全部页面路由与 BFF 接口�
 
 ### src/components/
 
-React UI 组件，按页面域分子目录（`terminal/` 行情终端、`trading/` 模拟交易、`home/` 首页入口）：
+React UI 组件，按页面域分子目录（`terminal/` 行情终端、`trading/` 模拟交易、`home/` 首页入口、`market/` 行情中心、`screener/` 量化选股）：
 
-- `home/HomeLanding.tsx`：首页入口页（行情看板 / 模拟交易两张入口卡片，独立主题切换）。
+- `home/HomeLanding.tsx`：首页入口页（行情中心 / 量化选股 / 行情看板 / 模拟交易 / 极速模拟 / 模拟设置六张入口卡片，独立主题切换）。
+
+- `market/MarketCenter.tsx`：行情中心主组件（指数概览 + 板块榜单 + 自选收藏；搜索下拉、星标、深链看板、3s 轮询内聚于此）。
+- `market/StarButton.tsx`：自选星标按钮（行情中心 / 量化选股共用）。
+
+- `screener/Screener.tsx`：量化选股主组件（条件组合器、预设模板、分片运行轮询、动态条件值结果表）。
 
 - `TradingTerminal.tsx`：终端主组件，负责组装工具栏、信息表格与图表挂载点。
 - `SymbolPicker.tsx` / `PeriodGroup.tsx`：标的搜索切换与周期（分时/分钟/日/周/月）切换；`PeriodGroup` 支持 `simple` 精简模式（仅日/周/月，交易页图表用）。
@@ -81,12 +90,14 @@ React UI 组件，按页面域分子目录（`terminal/` 行情终端、`trading
     - `registry.ts`：按 `DATA_PROVIDER` 环境变量选择数据源实例（进程内单例）。
     - `periods.ts`：周期兜底计划（原生周期透传，缺口周期基周期拉取 + 本地聚合）。
     - `contract.ts`：provider 契约测试套件（新数据源上线须通过）。
-    - `tencent/`：腾讯数据源实现（`http` 传输 / `parse` 协议解析 / `quote`·`kline`·`timeshare`·`search` 四类接口 / `index` 组装与缓存策略）。
+    - `tencent/`：腾讯数据源实现（`http` 传输 / `parse` 协议解析 / `quote`（含批量）·`kline`·`timeshare`·`search`·`ranking` 接口 / `index` 组装与缓存策略）。
+  - `screener/`：量化选股编排（`universe.ts` 沪深主板池发现与日 K 长缓存、`service.ts` 基本面预筛 + 技术指标分片计算与游标状态）。
   - `cache.ts`：TTL 缓存（含在途请求去重）。
   - `rate-limit.ts`：按 IP 滑动窗口限流。
   - `schemas.ts` / `env.ts`：zod 接口参数校验与环境变量解析。
   - `api.ts` / `logger.ts`：路由层公共封装与 pino 结构化日志。
-- 根级文件：`fundamental.ts`（基本面展示回溯与信息表格渲染）、`i18n.ts`（中英双语文案，`#en-US` hash 兼容原 SPA）。
+- `screener/`：量化选股域（环境无关，两端共用）——`types.ts` 条件模型 + 指标元数据单源、`indicators.ts` 指标纯函数、条件求值与区间逐日扫描、`validate.ts` 双端校验护栏、`screener.test.ts` 单元测试。
+- 根级文件：`fundamental.ts`（基本面展示回溯与信息表格渲染）、`i18n.ts`（中英双语文案，`#en-US` hash 兼容原 SPA）、`watchlist.ts`（自选收藏 localStorage 存取，行情中心 / 量化选股共用）。
 
 ## tests/
 

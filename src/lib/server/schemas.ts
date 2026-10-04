@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { SCREENER_INDICATORS, SCREENER_MAX_CONDITIONS, type ScreenerIndicatorKey } from '../screener/types'
 
 const symbolField = z.string().regex(/^(sh|sz|bj)\d{6}$/, 'symbol must be market prefix (sh/sz/bj) + 6-digit code')
 
@@ -21,9 +22,40 @@ export const searchQuerySchema = z.object({
   q: z.string().trim().min(1, 'query is required').max(40, 'query is too long')
 })
 
+/** 行情中心总览（/api/market）：board/sort/dir 控制榜单视图，symbols 携带自选代码批量刷新行情 */
+export const marketQuerySchema = z.object({
+  board: z.enum(['industry', 'concept']).default('industry'),
+  sort: z.enum(['changePct', 'turnover']).default('changePct'),
+  dir: z.enum(['asc', 'desc']).default('desc'),
+  symbols: z.string().trim().max(240, 'too many symbols').optional()
+})
+
 /** 回放视图（/api/sim/replay）：symbol 之外无参数——窗口（起始日/结束日/根数）由服务端从当前会话解析 */
 export const replayQuerySchema = z.object({
   symbol: symbolField
+})
+
+/** 量化选股条件（指标枚举自指标库元数据派生；参数范围/阈值配套护栏在 lib/screener/validate） */
+const screenerConditionSchema = z.object({
+  key: z.enum(SCREENER_INDICATORS.map((meta) => meta.key) as [ScreenerIndicatorKey, ...ScreenerIndicatorKey[]]),
+  params: z.record(z.string(), z.number()).default({}),
+  op: z.enum(['gt', 'lt', 'between', 'bool']),
+  value: z.number().optional(),
+  min: z.number().optional(),
+  max: z.number().optional()
+})
+
+/** 量化选股运行（POST /api/screener）：分片渐进，同参数续算；from/asOf 组成历史扫描区间（近一年内，from ≤ asOf）；股票池固定沪深主板 */
+export const screenerRunSchema = z.object({
+  conditions: z.array(screenerConditionSchema).min(1).max(SCREENER_MAX_CONDITIONS),
+  from: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'from must be yyyy-mm-dd')
+    .optional(),
+  asOf: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'asOf must be yyyy-mm-dd')
+    .optional()
 })
 
 /** 模拟交易下单（/api/sim/orders）：价格/数量由服务端权威校验（涨跌停/整手/资金/T+1） */

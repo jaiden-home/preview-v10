@@ -162,28 +162,29 @@ flowchart TD
 | `page.tsx`                                    | 首页（默认上证指数 sh000001），`dynamic = 'force-dynamic'`；`fetchInitialTerminalData` 服务端并行拉取快照与初始日 K 直出首屏 |
 | `trade/page.tsx`                              | 模拟交易页，`dynamic = 'force-dynamic'` + 静态 `metadata`；页面只做壳，虚拟账户与轮询全在客户端（见 4.6）                    |
 | `loading.tsx` / `error.tsx` / `not-found.tsx` | 骨架屏 / 客户端错误边界（含 Sentry 挂点）/ 404 提示                                                                          |
-| `api/*/route.ts`                              | BFF 六接口（见第 6 节）                                                                                                      |
+| `api/*/route.ts`                              | BFF 十一接口（见第 6 节）                                                                                                    |
 
 ### 4.2 边界代理与启动钩子
 
 - **`proxy.ts`**（Edge，matcher 排除 `_next/static`、`_next/image`）：
-  - **边缘 404**：单段路径、非保留段（`api`、`_next`、`favicon.ico`、`logo.svg`、`robots.txt`、`trade`）且不匹配 `^(sh|sz|bj)\d{6}$` 时直接返回内联 404。动机：Next 流式响应下页面内 `notFound()` 在响应头冲刷后抛出，无法再改状态码。匹配标的模式的路径放行后由 Next 渲染 `not-found.tsx` 兜底（`[symbol]` 路由已移除）。
+  - **边缘 404**：单段路径、非保留段（`api`、`_next`、`favicon.ico`、`logo.svg`、`robots.txt`、`trade`、`dashboard`、`market`、`screener`、`simtrade`、`admin`）且不匹配 `^(sh|sz|bj)\d{6}$` 时直接返回内联 404。动机：Next 流式响应下页面内 `notFound()` 在响应头冲刷后抛出，无法再改状态码。匹配标的模式的路径放行后由 Next 渲染 `not-found.tsx` 兜底（`[symbol]` 路由已移除）。
   - **`x-request-id` 注入**：已有则透传，否则 `crypto.randomUUID()` 写回响应头，供日志关联。
 - **`instrumentation.ts` / `instrumentation-node.ts`**：按 `NEXT_RUNTIME` 静态判定仅 Node 运行时加载 node 分支——启动日志（node 版本/pid）+ `SIGTERM`/`SIGINT` 优雅停机记录；Edge bundle 中被摇树移除。
 
 ### 4.3 BFF 服务端层（`lib/server/`，仅服务端）
 
-| 模块                | 职责                                                                                                                                                                                                                                                               |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `market-service.ts` | 行情服务（BFF 与页面的唯一入口）：按 `DATA_PROVIDER` 取数据源实例；能力降级（无分时 → 当日 1 分钟 K 合成，无联想搜索 → 代码精确匹配）；`fetchInitialTerminalData` 聚合                                                                                             |
-| `provider/`         | 数据源抽象层：`types.ts`（`MarketDataProvider` 接口 + `ProviderCapabilities`）、`registry.ts`（env 选择，进程内单例）、`periods.ts`（周期兜底）、`contract.ts`（契约测试套件）                                                                                     |
-| `provider/tencent/` | 腾讯数据源实现（唯一上游出口）：`http.ts` 传输（UA/Referer 伪装、GBK 解码、超时）、`parse.ts` 协议解析（qt 行情、K 线行、分时点、smartbox、周期映射）、`quote/kline/timeshare/search` 四类接口、`index.ts` 组装与缓存策略（raw/hist 分层，key 带 `tencent:` 前缀） |
-| `cache.ts`          | `TTLCache<T>`：LRU 淘汰 + 过期清扫 + **在途请求去重**                                                                                                                                                                                                              |
-| `rate-limit.ts`     | `SlidingWindowRateLimiter`：按 IP 精确滑动窗口                                                                                                                                                                                                                     |
-| `schemas.ts`        | zod 查询参数 schema（symbol 正则、period 枚举、from<to、q 长度 1–40）                                                                                                                                                                                              |
-| `api.ts`            | 路由公共工具：`jsonOk/jsonError`（统一 `Cache-Control: no-store`）、进程级共享限流器、`requestIdOf`、`queryObject`                                                                                                                                                 |
-| `env.ts`            | zod 校验环境变量，进程内懒解析一次，非法值启动期快速失败                                                                                                                                                                                                           |
-| `logger.ts`         | pino 全局 logger + `requestLogger(requestId)` 派生 child logger                                                                                                                                                                                                    |
+| 模块                | 职责                                                                                                                                                                                                                                                                                                      |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `market-service.ts` | 行情服务（BFF 与页面的唯一入口）：按 `DATA_PROVIDER` 取数据源实例；能力降级（无分时 → 当日 1 分钟 K 合成，无联想搜索 → 代码精确匹配，无批量行情 → 逐标的拉取，无板块榜 → 空榜）；`fetchInitialTerminalData` 终端聚合、`fetchMarketOverview` 行情中心总览（指数 + 板块榜 + 自选批量行情）                  |
+| `provider/`         | 数据源抽象层：`types.ts`（`MarketDataProvider` 接口 + `ProviderCapabilities`）、`registry.ts`（env 选择，进程内单例）、`periods.ts`（周期兜底）、`contract.ts`（契约测试套件）                                                                                                                            |
+| `provider/tencent/` | 腾讯数据源实现（唯一上游出口）：`http.ts` 传输（UA/Referer 伪装、GBK 解码、超时）、`parse.ts` 协议解析（qt 行情、K 线行、分时点、smartbox、板块榜单、周期映射）、`quote/kline/timeshare/search/ranking` 五类接口（quote 含批量 `q=`）、`index.ts` 组装与缓存策略（raw/hist 分层，key 带 `tencent:` 前缀） |
+| `screener/`         | 量化选股编排：`universe.ts`（沪深主板池发现 24h 缓存 + 日 K 10min 长缓存受控并发）、`service.ts`（基本面预筛 → 技术指标分片计算，游标状态 10min，命中行情刷新）                                                                                                                                           |
+| `cache.ts`          | `TTLCache<T>`：LRU 淘汰 + 过期清扫 + **在途请求去重**                                                                                                                                                                                                                                                     |
+| `rate-limit.ts`     | `SlidingWindowRateLimiter`：按 IP 精确滑动窗口                                                                                                                                                                                                                                                            |
+| `schemas.ts`        | zod 查询参数 schema（symbol 正则、period 枚举、from<to、q 长度 1–40、量化条件枚举派生自指标库元数据）                                                                                                                                                                                                     |
+| `api.ts`            | 路由公共工具：`jsonOk/jsonError`（统一 `Cache-Control: no-store`）、进程级共享限流器、`requestIdOf`、`queryObject`                                                                                                                                                                                        |
+| `env.ts`            | zod 校验环境变量，进程内懒解析一次，非法值启动期快速失败                                                                                                                                                                                                                                                  |
+| `logger.ts`         | pino 全局 logger + `requestLogger(requestId)` 派生 child logger                                                                                                                                                                                                                                           |
 
 ### 4.4 图表域层（`lib/chart/`，环境无关 + 客户端图表控制器）
 
@@ -412,13 +413,15 @@ sequenceDiagram
 
 统一处理模式：`requestLogger(requestIdOf)` → zod `safeParse` 失败 `400 invalid_params` → `allowRequest` 失败 `429 rate_limited` → 业务调用（经 TTL 缓存）→ catch 时 `log.error` + `502 upstream_error`。全部 `dynamic = 'force-dynamic'`，响应统一 `Cache-Control: no-store`（新鲜度由服务端 TTL 缓存管理）。
 
-| 路径                 | 参数                                                          | 返回                               | 上游             |
-| -------------------- | ------------------------------------------------------------- | ---------------------------------- | ---------------- |
-| `GET /api/kline`     | `symbol, period, from, to`（period 二次校验，不支持周期 400） | `{ bars: KLineData[] }`            | 分钟/日周月 K    |
-| `GET /api/timeshare` | `symbol`                                                      | `{ date, prevClose, bars }`        | 分时 + 昨收兜底  |
-| `GET /api/quote`     | `symbol`                                                      | 名称/现价/昨收 + 基本面            | qt 快照          |
-| `GET /api/search`    | `q`（trim 后 1–40 字符）                                      | `{ items }`（代码精确 + 名称联想） | quote / smartbox |
-| `GET /api/healthz`   | -                                                             | `{ status, uptime, timestamp }`    | -                |
+| 路径                 | 参数                                                          | 返回                                           | 上游                |
+| -------------------- | ------------------------------------------------------------- | ---------------------------------------------- | ------------------- |
+| `GET /api/kline`     | `symbol, period, from, to`（period 二次校验，不支持周期 400） | `{ bars: KLineData[] }`                        | 分钟/日周月 K       |
+| `GET /api/timeshare` | `symbol`                                                      | `{ date, prevClose, bars }`                    | 分时 + 昨收兜底     |
+| `GET /api/quote`     | `symbol`                                                      | 名称/现价/昨收 + 基本面                        | qt 快照             |
+| `GET /api/search`    | `q`（trim 后 1–40 字符）                                      | `{ items }`（代码精确 + 名称联想）             | quote / smartbox    |
+| `GET /api/market`    | `board,sort,dir`（榜单视图）+ `symbols`（自选批量，≤30）      | `{ indices, ranking, watches }`                | qt 批量 / getRank   |
+| `POST /api/screener` | `conditions,from,asOf`（量化条件组合 + 日期区间）             | `{ done, computed, total, items }`（分片渐进） | 池探测 / 日K / 指标 |
+| `GET /api/healthz`   | -                                                             | `{ status, uptime, timestamp }`                | -                   |
 
 **BFF 请求处理时序图：**
 
@@ -466,7 +469,7 @@ sequenceDiagram
 │   ├── page.tsx              # 首页（默认上证指数 sh000001）
 │   ├── trade/page.tsx        # 模拟交易页（静态 metadata + 客户端虚拟账户壳）
 │   ├── loading/error/not-found.tsx
-│   └── api/                  # BFF：kline / timeshare / quote / search / sim（state/orders/session/replay）/ healthz
+│   └── api/                  # BFF：kline / timeshare / quote / search / market / screener / sim（state/orders/session/replay）/ healthz
 ├── components/
 │   ├── terminal/             # TradingTerminal 及工具栏 / 信息表格 / 弹窗组件
 │   └── trading/              # PaperTrading / OrderPanel / PositionsTable / TradesTable

@@ -46,6 +46,43 @@ export interface TimeShareSnapshot {
   bars: KLineData[]
 }
 
+/** 板块榜单领涨股（可深链至看板终端） */
+export interface BoardLeadingStock {
+  market: string
+  ticker: string
+  name: string
+  price: number | null
+  changePct: number | null
+}
+
+/** 板块榜单条目（行业/概念维度，腾讯官方排名服务直供） */
+export interface BoardRankItem {
+  code: string // 板块代码（pt 前缀，仅标识用）
+  name: string
+  price: number | null // 板块指数点位
+  change: number | null // 涨跌（点位）
+  changePct: number | null // 涨跌幅(%)
+  turnoverRate: number | null // 换手率(%)
+  turnover: number | null // 成交额(元)
+  leading: BoardLeadingStock | null
+}
+
+/** 行情中心总览（/api/market 单次下发：指数 + 板块榜 + 自选行情） */
+export interface MarketOverview {
+  indices: QuoteSnapshot[]
+  ranking: BoardRankItem[]
+  watches: QuoteSnapshot[]
+}
+
+/** 行情中心榜单维度：行业 / 概念 */
+export type MarketBoard = 'industry' | 'concept'
+
+/** 行情中心榜单排序键（上游支持的枚举子集：换手率不可排序） */
+export type MarketBoardSort = 'changePct' | 'turnover'
+
+/** 榜单排序方向：desc=降序（涨幅榜在前）/ asc=升序（跌幅榜在前） */
+export type MarketSortDirection = 'asc' | 'desc'
+
 /** 标的代码合法性：sh/sz/bj + 6 位数字 */
 export const SYMBOL_PATTERN = /^(sh|sz|bj)\d{6}$/
 

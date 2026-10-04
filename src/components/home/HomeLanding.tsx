@@ -32,6 +32,77 @@ export default function HomeLanding() {
           <p className="home-hero-sub">{t('选择一个入口开始|Pick an entry to get started')}</p>
         </div>
         <nav className="home-grid" aria-label={t('页面入口|Page entries')}>
+          {/* 行情中心入口：板块榜单 + 自选，品牌蓝语义（§3.15） */}
+          <Link className="home-card market" href="/market">
+            <span className="home-card-head">
+              <span className="home-card-icon" aria-hidden="true">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M4 6h9" />
+                  <path d="M4 12h6" />
+                  <path d="M4 18h11" />
+                  <path d="M17.5 4.5l1.1 2.2 2.4.35-1.75 1.7.4 2.4-2.15-1.1-2.15 1.1.4-2.4-1.75-1.7 2.4-.35z" />
+                </svg>
+              </span>
+              <span className="home-card-arrow" aria-hidden="true">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M9 5l7 7-7 7" />
+                </svg>
+              </span>
+            </span>
+            <span className="home-card-title">{t('行情中心|Market Center')}</span>
+            <span className="home-card-desc">
+              {t('指数概览、板块榜单与自选收藏|Index overview, board rankings and watchlist')}
+            </span>
+          </Link>
+          {/* 量化选股入口：条件组合筛选，品牌蓝语义（§3.16） */}
+          <Link className="home-card screener" href="/screener">
+            <span className="home-card-head">
+              <span className="home-card-icon" aria-hidden="true">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M4 5v14" />
+                  <path d="M4 15l4.5-4.5 3 3L20 5" />
+                  <circle cx="20" cy="9.5" r="2.2" />
+                </svg>
+              </span>
+              <span className="home-card-arrow" aria-hidden="true">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M9 5l7 7-7 7" />
+                </svg>
+              </span>
+            </span>
+            <span className="home-card-title">{t('量化选股|Stock Screener')}</span>
+            <span className="home-card-desc">
+              {t('自定义量化指标，全池条件筛选|Custom quant conditions, screen the whole pool')}
+            </span>
+          </Link>
           <Link className="home-card" href="/dashboard">
             <span className="home-card-head">
               <span className="home-card-icon" aria-hidden="true">

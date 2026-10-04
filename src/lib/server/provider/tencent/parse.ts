@@ -1,6 +1,6 @@
 import type { KLineData } from 'klinecharts'
 import { parseCnBarTime } from '../../../chart/utils'
-import type { FundamentalData, SymbolSearchItem } from '../../../chart/types'
+import type { BoardRankItem, FundamentalData, SymbolSearchItem } from '../../../chart/types'
 
 // ==================== 腾讯协议解析（仅供 tencent provider 内部使用） ====================
 
@@ -106,6 +106,61 @@ export const CN_TENCENT_PERIOD: Record<string, string> = {
   '1d': 'day',
   '1w': 'week',
   '1M': 'month'
+}
+
+/**
+ * 板块榜单响应解析（proxy.finance.qq.com getRank，JSON）。
+ * 实测字段：code(pt 前缀板块码)/name/zxj(指数点位)/zd(涨跌)/zdf(涨跌幅%)/hsl(换手率%)/
+ * turnover(成交额，万元)/lzg{code,name,zxj,zd,zdf}（领涨股）；缺字段或占位 "-" 置 null。
+ */
+export const parseBoardRankList = (payload: unknown): BoardRankItem[] => {
+  const rankList = (payload as { data?: { rank_list?: unknown[] } })?.data?.rank_list
+  if (!Array.isArray(rankList)) {
+    return []
+  }
+  const parseNullable = (value: unknown): number | null => {
+    if (typeof value !== 'string' || value === '' || value === '-') {
+      return null
+    }
+    const num = Number(value.replace(/,/g, ''))
+    return Number.isFinite(num) ? num : null
+  }
+  const items: BoardRankItem[] = []
+  for (const entry of rankList) {
+    if (typeof entry !== 'object' || entry == null) {
+      continue
+    }
+    const raw = entry as Record<string, unknown>
+    const name = typeof raw.name === 'string' && raw.name !== '' ? raw.name : null
+    if (name == null) {
+      continue
+    }
+    const lzg = raw.lzg as Record<string, unknown> | undefined
+    const lzgCode = typeof lzg?.code === 'string' ? lzg.code : ''
+    const lzgMatch = lzgCode.match(/^(sh|sz|bj)(\d{6})$/)
+    // 上游成交额单位为万元，统一换算为元（与 QuoteSnapshot 市值口径一致）
+    const turnoverWan = parseNullable(raw.turnover)
+    items.push({
+      code: typeof raw.code === 'string' ? raw.code : '',
+      name,
+      price: parseNullable(raw.zxj),
+      change: parseNullable(raw.zd),
+      changePct: parseNullable(raw.zdf),
+      turnoverRate: parseNullable(raw.hsl),
+      turnover: turnoverWan != null ? turnoverWan * 1e4 : null,
+      leading:
+        lzgMatch != null
+          ? {
+              market: lzgMatch[1],
+              ticker: lzgMatch[2],
+              name: typeof lzg?.name === 'string' && lzg.name !== '' ? lzg.name : lzgCode,
+              price: parseNullable(lzg?.zxj),
+              changePct: parseNullable(lzg?.zdf)
+            }
+          : null
+    })
+  }
+  return items
 }
 
 const isTradingMinute = (hhmm: string): boolean =>

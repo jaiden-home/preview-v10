@@ -3,7 +3,14 @@ import type { Period } from 'klinecharts'
 import { runProviderContractTests } from '../contract'
 import type { MarketDataProvider } from '../types'
 import { createTencentProvider } from './index'
-import { formatTencentDate, parseQtQuote, parseSmartboxResponse, parseTimeShareDay, parseTencentKlines } from './parse'
+import {
+  formatTencentDate,
+  parseBoardRankList,
+  parseQtQuote,
+  parseSmartboxResponse,
+  parseTimeShareDay,
+  parseTencentKlines
+} from './parse'
 
 /** 构造腾讯 qt 行情文本：字段索引与线上接口一致 */
 const buildQtText = (code: string, fields: Record<number, string>): string => {
@@ -87,6 +94,79 @@ describe('parseSmartboxResponse', () => {
   it('无法解析的文本返回空数组', () => {
     expect(parseSmartboxResponse('')).toEqual([])
     expect(parseSmartboxResponse('v_hint=[broken')).toEqual([])
+  })
+})
+
+describe('parseBoardRankList', () => {
+  /** getRank 实测响应结构（字段为字符串，成交额单位万元） */
+  const payload = {
+    code: 0,
+    msg: 'ok',
+    data: {
+      rank_list: [
+        {
+          code: 'pt01801150',
+          name: '医药生物',
+          zxj: '7989.12',
+          zd: '212.61',
+          zdf: '2.73',
+          hsl: '2.54',
+          turnover: '13828968',
+          lzg: { code: 'sh688185', name: '康希诺', zxj: '102.64', zd: '17.11', zdf: '20.00' }
+        },
+        {
+          code: 'pt01801980',
+          name: '美容护理',
+          zxj: '-',
+          zd: '',
+          zdf: '-1.70',
+          hsl: '1.91',
+          turnover: '-',
+          lzg: { code: 'sz001206', name: '依依股份', zxj: '18.62', zd: '1.69', zdf: '9.98' }
+        },
+        { code: 'pt02GN2448', name: '肿㾇疫苗', zdf: '9.67', lzg: { code: 'pt_invalid', name: '板块自身' } },
+        null,
+        'garbage'
+      ]
+    }
+  }
+
+  it('解析板块条目：领涨股拆市场/代码，成交额万元换算为元', () => {
+    const items = parseBoardRankList(payload)
+    expect(items).toHaveLength(3)
+    expect(items[0]).toEqual({
+      code: 'pt01801150',
+      name: '医药生物',
+      price: 7989.12,
+      change: 212.61,
+      changePct: 2.73,
+      turnoverRate: 2.54,
+      turnover: 138289680000,
+      leading: { market: 'sh', ticker: '688185', name: '康希诺', price: 102.64, changePct: 20.0 }
+    })
+  })
+
+  it('占位字段置 null，领涨股代码非法置 null，坏条目跳过', () => {
+    const items = parseBoardRankList(payload)
+    expect(items[1].price).toBeNull()
+    expect(items[1].change).toBeNull()
+    expect(items[1].changePct).toBe(-1.7)
+    expect(items[1].turnover).toBeNull()
+    expect(items[1].leading).toEqual({
+      market: 'sz',
+      ticker: '001206',
+      name: '依依股份',
+      price: 18.62,
+      changePct: 9.98
+    })
+    expect(items[2].leading).toBeNull()
+    expect(items[2].turnover).toBeNull()
+  })
+
+  it('非对象 / 缺 rank_list 返回空数组', () => {
+    expect(parseBoardRankList(null)).toEqual([])
+    expect(parseBoardRankList({ code: 0 })).toEqual([])
+    expect(parseBoardRankList({ data: { rank_list: 'oops' } })).toEqual([])
   })
 })
 
@@ -395,6 +475,62 @@ describe('fetchKLines 缓存路由', () => {
     await provider.fetchKLines({ market: 'sz', ticker: '000001' }, dayPeriod, ts('2026-09-15'), ts('2026-09-16'))
     expect(fetchMock).toHaveBeenCalledTimes(2)
     expect(String(fetchMock.mock.calls[1][0])).toContain('param=sz000001,day,')
+  })
+})
+
+describe('fetchBoardRanking 传输', () => {
+  it('构造 getRank 查询串（领域键映射 hy/Turnover），同参数命中缓存', async () => {
+    const rankJson = {
+      code: 0,
+      msg: 'ok',
+      data: {
+        rank_list: [
+          {
+            code: 'pt01801150',
+            name: '医药生物',
+            zdf: '2.73',
+            turnover: '1',
+            lzg: { code: 'sh688185', name: '康希诺', zdf: '20.00' }
+          }
+        ]
+      }
+    }
+    const fetchMock = vi.fn(async (url: string) => {
+      if (String(url).includes('getRank')) {
+        return { ok: true, json: async () => rankJson }
+      }
+      throw new Error(`unexpected upstream url: ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const provider = createTencentProvider()
+    const items = await provider.fetchBoardRanking?.('industry', 'turnover', 'desc', 20)
+    expect(items).toHaveLength(1)
+    expect(items?.[0].name).toBe('医药生物')
+    expect(String(fetchMock.mock.calls[0][0])).toContain(
+      'board_code=hy&board_type=hy&sort_type=Turnover&direct=down&offset=0&count=20'
+    )
+    // 命中缓存：同参数第二次不再回源
+    await provider.fetchBoardRanking?.('industry', 'turnover', 'desc', 20)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+
+    // 概念板块 + 升序：独立缓存键，URL 随之切换
+    await provider.fetchBoardRanking?.('concept', 'changePct', 'asc', 20)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(String(fetchMock.mock.calls[1][0])).toContain('board_code=gn&board_type=gn&sort_type=PriceRatio&direct=up')
+    vi.unstubAllGlobals()
+  })
+
+  it('上游返回空榜抛 ProviderError', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({ ok: true, json: async () => ({ code: 0, data: { rank_list: [] } }) }))
+    )
+    const provider = createTencentProvider()
+    await expect(provider.fetchBoardRanking?.('industry', 'changePct', 'desc', 20)).rejects.toThrow(
+      /board ranking is empty/
+    )
+    vi.unstubAllGlobals()
   })
 })
 

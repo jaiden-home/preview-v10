@@ -1,8 +1,17 @@
 import type { KLineData, Period } from 'klinecharts'
 import { BAR_LIMIT, TIMESPAN_MILLIS } from '../chart/constants'
-import type { QuoteSnapshot, SymbolRef, SymbolSearchItem, TimeShareSnapshot } from '../chart/types'
+import type {
+  BoardRankItem,
+  MarketOverview,
+  QuoteSnapshot,
+  SymbolRef,
+  SymbolSearchItem,
+  TimeShareSnapshot
+} from '../chart/types'
+import { isValidSymbolCode } from '../chart/types'
 import { guessCnMarket } from '../chart/utils'
 import { getProvider } from './provider/registry'
+import type { BoardKind, BoardSortKey } from './provider/types'
 import { ProviderError } from './provider/types'
 
 // ==================== 行情服务（BFF 路由与页面的唯一入口） ====================
@@ -59,6 +68,80 @@ export const searchSymbols = async (query: string): Promise<SymbolSearchItem[]> 
   } catch {
     return []
   }
+}
+
+// ==================== 行情中心总览（/market 页与 /api/market 的唯一入口） ====================
+
+/** 指数条标的：上证指数 / 深证成指 / 创业板指 / 科创50 */
+export const MARKET_INDEX_CODES = ['sh000001', 'sz399001', 'sz399006', 'sh000688'] as const
+
+/** 板块榜单每页条数（行业 ~86 / 概念 ~400+，取头部足够） */
+export const MARKET_RANK_LIMIT = 20
+
+/** 自选行情批量上限（超出截断，防长串代码打爆上游 URL） */
+export const MARKET_WATCH_LIMIT = 30
+
+export interface MarketOverviewQuery {
+  board: BoardKind
+  sort: BoardSortKey
+  direction: 'asc' | 'desc'
+  watches: SymbolRef[]
+}
+
+/** 逗号分隔自选代码串 → 去重截断的 SymbolRef 列表（非法段直接丢弃） */
+export const parseWatchCodes = (raw: string): SymbolRef[] => {
+  const seen = new Set<string>()
+  const refs: SymbolRef[] = []
+  for (const token of raw.split(',')) {
+    const code = token.trim()
+    if (!isValidSymbolCode(code) || seen.has(code) || refs.length >= MARKET_WATCH_LIMIT) {
+      continue
+    }
+    seen.add(code)
+    refs.push({ market: code.slice(0, 2), ticker: code.slice(2) })
+  }
+  return refs
+}
+
+/** 批量行情：能力缺失时降级为逐标的拉取（单个失败置空价快照，不拖垮整批） */
+const fetchQuotesResilient = async (symbols: SymbolRef[]): Promise<QuoteSnapshot[]> => {
+  const provider = getProvider()
+  if (symbols.length === 0) {
+    return []
+  }
+  if (provider.capabilities.batchQuotes && provider.fetchQuotes != null) {
+    return provider.fetchQuotes(symbols)
+  }
+  return Promise.all(
+    symbols.map(async (symbol) => {
+      try {
+        return await provider.fetchQuote(symbol)
+      } catch {
+        return {
+          market: symbol.market,
+          ticker: symbol.ticker,
+          name: null,
+          price: null,
+          prevClose: null,
+          fundamental: {}
+        }
+      }
+    })
+  )
+}
+
+/** 行情中心总览：指数条 + 板块榜 + 自选行情一次拉齐；榜单能力缺失/上游失败降级为空榜 */
+export const fetchMarketOverview = async (query: MarketOverviewQuery): Promise<MarketOverview> => {
+  const provider = getProvider()
+  const indexRefs = MARKET_INDEX_CODES.map((code) => ({ market: code.slice(0, 2), ticker: code.slice(2) }))
+  const [indices, ranking, watches] = await Promise.all([
+    fetchQuotesResilient(indexRefs),
+    provider.capabilities.boardRanking && provider.fetchBoardRanking != null
+      ? provider.fetchBoardRanking(query.board, query.sort, query.direction, MARKET_RANK_LIMIT).catch(() => [])
+      : Promise.resolve([] as BoardRankItem[]),
+    fetchQuotesResilient(query.watches)
+  ])
+  return { indices, ranking, watches }
 }
 
 /** 供页面 SSR 使用的聚合快照（行情 + 初始日 K） */

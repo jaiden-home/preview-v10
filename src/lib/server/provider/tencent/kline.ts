@@ -27,10 +27,10 @@ const fetchKlineRows = async (code: string, periodKey: string, url: string): Pro
 const fetchRawKLines = (cache: TTLCache<KLineData[]>, code: string, periodKey: string): Promise<KLineData[]> =>
   cache.getOrLoad(`tencent:kline:raw:${code}:${periodKey}`, async () => {
     // 分钟线接口仅支持 m1/m5/m15/m30/m60；用 /^m\d/ 匹配，避免 'month' 误入分钟接口。
-    // 日/周/月起止留空 = 腾讯返回最新 640 根（覆盖 init/增量/轮询的全部近端窗口）
+    // fqkline 走 web. 前缀域名（无前缀的 ifzq.gtimg.cn 已开始返回 501）；mkline 仅无前缀域名可用
     const url = /^m\d/.test(periodKey)
       ? `https://ifzq.gtimg.cn/appstock/app/kline/mkline?param=${code},${periodKey},,640`
-      : `https://ifzq.gtimg.cn/appstock/app/fqkline/get?param=${code},${periodKey},,,640,qfq`
+      : `https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=${code},${periodKey},,,640,qfq`
     return fetchKlineRows(code, periodKey, url)
   })
 
@@ -51,7 +51,7 @@ const fetchHistoricalKLines = (
     async () => {
       // 腾讯接口带 end 日期时会漏掉"当天"这根 bar（end 写成未来日期也一样），窗口覆盖今天时 end 必须留空
       const endParam = formatTencentDate(to) === formatTencentDate(Date.now()) ? '' : formatTencentDate(to)
-      const url = `https://ifzq.gtimg.cn/appstock/app/fqkline/get?param=${code},${periodKey},${formatTencentDate(from)},${endParam},640,qfq`
+      const url = `https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=${code},${periodKey},${formatTencentDate(from)},${endParam},640,qfq`
       const rows = await fetchKlineRows(code, periodKey, url)
       return rows.filter((d) => d.timestamp >= from && d.timestamp <= to).slice(-BAR_LIMIT)
     },

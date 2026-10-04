@@ -2816,3 +2816,723 @@ body {
     align-self: stretch;
   }
 }
+
+/* ---------------- 行情中心页（/market，UI_SPEC §3.15） ---------------- */
+
+/* 画布：卡片化页面范式（--page-tint）；唯一滚动容器语言同 .trade-scroll（v2.56 工具栏随内容滚动） */
+#app .market-page {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--page-tint);
+}
+
+#app .market-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 加载/失败态：文案 + 行内重试 */
+#app .market-scroll > .trade-loading {
+  flex-direction: row;
+  gap: 8px;
+}
+
+#app .market-main {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+}
+
+/* 指数概览条：4 格指标带，格间左竖分隔线（延续数据卡分隔语言） */
+#app .market-indices {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px 12px;
+  padding: 12px 16px;
+}
+
+#app .market-index {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  border-left: 1px solid var(--tb-border);
+  padding-left: 12px;
+}
+
+#app .market-index:first-child {
+  border-left: none;
+  padding-left: 0;
+}
+
+#app .market-index-name {
+  font-size: 11px;
+  color: var(--tb-text-sub);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 现价 Display-S 锚点（红涨绿跌语义色） */
+#app .market-index-price {
+  font-family: var(--font-num);
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.3;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+#app .market-index-change {
+  font-family: var(--font-num);
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* 双列主体：榜单 + 自选（自选窄列，同交易页右列比例） */
+#app .market-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 12px;
+  align-items: start;
+}
+
+/* 榜单卡头：两组分段控件（板块维度 × 排序），底部结构实线 */
+#app .market-rank-head {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--tb-border);
+}
+
+/* 自选卡头：Title + Micro 副文案 */
+#app .market-card-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 14px 8px;
+  border-bottom: 1px solid var(--tb-border);
+}
+
+#app .market-card-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--tb-text);
+}
+
+#app .market-card-sub {
+  font-size: 10px;
+  color: var(--tb-text-sub);
+}
+
+/* 榜单表格：排名/板块名列 */
+#app .market-rank-no {
+  color: var(--tb-text-sub);
+}
+
+#app .market-board-name {
+  font-weight: 600;
+}
+
+/* 领涨股组合：星标 + 名称链接 + 涨跌幅 */
+#app .market-leading,
+#app .market-item-leading {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+#app .market-leading-link {
+  font-weight: 600;
+  color: var(--tb-text);
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: color 0.2s ease;
+}
+
+#app .market-leading-link:hover {
+  color: var(--tb-active);
+}
+
+#app .market-leading-pct {
+  font-family: var(--font-num);
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* 星标按钮：28px 次级控件触控区，激活品牌蓝 */
+#app .market-star {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background-color: transparent;
+  color: var(--tb-text-sub);
+  cursor: pointer;
+  transition:
+    color 0.2s ease,
+    background-color 0.2s ease;
+}
+
+#app .market-star:hover {
+  background-color: var(--tb-hover);
+  color: var(--tb-text);
+}
+
+#app .market-star.active {
+  color: var(--tb-active);
+}
+
+#app .market-star svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* 搜索下拉行：左信息栈（可点进看板）+ 右星标 */
+#app .market-search-row {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+#app .market-search-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  text-decoration: none;
+}
+
+/* 自选表标的列（Link 壳，去下划线） */
+#app a.cell-symbol {
+  text-decoration: none;
+  color: inherit;
+}
+
+/* 移动端列表模式：宽表隐藏，票据式信息卡（桌面隐藏容器） */
+#app .market-list {
+  display: none;
+}
+
+#app .market-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--tb-border);
+}
+
+#app .market-item:last-child {
+  border-bottom: none;
+}
+
+#app .market-item-head {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+#app .market-item-rank {
+  flex: none;
+  min-width: 18px;
+  text-align: right;
+  font-family: var(--font-num);
+  font-size: 11px;
+  color: var(--tb-text-sub);
+  font-variant-numeric: tabular-nums;
+}
+
+#app .market-item-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#app .market-item-pct {
+  flex: none;
+  font-family: var(--font-num);
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 元信息行：领涨 + 成交 + 换手，左缩进对齐板块名 */
+#app .market-item-stats {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-left: 26px;
+  font-size: 11px;
+  color: var(--tb-text-sub);
+}
+
+#app .market-item-stat b {
+  margin-left: 2px;
+  font-weight: 600;
+  color: var(--tb-text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 自选移动端条目：左身份栈 + 右行情栈 + 星标 */
+#app .market-watch-item {
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
+}
+
+#app .market-watch-link {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-right: 4px;
+  text-decoration: none;
+  color: var(--tb-text);
+  transition: background-color 0.2s ease;
+  border-radius: var(--radius-sm);
+}
+
+#app .market-watch-id {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+#app .market-watch-quote {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  font-family: var(--font-num);
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- 平板（769–1024px）：双列并单列，自选收至榜单之下 ---- */
+@media (min-width: 769px) and (max-width: 1024px) {
+  #app .market-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ---- 行情中心移动端（≤768px） ---- */
+@media (max-width: 768px) {
+  /* 品牌静态文本不占满首行（覆盖工具栏通用规则：那是标的选择器的专属行为） */
+  #app .market-toolbar > .toolbar-item:first-child {
+    flex: 0 0 auto;
+  }
+
+  #app .market-main {
+    gap: 8px;
+    padding: 8px;
+  }
+
+  /* 指数条 2×2：左列去竖线 */
+  #app .market-indices {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding: 10px 12px;
+  }
+
+  #app .market-index:nth-child(odd) {
+    border-left: none;
+    padding-left: 0;
+  }
+
+  /* 宽表转票据式列表 */
+  #app .market-rank-wrap,
+  #app .market-watch .trade-table-wrap {
+    display: none;
+  }
+
+  #app .market-list {
+    display: flex;
+    flex-direction: column;
+  }
+
+  #app .market-card-sub {
+    display: none;
+  }
+}
+
+/* ---------------- 量化选股页（/screener，UI_SPEC §3.16） ---------------- */
+
+/* 画布与滚动容器：复用行情中心页面范式（--page-tint + 唯一滚动 + v2.56 工具栏随内容滚动） */
+#app .screener-page {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--page-tint);
+}
+
+#app .screener-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+#app .screener-main {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  max-width: 980px;
+  width: 100%;
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+
+/* 策略编辑卡 */
+#app .screener-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+}
+
+/* 动作行：股票池说明 + 日期区间 + 运行按钮（CTA 品牌蓝实底，§5 主要操作 40px） */
+#app .screener-actions {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* 股票池说明胶囊（v2.62 起池固定沪深主板，无切换） */
+#app .screener-universe-hint {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 10px;
+  font-size: 11px;
+  color: var(--tb-text-sub);
+  background-color: var(--tb-hover);
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+
+#app .screener-run {
+  margin-left: auto;
+  height: 40px;
+  padding: 0 16px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--on-solid);
+  background-color: var(--tb-active);
+  border: none;
+  border-radius: var(--radius-md);
+  box-shadow: 0 2px 8px rgba(22, 119, 255, 0.28);
+  cursor: pointer;
+  transition: filter 0.2s ease;
+}
+
+#app .screener-run:hover {
+  filter: brightness(1.06);
+}
+
+/* 条件行：指标下拉 + 参数 + 运算符 + 阈值 + 删除，窄屏自动换行 */
+#app .screener-conditions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+#app .screener-cond {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 10px;
+  background-color: var(--tb-hover);
+  border-radius: var(--radius-md);
+}
+
+#app .screener-key {
+  max-width: 160px;
+}
+
+/* 参数：标签 + 紧凑数字输入（§3.4 规格，num 等宽） */
+#app .screener-param {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
+}
+
+#app .screener-param-label {
+  font-size: 11px;
+  color: var(--tb-text-sub);
+  white-space: nowrap;
+}
+
+#app .screener-input {
+  width: 76px;
+  box-sizing: border-box;
+  height: 28px;
+  padding: 0 8px;
+  color: var(--tb-text);
+  font-family: var(--font-num);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  background-color: var(--tb-bg);
+  border: 1px solid var(--tb-border);
+  border-radius: var(--radius-sm);
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+#app .screener-input:focus {
+  outline: none;
+  border-color: var(--tb-active);
+  box-shadow: 0 0 0 3px var(--tb-active-bg);
+}
+
+/* 布尔条件：无运算符/阈值，静态命中标签 */
+#app .screener-bool-tag {
+  padding: 0 8px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--tb-active);
+  background-color: var(--tb-active-bg);
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+
+/* between 双输入 */
+#app .screener-range {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
+}
+
+/* 截止日期（as-of）：标签 + 日期输入 + 一键恢复最新 */
+#app .screener-asof {
+  position: relative;
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
+}
+
+#app .screener-date {
+  box-sizing: border-box;
+  height: 28px;
+  padding: 0 24px 0 8px;
+  color: var(--tb-text);
+  font-family: var(--font-num);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  background-color: var(--tb-bg);
+  border: 1px solid var(--tb-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+#app .screener-date:focus {
+  outline: none;
+  border-color: var(--tb-active);
+  box-shadow: 0 0 0 3px var(--tb-active-bg);
+}
+
+#app .screener-asof-clear {
+  position: absolute;
+  right: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background-color: transparent;
+  color: var(--tb-text-sub);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    color 0.2s ease,
+    background-color 0.2s ease;
+}
+
+#app .screener-asof-clear:hover {
+  background-color: var(--tb-hover);
+  color: var(--tb-text);
+}
+
+#app .screener-dash {
+  color: var(--tb-text-sub);
+}
+
+/* 删除条件：28px 次级控件 */
+#app .screener-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  margin-left: auto;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background-color: transparent;
+  color: var(--tb-text-sub);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    color 0.2s ease,
+    background-color 0.2s ease;
+}
+
+#app .screener-remove:hover:not(:disabled) {
+  background-color: var(--tb-bg);
+  color: var(--up);
+}
+
+#app .screener-remove:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* 添加条件：幽灵按钮 */
+#app .screener-add {
+  align-self: flex-start;
+  border: 1px dashed var(--tb-border);
+}
+
+#app .screener-add:hover:not(:disabled) {
+  border-color: var(--tb-active);
+  color: var(--tb-active);
+}
+
+#app .screener-add:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* 结果卡 */
+#app .screener-results {
+  display: flex;
+  flex-direction: column;
+}
+
+#app .screener-results-head {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+#app .screener-hit-count {
+  margin-left: 6px;
+  padding: 1px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--tb-active);
+  background-color: var(--tb-active-bg);
+  border-radius: var(--radius-sm);
+}
+
+/* 进度条：轨道 --tb-hover + 填充品牌蓝（宽度为数据驱动内联值） */
+#app .screener-progress {
+  flex: none;
+  height: 3px;
+  margin: 0 14px;
+  background-color: var(--tb-hover);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+#app .screener-progress-fill {
+  display: block;
+  height: 100%;
+  background-color: var(--tb-active);
+}
+
+/* 业务校验/请求失败横幅 */
+#app .screener-error {
+  padding: 8px 14px;
+  font-size: 12px;
+  color: var(--up);
+  border-bottom: 1px solid var(--tb-border);
+}
+
+/* ---- 量化选股移动端（≤768px） ---- */
+@media (max-width: 768px) {
+  #app .screener-main {
+    gap: 8px;
+    padding: 8px;
+  }
+
+  #app .screener-editor {
+    padding: 10px 12px;
+  }
+
+  /* 运行按钮换行后占满整行（触控优先） */
+  #app .screener-run {
+    flex: 1 1 100%;
+    margin-left: 0;
+  }
+
+  /* 宽表转票据式列表（复用行情中心 .market-list 范式） */
+  #app .screener-results-wrap {
+    display: none;
+  }
+
+  #app .screener-results .market-list {
+    display: flex;
+    flex-direction: column;
+  }
+}
