@@ -26,12 +26,15 @@ const order = (overrides: Partial<Parameters<typeof validateOrder>[0]> = {}) => 
 })
 
 describe('round2', () => {
-  it('四舍五入保留两位', () => {
-    expect(round2(2.675)).toBe(2.68)
+  it('保留两位（与展示 toFixed(2) 同口径）', () => {
     expect(round2(1.234)).toBe(1.23)
     expect(round2(1.236)).toBe(1.24)
     expect(round2(-1.005)).toBe(-1)
     expect(round2(3)).toBe(3)
+    // 中点值随展示：2.675 的双精度真值为 2.674999…，展示 2.67，取整同为 2.67
+    // （旧 Math.round(2.675*100)/100 因乘法恰得 267.5 而取 2.68，与展示分叉）
+    expect((2.675).toFixed(2)).toBe('2.67')
+    expect(round2(2.675)).toBe(2.67)
   })
 })
 
@@ -162,6 +165,19 @@ describe('下单校验：现价成交', () => {
     })
     // 买入侧对称：现价 18.730000000000004（显示 18.73），委托 18.73 通过
     expect(validateOrder(order({ price: 18.73, lastPrice: 18.730000000000004 }))).toBeNull()
+  })
+
+  it('回归：现价 11.385（显示/预填 11.38）按显示价委托可成交、按显示价成交', () => {
+    // 复现：前复权收盘 11.385（sz300938 真实数据），UI toFixed(2) 显示 11.38、预填 11.38，
+    // 旧 round2 = Math.round(11.385*100)/100 因浮点乘法恰得 1138.5 被舍入为 11.39，
+    // 委托 11.38 曾被误拒「委托价低于现价11.39」；取整与显示同口径后同价应通过
+    expect(round2(11.385)).toBe(11.38)
+    expect(validateOrder(order({ price: 11.38, lastPrice: 11.385 }))).toBeNull()
+    expect(fillPriceOf(11.38, 11.385)).toBe(11.38)
+    // 对称：委托劣于显示现价（11.37 < 11.38）仍拒
+    expect(validateOrder(order({ price: 11.37, lastPrice: 11.385 }))).toMatchObject({
+      code: 'price_unfillable'
+    })
   })
 
   it('缺现价（null/非正数）跳过可成交校验（按委托价成交）', () => {

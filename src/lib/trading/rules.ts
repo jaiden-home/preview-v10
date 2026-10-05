@@ -18,7 +18,12 @@ export const LOT_SIZE = 100
 
 export type TradeSide = 'buy' | 'sell'
 
-export const round2 = (n: number): number => Math.round(n * 100) / 100
+/**
+ * 分位取整：与 UI 展示/预填的 toFixed(2) 严格同口径（Number(n.toFixed(2))）。
+ * 勿改回 Math.round(n * 100) / 100：浮点乘法恰好落到 .5 时与显示舍入分叉——
+ * 如前复权收盘 11.385 显示 11.38，旧式取整却得 11.39，导致"委托价 = 显示现价"被误拒。
+ */
+export const round2 = (n: number): number => Number(n.toFixed(2))
 
 // ==================== 标的与涨跌停 ====================
 
