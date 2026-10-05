@@ -48,13 +48,13 @@ describe('日原子状态机', () => {
     expect(createReplaySession('sh600519', '2023-06-01', 10, 30_000).speedMs).toBe(30_000)
   })
 
-  it('倍速档位：10/15/30/60 秒，反查就近命中', () => {
-    expect(REPLAY_SPEED_PRESETS_MS).toEqual([REPLAY_SPEED_MS, 15_000, 30_000, 60_000])
+  it('倍速档位：3/5/10/15/30/60 秒，反查就近命中', () => {
+    expect(REPLAY_SPEED_PRESETS_MS).toEqual([3_000, 5_000, REPLAY_SPEED_MS, 15_000, 30_000, 60_000])
     for (const presetMs of REPLAY_SPEED_PRESETS_MS) {
       expect(nearestSpeedPresetMs(presetMs)).toBe(presetMs)
     }
     // 非档位值取就近档
-    expect(nearestSpeedPresetMs(2_000)).toBe(REPLAY_SPEED_MS)
+    expect(nearestSpeedPresetMs(2_000)).toBe(3_000)
     expect(nearestSpeedPresetMs(40_000)).toBe(30_000)
   })
 

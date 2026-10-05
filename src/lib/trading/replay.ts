@@ -21,7 +21,7 @@ export const REPLAY_FETCH_MAX_BARS = 5000
 export const REPLAY_SPEED_MS = 10_000
 
 /** 倍速档位（模拟设置页分段；每交易日真实毫秒） */
-export const REPLAY_SPEED_PRESETS_MS = [10_000, 15_000, 30_000, 60_000] as const
+export const REPLAY_SPEED_PRESETS_MS = [3_000, 5_000, 10_000, 15_000, 30_000, 60_000] as const
 
 /** 每交易日毫秒 -> 就近档位（服务端 speedMs 反查展示用） */
 export const nearestSpeedPresetMs = (speedMs: number): (typeof REPLAY_SPEED_PRESETS_MS)[number] =>

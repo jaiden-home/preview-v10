@@ -337,8 +337,8 @@ export default function SimTrading() {
       <div className="trade-scroll">
         <div className="toolbar">
           <div className="toolbar-item">
-            <Link className="tb-btn tb-clear" href="/dashboard">
-              ← {t('返回行情|Back to chart')}
+            <Link className="tb-btn tb-clear" href="/admin/simtrade">
+              ← {t('模拟设置|Sim settings')}
             </Link>
           </div>
           <ThemeToggle t={t} onToggle={chart.toggleTheme} id="theme-btn-top" itemClassName="theme-at-top" />
@@ -357,9 +357,9 @@ export default function SimTrading() {
           <div className="trade-main">
             <section className="trade-card trade-chart">
               <div className="trade-chart-toolbar">
-                {/* 返回行情（移动端，§3.11）：微信式左箭头图标按钮，与周期分段同行；
-                    桌面隐藏，保留顶部工具栏文字链 */}
-                <Link className="tb-btn tb-back" href="/dashboard" aria-label={t('返回行情|Back to chart')}>
+                {/* 模拟设置入口（移动端，§3.11）：微信式左箭头图标按钮，与周期分段同行；
+                    桌面隐藏，保留顶部工具栏文字链（同指 /admin/simtrade） */}
+                <Link className="tb-btn tb-back" href="/admin/simtrade" aria-label={t('模拟设置|Sim settings')}>
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
                     <path d="M15 5l-7 7 7 7" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
