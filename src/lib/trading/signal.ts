@@ -12,8 +12,8 @@ export interface SignalPoint {
 
 /** 买入规则窗口长度：连续 3 日 */
 const BUY_RUN_DAYS = 3
-/** 买入强度门槛：后两个交易日累计涨幅 ≥ 1% */
-const BUY_TAIL_GAIN_MIN = 0.01
+/** 买动能保护：缩量且涨速收窄时，第 3 日/第 2 日涨幅比下限 */
+const BUY_FADE_RATIO = 0.15
 /** 卖出 S2 均线周期：30 日收盘均线（亦为买入门槛②「第 3 日收盘 ≥ 均线」的周期） */
 const SELL_MA_DAYS = 30
 /** 卖出 S3 放量倍数：当日成交量 ≥ 前一交易日的 3 倍 */
@@ -22,6 +22,8 @@ const SELL_SPIKE_RATIO = 3
 const SELL_HIGH_LOOKBACK_BARS = 120
 /** 卖出 S4 破位离场天数：连续 3 个交易日收盘低于新高日基准 */
 const SELL_DROP_DAYS = 3
+/** 卖出 S5 三连阴确认天数：连续 3 个交易日收盘低于上一交易日 */
+const SELL_DOWN_RUN_DAYS = 3
 
 /**
  * 逐日买卖点求值（纯函数，环境无关）：极速模拟页「当日买入点 / 卖出点」提示的规则域。
@@ -36,8 +38,9 @@ const SELL_DROP_DAYS = 3
  * 买入（B）：**空仓时**（无未配对的 S），当日为「连续 3 日强涨」的第 3 日——
  * 窗口内每日**最高价高于上一交易日的最高价**且**收盘价高于上一交易日的收盘价**
  * （三日比较：高点过高点、收盘过收盘），并须同时满足两项强化条件：
- * ① 后两个交易日累计涨幅 ≥ 1%（第 3 日收盘相对窗口首日收盘）；
- * ② 第 3 日收盘价 ≥ 30 日均线（MA30 窗口不足不判定）。
+ * ① 第 3 日收盘价 ≥ 30 日均线（MA30 窗口不足不判定）；
+ * ② 动能保护：第 3 日涨幅与成交量**均**低于第 2 日（缩量且涨速收窄）时，
+ *    第 3 日/第 2 日涨幅比 ≥ 0.15（涨速可衰减、不可衰竭；放量或涨速不降则不受限）。
  *
  * 卖出（S）：**B/S 成对交替**——B 后进入持仓态，S 出现前不再标 B（强势延续
  * 只续持、不加仓标记）；持仓期逐日判定，先触发者离场（一枚 B 对一枚 S）——
@@ -52,6 +55,10 @@ const SELL_DROP_DAYS = 3
  * 此后首次出现连续 3 个交易日收盘均低于该基准，第三日离场；基准随仓位
  * 生命周期走——离场即复位，下一对 B/S 重新观察（空仓期与起始日前的新高
  * 不记录）。
+ * S5 连跌破位：**持仓期**出现连续 3 个交易日收盘价低于上一交易日（三连阴）
+ * 时记录第 3 日的最低价为观察基准（新一次三连阴重记基准），此后首次出现
+ * 连续 3 个交易日收盘低于该最低价，第三日离场；基准随离场即复位（空仓
+ * 期与起始日前的连跌不记录）。
  * B 必须先于 S（无 B 不判 S）；B/S 同日冲突时 B 优先（开仓日不判 S）；
  * S 后空仓，待下一枚 B 重新武装。
  */
@@ -70,6 +77,10 @@ export const dailySignals = (bars: KLineData[], startDate: string): SignalPoint[
   let highClose: number | null = null
   /** S4 破位计数：基准之后连续收盘低于基准的天数 */
   let dropDays = 0
+  /** S5 连跌计数：本持仓期内连续收盘低于上一交易日的天数（收涨即清零） */
+  let downRun = 0
+  /** S5 观察基准：本持仓期内最近一次三连阴第 3 日的最低价；null = 尚无基准 */
+  let breakLow: number | null = null
 
   for (let i = 1; i < bars.length; i++) {
     const bar = bars[i]!
@@ -80,12 +91,12 @@ export const dailySignals = (bars: KLineData[], startDate: string): SignalPoint[
 
     if (stopLow == null) {
       // B：空仓 + 连续 3 日（高点过高点、收盘过收盘）第 3 日 + 两项强化条件——
-      // ① 后两个交易日累计涨幅 ≥ 1%（第 3 日收盘 vs 窗口首日收盘）② 第 3 日收盘 ≥ MA30；
+      // ① 第 3 日收盘 ≥ MA30 ② 动能保护：缩量且涨速收窄时 第 3 日/第 2 日涨幅比 ≥ 0.15；
       // 起始日起开仓并记止损基准，开仓日不判 S；起始日前的强涨不开仓（策略自起始日起始）
       if (
         i >= BUY_RUN_DAYS &&
         isStrongRun(bars, i) &&
-        tailGainOf(bars, i) >= BUY_TAIL_GAIN_MIN &&
+        day3KeepsMomentum(bars, i) &&
         Number.isFinite(ma[i]!) &&
         bar.close >= ma[i]! &&
         dayKeyOf(bar.timestamp) >= startDate
@@ -113,21 +124,34 @@ export const dailySignals = (bars: KLineData[], startDate: string): SignalPoint[
     } else if (highClose != null) {
       dropDays = bar.close < highClose ? dropDays + 1 : 0
     }
+    // S5 观察：连续收盘低于上一交易日（收涨即清零），第 3 日确认三连阴并重记该日最低价为基准
+    if (bar.close < prev.close) {
+      downRun += 1
+      if (downRun === SELL_DOWN_RUN_DAYS) {
+        breakLow = bar.low
+      }
+    } else {
+      downRun = 0
+    }
     // S1 止损：收盘跌破 B 点前一日最低；S2 趋势离场：连续两日收盘低于 MA30；
     // S3 放量破位：连续两日收盘跌破最近放量基准（基准当日收盘即基准，不会自触发）；
-    // S4 高位破位：连续 3 日收盘跌破最近半年新高基准（基准当日收盘即基准，不会自触发）
+    // S4 高位破位：连续 3 日收盘跌破最近半年新高基准（基准当日收盘即基准，不会自触发）；
+    // S5 连跌破位：连续 3 日收盘跌破最近三连阴第 3 日最低价（基准当日收盘 ≥ 自身最低价，不会自触发）
     if (
       bar.close < stopLow ||
       (belowMa(i) && belowMa(i - 1)) ||
       (spikeClose != null && bar.close < spikeClose && prev.close < spikeClose) ||
-      dropDays >= SELL_DROP_DAYS
+      dropDays >= SELL_DROP_DAYS ||
+      (breakLow != null && bar.close < breakLow && prev.close < breakLow && bars[i - 2]!.close < breakLow)
     ) {
       points.push({ timestamp: bar.timestamp, signal: 'sell' })
       stopLow = null
-      // S3 基准 / S4 基准随离场复位：下一对 B/S 重新观察
+      // S3 / S4 / S5 基准随离场复位：下一对 B/S 重新观察
       spikeClose = null
       highClose = null
       dropDays = 0
+      downRun = 0
+      breakLow = null
     }
   }
   return points
@@ -145,10 +169,21 @@ const isStrongRun = (bars: KLineData[], i: number): boolean => {
   return true
 }
 
-/** 买入窗口「后两个交易日」累计涨幅：第 3 日收盘相对窗口首日收盘 */
-const tailGainOf = (bars: KLineData[], i: number): number => {
-  const base = bars[i - BUY_RUN_DAYS + 1]!.close
-  return (bars[i]!.close - base) / base
+/**
+ * 买动能保护（买入门槛②）：第 3 日涨幅与成交量**均**低于第 2 日（缩量且涨速收窄）时，
+ * 第 3 日/第 2 日涨幅比须 ≥ BUY_FADE_RATIO；放量或涨速不降则不受限（恒过）。
+ * 调用前提：isStrongRun 已保证第 2 日收涨（day2Gain > 0，比值分母安全）。
+ */
+const day3KeepsMomentum = (bars: KLineData[], i: number): boolean => {
+  const day3 = bars[i]!
+  const day2 = bars[i - 1]!
+  const day1 = bars[i - 2]!
+  const day2Gain = (day2.close - day1.close) / day1.close
+  const day3Gain = (day3.close - day2.close) / day2.close
+  if (!(day3Gain < day2Gain && (day3.volume ?? 0) < (day2.volume ?? 0))) {
+    return true
+  }
+  return day3Gain / day2Gain >= BUY_FADE_RATIO
 }
 
 /** i 日最高价是否创近 SELL_HIGH_LOOKBACK_BARS 个交易日（约半年）新高（严格高于回看内全部高点） */
