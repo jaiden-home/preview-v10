@@ -12,6 +12,8 @@ export interface SignalPoint {
 
 /** 买入规则窗口长度：连续 3 日 */
 const BUY_RUN_DAYS = 3
+/** 三日比较高点容差：当日最高价 ≥ 前日最高价 × 0.999（0.1% 内针尖误差不断链） */
+const BUY_HIGH_TOL = 0.999
 /** 买动能保护·修复下限：R2 + R3 须不低于 R1 的 50%（R1/R2/R3 = 窗口第 1/2/3 日单日涨幅） */
 const BUY_TAIL_REPAIR_MIN = 0.5
 /** 买动能保护·衰减下限：R3 须不低于 R2 的 15% */
@@ -42,8 +44,8 @@ const SELL_TREND_STREAK_DAYS = 15
  * - 纯客户端本地展示口径（对单一用户生效），不入服务端账务与成交链路。
  *
  * 买入（B）：**空仓时**（无未配对的 S），当日为「连续 3 日强涨」的第 3 日——
- * 窗口内每日**最高价高于上一交易日的最高价**且**收盘价高于上一交易日的收盘价**
- * （三日比较：高点过高点、收盘过收盘），并须同时满足两项强化条件：
+ * 窗口内每日**最高价不低于上一交易日的最高价×0.999（含 0.1% 容差，平高/针尖误差亦算）**且**收盘价高于上一交易日的收盘价**
+ * （三日比较：高点平高亦算、收盘过收盘），并须同时满足两项强化条件：
  * ① 第 3 日收盘价 ≥ 30 日均线（MA30 窗口不足不判定）；
  * ② 动能保护：以 R1/R2/R3 记窗口第 1/2/3 日单日涨幅（vs 各自前一交易日收
  *    盘），涨幅真衰减且不能有效修复则不开仓——任一成立即拦：
@@ -114,8 +116,8 @@ export const dailySignals = (bars: KLineData[], startDate: string): SignalPoint[
     const volumeSpiked = prevVol > 0 && (bar.volume ?? 0) >= prevVol * SELL_SPIKE_RATIO
 
     if (stopLow == null) {
-      // B：空仓 + 连续 3 日（高点过高点、收盘过收盘）第 3 日 + 两项强化条件——
-      // ① 第 3 日收盘 ≥ MA30 ② 动能保护：R1 的 50% > R2+R3 或 R2 的 15% > R3 即拦；
+      // B：空仓 + 连续 3 日（高点 ≥ 前日高点×0.999（容差/平高亦算）、收盘 > 前日收盘）第 3 日 +
+      // 两项强化条件——① 第 3 日收盘 ≥ MA30 ② 动能保护：R1 的 50% > R2+R3 或 R2 的 15% > R3 即拦；
       // 起始日起开仓并记止损基准，开仓日不判 S；起始日前的强涨不开仓（策略自起始日起始）
       if (
         i >= BUY_RUN_DAYS &&
@@ -185,12 +187,12 @@ export const dailySignals = (bars: KLineData[], startDate: string): SignalPoint[
   return points
 }
 
-/** i 日是否为「连续 BUY_RUN_DAYS 日：每日最高价 > 前日最高价 且 收盘价 > 前日收盘价」的窗口末日 */
+/** i 日是否为「连续 BUY_RUN_DAYS 日：每日最高价 ≥ 前日最高价×BUY_HIGH_TOL（含 0.1% 容差与平高） 且 收盘价 > 前日收盘价」的窗口末日 */
 const isStrongRun = (bars: KLineData[], i: number): boolean => {
   for (let j = i - BUY_RUN_DAYS + 1; j <= i; j++) {
     const day = bars[j]!
     const prev = bars[j - 1]!
-    if (!(day.high > prev.high && day.close > prev.close)) {
+    if (!(day.high >= prev.high * BUY_HIGH_TOL && day.close > prev.close)) {
       return false
     }
   }
