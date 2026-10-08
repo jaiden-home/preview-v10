@@ -78,7 +78,7 @@ function decodeGbk(buf) {
   }
 }
 
-// —— 批量报价：名称非空 = 有效标的 ——
+// —— 批量报价：名称非空 = 有效标的；同时提取盘中口径所需的当前价/当日最高/行情时间戳 ——
 async function fetchQuotes(codes) {
   const res = await fetch(`https://qt.gtimg.cn/q=${codes.join(',')}`, { signal: AbortSignal.timeout(12_000) })
   if (!res.ok) throw new Error(`qt http ${res.status}`)
@@ -87,14 +87,23 @@ async function fetchQuotes(codes) {
   for (const line of text.split(';')) {
     const m = line.match(/v_(s[hz]\d{6})="([^"]*)"/)
     if (!m) continue
-    const name = (m[2].split('~')[1] ?? '').trim()
-    if (name) out.set(m[1], name)
+    const f = m[2].split('~')
+    const name = (f[1] ?? '').trim()
+    if (!name) continue
+    out.set(m[1], {
+      name,
+      price: Number.parseFloat(f[3]), // 当前价（盘中 = 未收盘价）
+      high: Number.parseFloat(f[33]), // 当日最高
+      time: f[30] ?? '' // 行情时间戳 yyyyMMddHHmmss（停牌股为旧日期）
+    })
   }
   return out
 }
 
 // —— 前复权日 K（近 500 自然日；newfqkline 会返回最近 640 根，口径一致）——
-async function fetchDaily(code, { throttle = 0, maxRetry = 5 } = {}) {
+// live：报价快照。K 线接口盘中不含当日未收盘 bar——若报价时间戳落在基准日（说明当日有行情），
+// 以报价合成当日 bar（当前价 = 收盘、当日最高 = 最高价），满足"当前价默认成收盘状态"。
+async function fetchDaily(code, { throttle = 0, maxRetry = 5, live = null } = {}) {
   const param = `${code},day,${FROM},${ASOF},640,qfq`
   let lastErr = null
   for (let i = 0; i < maxRetry; i++) {
@@ -118,7 +127,23 @@ async function fetchDaily(code, { throttle = 0, maxRetry = 5 } = {}) {
       const bars = rows
         .map((r) => ({ date: String(r[0]), close: Number.parseFloat(r[2]), high: Number.parseFloat(r[3]) }))
         .filter((b) => Number.isFinite(b.close))
-      return bars.length ? bars : null
+      if (!bars.length) return null
+      // 盘中合成当日 bar：报价时间戳日期 == 基准日（当日有行情）且 K 线末端尚无当日 bar
+      if (
+        live &&
+        String(live.time).slice(0, 8) === ASOF.replaceAll('-', '') &&
+        Number.isFinite(live.price) &&
+        live.price > 0
+      ) {
+        if (bars[bars.length - 1].date < ASOF) {
+          bars.push({
+            date: ASOF,
+            close: live.price,
+            high: Number.isFinite(live.high) && live.high > 0 ? live.high : live.price
+          })
+        }
+      }
+      return bars
     } catch (e) {
       lastErr = e
     }
@@ -241,7 +266,7 @@ async function screenBatch(list, names, concurrency, throttleMs, stats, hits, pr
   let done = 0
   const t0 = Date.now()
   await pool(list, concurrency, async (e) => {
-    const bars = await fetchDaily(e.code, { throttle: throttleMs })
+    const bars = await fetchDaily(e.code, { throttle: throttleMs, live: e.live })
     if (bars === 'FAIL') {
       stats.fail++
       failed.push(e)
@@ -304,8 +329,10 @@ async function runScreening() {
     }
     if (++qDone % 20 === 0) console.log(`[quotes] ${qDone}/${quoteBatches.length} batches, valid=${valid.size}`)
   })
-  const names = new Map(valid)
-  const entries = [...valid.keys()].map((code) => ({ code })).sort((a, b) => a.code.localeCompare(b.code))
+  const names = new Map([...valid].map(([k, v]) => [k, v.name]))
+  const entries = [...valid.keys()]
+    .map((code) => ({ code, live: valid.get(code) }))
+    .sort((a, b) => a.code.localeCompare(b.code))
   console.log(`[universe] candidates=${candidates.length} valid=${entries.length}`)
 
   // 3) ST 过滤
