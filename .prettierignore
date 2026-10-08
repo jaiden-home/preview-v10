@@ -6,3 +6,5 @@ coverage
 playwright-report
 test-results
 package-lock.json
+screening/data
+screening/index.html

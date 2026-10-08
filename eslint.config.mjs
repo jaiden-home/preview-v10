@@ -5,7 +5,15 @@ import nextTypescript from 'eslint-config-next/typescript'
 const eslintConfig = defineConfig([
   nextCoreWebVitals,
   nextTypescript,
-  globalIgnores(['.next/**', 'node_modules/**', 'out/**', 'next-env.d.ts', 'playwright-report/**', 'test-results/**']),
+  globalIgnores([
+    '.next/**',
+    'node_modules/**',
+    'out/**',
+    'next-env.d.ts',
+    'playwright-report/**',
+    'test-results/**',
+    'screening/**'
+  ]),
   {
     rules: {
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }]
