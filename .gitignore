@@ -24,6 +24,8 @@ npm-debug.log*
 
 # runtime data (sim trading sqlite)
 # data
+data/*.db-shm
+data/*.db-wal
 
 # typescript
 *.tsbuildinfo
