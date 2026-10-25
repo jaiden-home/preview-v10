@@ -23,7 +23,7 @@ npm-debug.log*
 .idea/
 
 # runtime data (sim trading sqlite)
-# data
+data/*.db
 data/*.db-shm
 data/*.db-wal
 
