@@ -8,14 +8,15 @@ A 股行情预览 + 模拟交易的 Web 终端：Next.js 16（App Router，stand
 
 ## 常用命令
 
-| 任务     | 命令                                                                     |
-| -------- | ------------------------------------------------------------------------ |
-| 本地开发 | `npm run dev`（3000 被占用时自动换 3001）                                |
-| 构建     | `npm run build`                                                          |
-| Lint     | `npm run lint`（ESLint）· `npm run lint:css`（stylelint，UI 令牌强约束） |
-| 类型检查 | `npm run typecheck`（tsc strict）                                        |
-| 单元测试 | `npm run test`（Vitest，`*.test.ts` 与源码同目录）                       |
-| E2E      | `npm run test:e2e`（Playwright）                                         |
+| 任务     | 命令                                                                                                                                                     |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 本地开发 | `npm run dev`（3000 被占用时自动换 3001）                                                                                                                |
+| 构建     | `npm run build`                                                                                                                                          |
+| Lint     | `npm run lint`（ESLint）· `npm run lint:css`（stylelint，UI 令牌强约束）                                                                                 |
+| 类型检查 | `npm run typecheck`（tsc strict）                                                                                                                        |
+| 单元测试 | `npm run test`（Vitest，`*.test.ts` 与源码同目录）                                                                                                       |
+| E2E      | `npm run test:e2e`（Playwright）                                                                                                                         |
+| 数据维护 | `npm run maintain`（任意时刻可跑：自动补漏跑交易日，盘中用实时值，收盘后重跑得终值）· `npm run task -- run sync:kline-daily -- --status`（查数据完整性） |
 
 **交付门槛**：`build` + `typecheck` + `lint` + `lint:css` 四项全绿；涉及业务逻辑的改动必须补/改测试；UI 改动另过 `docs/UI_SPEC.md` §7 检查清单。
 
@@ -33,6 +34,10 @@ A 股行情预览 + 模拟交易的 Web 终端：Next.js 16（App Router，stand
 - `lib/server/`：仅服务端（`market-service` 数据源编排、`provider/tencent` 腾讯实现、`trading/` 模拟交易服务域【contract/registry/engine + local（node:sqlite 持久化），/simtrade 账务与回放会话权威结算】、`market-db/` 行情快照库只读访问与领涨看板计算（node:sqlite，dbdata/market.db）、TTLCache、限流、zod、pino），禁止被客户端引用。
 - `lib/trading/`：模拟交易域（环境无关，两端共用，均带测试）——`rules.ts` 买卖规则纯函数（标的准入、涨跌停、费用、下单校验、成交价）；`events.ts` 用户交易事件 + 事件引擎（init_order / select_side / place_order → 规则校验 → 成交，初始化默认委托最大可买，客户端 /trade 与服务端 /simtrade 共用管线）；`account.ts` 账务纯函数（整手买入、T+1、权益）+ localStorage 持久化；`replay.ts` 回放引擎纯函数；`messages.ts` 交易消息目录（code → `'中文|English'` 双语文案单一来源，`msg()` 支持 `{key}` 插值——rules/engine/组件共用，服务端拒单与客户端预检口径一致）；`protocol.ts` + `sim-api.ts` 为 /api/sim 传输协议与客户端请求封装。
 - `proxy.ts` / `instrumentation*.ts`：边缘 404 与 `x-request-id` 注入、启动日志与优雅停机。
+
+## 代码结构（scripts/，仓库根）
+
+- `scripts/`：market.db 数据维护任务系统（**腾讯源**，与 BFF 同上游；应用侧只读，写入只在此处）——`task.mjs` 任务注册表与统一入口、`lib/`（db 连接 WAL + 状态文件 + http 重试 + 腾讯封装）、`sync/kline-daily.mjs` 日 K 同步（自动补漏跑交易日 + 当日实时/终值快照，任意时刻可跑，upsert 幂等，`--status` 查完整性）、`sync/leaders.mjs` 领涨事件本地自算（增量，`--from` 强制重算）、`maintain.mjs` 统一维护入口（`final_through` 完整性口径落 `dbdata/task_runs.json`）。
 
 ## 必读文档（按任务选读）
 

@@ -9,6 +9,7 @@ stock-sim/
 ├── docs/
 ├── e2e/
 ├── public/
+├── scripts/
 ├── src/
 │   ├── app/
 │   ├── components/
@@ -98,6 +99,16 @@ React UI 组件，按页面域分子目录（`terminal/` 行情终端、`trading
   - `api.ts` / `logger.ts`：路由层公共封装与 pino 结构化日志。
 - `screener/`：领涨看板视图类型域（环境无关，两端共用）——`types.ts` 看板元信息 + 概念热力 + 领涨股行视图模型（SSR 与 /api/screener/board 共用）。
 - 根级文件：`fundamental.ts`（基本面展示回溯与信息表格渲染）、`i18n.ts`（中英双语文案，`#en-US` hash 兼容原 SPA）、`watchlist.ts`（自选收藏 localStorage 存取，行情中心 / 领涨看板共用）。
+
+## scripts/
+
+market.db 数据维护任务系统（node:sqlite 直连，应用侧只读、写入只在此处；**腾讯源**，与 BFF provider/tencent 同上游同解析口径）：
+
+- `task.mjs`：任务注册表与统一入口（`npm run task -- run <任务ID>`）。
+- `lib/`：`db.mjs`（连接 dbdata/market.db，WAL + busy_timeout + 任务状态文件 task_runs.json）、`http.mjs`（UA 统一 + 退避重试 + GBK 文本）、`tencent.mjs`（市场状态 sh000001 时间戳 / 交易日历 / 单股不复权日K / qt 批量实时行情）。
+- `sync/kline-daily.mjs`：`kline_daily` 日 K 同步——自动补漏跑交易日（逐股回填终值，串行/断点/熔断）+ 当日实时/终值快照（qt 批量，仅写时间戳=今日的行）；任意时刻可跑，upsert 幂等；`--status` 查看数据完整性。
+- `sync/leaders.mjs`：`leader_events` 领涨事件本地自算（kline_daily + stock_concepts + stocks，零外部请求；默认增量，`--from=YYYY-MM-DD` 强制重算）。
+- `maintain.mjs`：统一维护入口（顺序执行两同步；数据完整性以 `final_through` 口径落 `dbdata/task_runs.json`——盘中跑为快照，收盘后重跑覆盖终值）。
 
 ## tests/
 

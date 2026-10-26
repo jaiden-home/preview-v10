@@ -26,6 +26,7 @@ npm-debug.log*
 dbdata/*.db
 dbdata/*.db-shm
 dbdata/*.db-wal
+dbdata/task_runs.json
 
 # typescript
 *.tsbuildinfo

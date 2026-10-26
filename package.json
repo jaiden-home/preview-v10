@@ -19,6 +19,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
+    "task": "node scripts/task.mjs",
+    "maintain": "node scripts/task.mjs run maintain",
     "prepare": "husky"
   },
   "lint-staged": {
