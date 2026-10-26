@@ -26,7 +26,9 @@ npm-debug.log*
 dbdata/*.db
 dbdata/*.db-shm
 dbdata/*.db-wal
-dbdata/task_runs.json
+
+# runtime data (market.db 维护任务状态)
+scripts/task_runs.json
 
 # typescript
 *.tsbuildinfo

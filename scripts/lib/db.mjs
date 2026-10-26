@@ -31,7 +31,7 @@ export function nowStr() {
 }
 
 // ── 任务状态文件（taskId → { last_run_at, last_status, final_through, phase, ... }） ──
-const STATE_PATH = path.join(ROOT, 'dbdata', 'task_runs.json')
+const STATE_PATH = path.join(ROOT, 'scripts', 'task_runs.json')
 
 /** 读取任务状态（不存在或损坏 → 空对象，视为首次）。 */
 export function loadTaskState() {

@@ -6,7 +6,7 @@
 //   收盘后再跑一次 → 覆盖为当日终值（幂等，随时重跑安全）；
 //   漏跑的交易日 → 逐股自动补齐终值，无需单独补数命令。
 // 流程：sync:kline-daily（漏跑补数 + 当日快照/终值 + 完整性落状态）→ sync:leaders（增量重算）
-// 状态：dbdata/task_runs.json（kline 任务写入 final_through / phase，供完整性报告与 --status）
+// 状态：scripts/task_runs.json（kline 任务写入 final_through / phase，供完整性报告与 --status）
 // 失败：某任务抛错 → 中止后续任务（重跑本命令幂等续传）
 import { nowStr, loadTaskState } from './lib/db.mjs'
 import { run as syncKlineDaily } from './sync/kline-daily.mjs'
