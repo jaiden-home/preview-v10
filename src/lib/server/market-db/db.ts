@@ -5,7 +5,7 @@ import { getEnv } from '../env'
 
 // ==================== 行情快照库连接（进程级单例，只读） ====================
 // market.db 自 market 项目复制（含 stocks / concepts / stock_concepts / kline_daily /
-// kline_minute / leader_events 六表）；本模块只读查询，写入与建表一律在 market 项目完成。
+// leader_events 五表）；本模块只读查询，写入与建表一律在 market 项目完成。
 // globalThis 缓存防 dev 热重载句柄泄漏；库文件缺失时不创建（复制后可用）。
 
 const globalForDb = globalThis as unknown as { __marketDb?: DatabaseSync }
