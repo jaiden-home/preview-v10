@@ -1,13 +1,17 @@
 import type { Metadata } from 'next'
-import Screener from '@/components/screener/Screener'
+import ScreenCenter from '@/components/screener/ScreenCenter'
+import { getBoard } from '@/lib/server/market-db/board'
+
+export const dynamic = 'force-dynamic'
 
 export const metadata: Metadata = {
-  title: '量化选股',
+  title: '选股中心',
   description:
-    '自定义量化条件的选股器(Stock screener)：技术指标（均线/RSI/MACD/量能/波动率）与基本面（PE/PB/市值/换手）条件组合，沪深主板全池分片筛选。'
+    '领涨看板(本地快照库)：概念板块热力图与趋势达标领涨股筛选；条件选股(Stock screener)：技术指标与基本面条件组合，全市场启用股分片筛选。'
 }
 
-/** 量化选股页：纯客户端运行（策略本地持久化，筛选经 /api/screener 分片渐进计算） */
-export default function ScreenerPage() {
-  return <Screener />
+/** 选股中心：SSR 初载领涨看板（market.db 只读快照，5min 缓存；缺库时客户端引导刷新）+ 条件选股双模式 */
+export default async function ScreenerPage() {
+  const board = await getBoard()
+  return <ScreenCenter initialBoard={board} />
 }

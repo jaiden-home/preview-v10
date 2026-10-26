@@ -5,6 +5,7 @@ const RESERVED_ROOT_SEGMENTS = new Set([
   '_next',
   'favicon.ico',
   'logo.svg',
+  'treemap-heatmap.min.js',
   'robots.txt',
   'trade',
   'dashboard',

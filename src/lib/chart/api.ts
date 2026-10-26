@@ -7,7 +7,7 @@ import type {
   SymbolSearchItem,
   QuoteSnapshot
 } from './types'
-import type { ScreenerRunRequest, ScreenerRunView } from '../screener/types'
+import type { ScreenerRunRequest, ScreenerRunView, BoardData } from '../screener/types'
 
 /** 客户端 BFF 请求封装（失败返回 null / 空数组，由调用方兜底） */
 
@@ -72,6 +72,23 @@ export const fetchMarketOverview = async (params: {
 }
 
 export type ScreenerRunResult = { ok: true; view: ScreenerRunView } | { ok: false; message: string }
+
+export type BoardFetchResult = { ok: true; board: BoardData } | { ok: false; message: string }
+
+/** 领涨看板数据（/api/screener/board；refresh=true 绕过服务端缓存重算，message 为双语目录格式文案） */
+export const fetchBoardRequest = async (refresh = false): Promise<BoardFetchResult> => {
+  try {
+    const response = await fetch(`/api/screener/board${refresh ? '?refresh=1' : ''}`)
+    const data: unknown = await response.json().catch(() => null)
+    if (response.ok && data != null && typeof (data as BoardData).meta === 'object') {
+      return { ok: true, board: data as BoardData }
+    }
+    const message = (data as { error?: { message?: string } })?.error?.message
+    return { ok: false, message: message ?? '看板数据请求失败|Board request failed' }
+  } catch {
+    return { ok: false, message: '网络异常，请稍后重试|Network error, please retry' }
+  }
+}
 
 /** 量化选股运行（分片渐进；done=false 时带同参数继续请求，message 为双语目录格式文案） */
 export const runScreenerRequest = async (request: ScreenerRunRequest): Promise<ScreenerRunResult> => {

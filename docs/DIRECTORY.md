@@ -35,11 +35,12 @@ Next.js App Router 的应用根目录，包含全部页面路由与 BFF 接口�
   - `quote/`：实时快照（名称/现价/昨收 + 基本面估值）。
   - `search/`：标的搜索（6 位代码精确匹配 + smartbox 名称/拼音联想）。
   - `market/`：行情中心总览（`board/sort/dir` 板块榜视图 + `symbols` 自选批量 → `{ indices, ranking, watches }`）。
-  - `screener/`：量化选股运行（`POST`：conditions 条件组合 + from/asOf 日期区间 → 分片渐进 `{ done, computed, total, items }`；股票池固定沪深主板）。
+  - `screener/`：条件选股运行（`POST`：conditions 条件组合 + from/asOf 日期区间 → 分片渐进 `{ done, computed, total, items }`；池 = market.db 启用股全池，日 K 直读 kline_daily）。
+  - `screener/board/`：领涨看板数据（`GET`：概览 + 概念热力四周期 + 趋势达标领涨股表；`?refresh=1` 绕缓存重算；5min 进程缓存）。
   - `healthz/`：健康检查（`{ status, uptime, timestamp }`，供 Docker HEALTHCHECK 与探活使用）。
 - `dashboard/`：行情看板页（原首页终端整体迁移，默认上证指数，服务端直出首屏行情与日 K；支持 `?symbol=` 深链，非法代码回退默认）。
 - `market/`：行情中心页（指数概览 + 官方板块榜 + 自选收藏，SSR 直供默认视图 + 客户端 3s 轮询）。
-- `screener/`：量化选股页（纯客户端：条件组合器 + 模板 + 分片运行轮询，策略本地持久化）。
+- `screener/`：选股中心页（SSR 初载领涨看板 + 双模式 Tab：领涨看板 / 条件选股，策略本地持久化）。
 - `trade/`：模拟交易页（客户端虚拟账户 + BFF 行情轮询）。
 - `simtrade/`：极速模拟页（历史回放 + 虚拟时钟，账务由 `/api/sim/*` BFF 权威结算）。
 - `admin/`：管理命名空间；`admin/simtrade/` 模拟设置页（标的 / 起止日期 / 倍速 / 开始暂停开关）。
@@ -54,7 +55,7 @@ React UI 组件，按页面域分子目录（`terminal/` 行情终端、`trading
 - `market/MarketCenter.tsx`：行情中心主组件（指数概览 + 板块榜单 + 自选收藏；搜索下拉、星标、深链看板、3s 轮询内聚于此）。
 - `market/StarButton.tsx`：自选星标按钮（行情中心 / 量化选股共用）。
 
-- `screener/Screener.tsx`：量化选股主组件（条件组合器、预设模板、分片运行轮询、动态条件值结果表）。
+- `screener/ScreenCenter.tsx`：选股中心壳（双模式 Tab + 数据截至徽标 + 刷新 + 主题开关）；`LeaderBoard.tsx` 领涨看板（总览卡 + 概念热力 + chips 联动）；`ConceptTreemap.tsx` 热力图封装（treemap-heatmap 库，四周期/放大/多选）；`LeaderTable.tsx` 领涨股表（18 列排序/筛选/搜索/口径说明）；`Screener.tsx` 条件选股（条件组合器、分片运行轮询、动态条件值结果表）。
 
 - `TradingTerminal.tsx`：终端主组件，负责组装工具栏、信息表格与图表挂载点。
 - `SymbolPicker.tsx` / `PeriodGroup.tsx`：标的搜索切换与周期（分时/分钟/日/周/月）切换；`PeriodGroup` 支持 `simple` 精简模式（仅日/周/月，交易页图表用）。
@@ -91,7 +92,8 @@ React UI 组件，按页面域分子目录（`terminal/` 行情终端、`trading
     - `periods.ts`：周期兜底计划（原生周期透传，缺口周期基周期拉取 + 本地聚合）。
     - `contract.ts`：provider 契约测试套件（新数据源上线须通过）。
     - `tencent/`：腾讯数据源实现（`http` 传输 / `parse` 协议解析 / `quote`（含批量）·`kline`·`timeshare`·`search`·`ranking` 接口 / `index` 组装与缓存策略）。
-  - `screener/`：量化选股编排（`universe.ts` 沪深主板池发现与日 K 长缓存、`service.ts` 基本面预筛 + 技术指标分片计算与游标状态）。
+  - `screener/`：条件选股编排（`universe.ts` market.db 池发现 + 按需行情快照回填 + 日 K 直读、`service.ts` 基本面预筛 + 技术指标分片计算与游标状态）。
+  - `market-db/`：行情快照库访问（`db.ts` node:sqlite 只读单例；`board.ts` 领涨看板数据服务，口径移植自 market 首页；`board.test.ts` 内存夹具单测、`board.smoke.test.ts` 真库冒烟）。
   - `cache.ts`：TTL 缓存（含在途请求去重）。
   - `rate-limit.ts`：按 IP 滑动窗口限流。
   - `schemas.ts` / `env.ts`：zod 接口参数校验与环境变量解析。

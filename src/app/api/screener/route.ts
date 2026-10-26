@@ -2,7 +2,7 @@ import type { NextRequest } from 'next/server'
 import { allowRequest, jsonError, jsonOk, requestIdOf } from '@/lib/server/api'
 import { requestLogger } from '@/lib/server/logger'
 import { screenerRunSchema } from '@/lib/server/schemas'
-import { runScreener, ScreenerValidationError } from '@/lib/server/screener/service'
+import { MarketDbMissingError, runScreener, ScreenerValidationError } from '@/lib/server/screener/service'
 
 export const dynamic = 'force-dynamic'
 
@@ -28,6 +28,9 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     if (error instanceof ScreenerValidationError) {
       return jsonError(422, 'invalid_conditions', error.message)
+    }
+    if (error instanceof MarketDbMissingError) {
+      return jsonError(503, 'market_db_missing', error.message)
     }
     log.error({ err: String(error) }, 'screener run failed')
     return jsonError(502, 'upstream_error', 'screener temporarily unavailable')

@@ -1,45 +1,44 @@
 import type { KLineData } from 'klinecharts'
 import type { FundamentalData, QuoteSnapshot, SymbolRef } from '../../chart/types'
 import { TTLCache } from '../cache'
+import { getMarketDb, marketDbExists } from '../market-db/db'
 import { getProvider } from '../provider/registry'
 
-// ==================== 量化选股股票池（仅服务端） ====================
-// 池口径（用户指定）：沪深主板全部标的——深市主板 000 段 + 沪市主板 600 段。
-// 发现方式：候选代码批量报价探测（qt.gtimg.cn 一次 q= 多标的），名称为空视为无效代码剔除；
-// 探测顺带缓存名称与基本面快照（基本面日内基本不变，供条件预筛）。
+// ==================== 量化选股股票池（仅服务端，market.db 数据源） ====================
+// 池口径：market.db stocks.enabled=1（沪深主板 + 创业板启用股全池，名称/归属以库为准）；
+// 现价与基本面快照按需经腾讯批量报价回填（含基本面条件时才触发，24h 缓存）；
+// 日 K 直接读 kline_daily（不复权快照，与领涨看板同源同口径），不再逐标的拉上游。
 
-/** 池代码段：market + 6 位代码闭区间 */
-const SEGMENTS: Array<{ market: string; from: number; to: number }> = [
-  { market: 'sz', from: 1, to: 999 },
-  { market: 'sh', from: 600_000, to: 600_999 }
-]
-
+/** 快照回填批量与并发（对齐上游批量报价能力） */
 const PROBE_BATCH = 80
 const PROBE_CONCURRENCY = 5
 
-/** 池清单缓存 24h（成分变化低频；盘中新股忽略） */
+/** 池清单/快照缓存 24h（成分变化低频；快照日内基本不变） */
 const UNIVERSE_TTL_MS = 24 * 60 * 60 * 1000
 
 export interface UniverseEntry {
   market: string
   ticker: string
   name: string
-  /** 探测时现价：as-of 基本面比例回溯的定标基准（replayFundamentalOf 口径） */
+  /** 回填现价：as-of 基本面比例回溯的定标基准（replayFundamentalOf 口径）；未回填 = null */
   price: number | null
   fundamental: FundamentalData
 }
 
+/** 行情快照库缺失（页面/API 引导复制 market.db） */
+export class MarketDbMissingError extends Error {
+  constructor() {
+    super(
+      '行情快照库未就绪：请将 market.db 复制到 dbdata/ 后重试|Market snapshot db missing: copy market.db into dbdata/ first'
+    )
+    this.name = 'MarketDbMissingError'
+  }
+}
+
 const universeCache = new TTLCache<UniverseEntry[]>({ maxEntries: 4, defaultTtlMs: UNIVERSE_TTL_MS })
 
-const candidateCodes = (): Array<{ market: string; ticker: string }> => {
-  const codes: Array<{ market: string; ticker: string }> = []
-  for (const segment of SEGMENTS) {
-    for (let num = segment.from; num <= segment.to; num++) {
-      codes.push({ market: segment.market, ticker: String(num).padStart(6, '0') })
-    }
-  }
-  return codes
-}
+/** 交易所代码 → 应用内市场前缀 */
+const marketOf = (exchange: string): string => (exchange === 'SH' ? 'sh' : 'sz')
 
 /** 简易并发池：顺序出队，最多 limit 个在途 */
 const runWithConcurrency = async <T>(tasks: Array<() => Promise<T>>, limit: number): Promise<T[]> => {
@@ -82,69 +81,107 @@ export const fetchQuotesResilient = async (symbols: SymbolRef[]): Promise<QuoteS
   )
 }
 
-/** 主池发现（进程内 24h 缓存；并发批量探测沪深主板代码段） */
+/** 主池（market.db 启用股全池；进程内 24h 缓存；price/基本面待按需回填） */
 export const getScreenerUniverse = (): Promise<UniverseEntry[]> =>
-  universeCache.getOrLoad('screener:universe:main', async () => {
-    const candidates = candidateCodes()
-    const batches: Array<Array<{ market: string; ticker: string }>> = []
-    for (let i = 0; i < candidates.length; i += PROBE_BATCH) {
-      batches.push(candidates.slice(i, i + PROBE_BATCH))
+  universeCache.getOrLoad('screener:universe:db', async () => {
+    if (!marketDbExists()) {
+      throw new MarketDbMissingError()
+    }
+    const rows = getMarketDb()
+      .prepare('SELECT code, name, exchange FROM stocks WHERE enabled = 1 ORDER BY code')
+      .all() as Array<{ code: string; name: string; exchange: string }>
+    return rows.map((r) => ({
+      market: marketOf(r.exchange),
+      ticker: r.code,
+      name: r.name,
+      price: null,
+      fundamental: {}
+    }))
+  })
+
+/** 主池 + 行情快照回填（现价/涨跌/基本面；含基本面条件的策略用，24h 缓存，首次回填约数十秒） */
+export const getEnrichedScreenerUniverse = (): Promise<UniverseEntry[]> =>
+  universeCache.getOrLoad('screener:universe:db:enriched', async () => {
+    const base = await getScreenerUniverse()
+    const batches: Array<UniverseEntry[]> = []
+    for (let i = 0; i < base.length; i += PROBE_BATCH) {
+      batches.push(base.slice(i, i + PROBE_BATCH))
     }
     const probeResults = await runWithConcurrency(
-      batches.map((batch) => () => fetchQuotesResilient(batch).catch(() => [])),
+      batches.map(
+        (batch) => () =>
+          fetchQuotesResilient(batch.map((e) => ({ market: e.market, ticker: e.ticker }))).catch(() => [])
+      ),
       PROBE_CONCURRENCY
     )
-    const entries: UniverseEntry[] = []
+    const quoteMap = new Map<string, QuoteSnapshot>()
     for (const quotes of probeResults) {
       for (const quote of quotes) {
-        // 名称非空 = 有效代码；停牌股（price null）保留，交由指标层以缺数据保守过滤
-        if (quote.name != null) {
-          entries.push({
-            market: quote.market,
-            ticker: quote.ticker,
-            name: quote.name,
-            price: quote.price,
-            fundamental: quote.fundamental
-          })
-        }
+        quoteMap.set(`${quote.market}${quote.ticker}`, quote)
       }
     }
-    entries.sort((a, b) => `${a.market}${a.ticker}`.localeCompare(`${b.market}${b.ticker}`))
-    return entries
+    return base.map((entry) => {
+      const quote = quoteMap.get(`${entry.market}${entry.ticker}`)
+      if (quote == null) {
+        return entry // 探测失败保留库内名称，指标层以缺数据保守过滤
+      }
+      return {
+        ...entry,
+        price: quote.price,
+        fundamental: quote.fundamental
+      }
+    })
   })
 
-// ==================== 日 K 长缓存（量化口径：10min，绕开行情 3s 缓存） ====================
+// ==================== 日 K 读取（kline_daily 直读，不复权快照口径） ====================
 
-const KLINE_TTL_MS = 10 * 60 * 1000
-/** 指标最长回看 250 日 + as-of 一年 + EMA 预热，取 700 个自然日窗口（≈470 根日 K，上游单次 640 根内） */
+/** 指标最长回看 250 交易日 + as-of 一年 + EMA 预热，取 700 自然日窗口（≈470 根日 K） */
 const KLINE_LOOKBACK_DAYS = 700
-const DAY_MS = 24 * 60 * 60 * 1000
-const KLINE_CONCURRENCY = 8
 
-const barsCache = new TTLCache<KLineData[]>({ maxEntries: 4_000, defaultTtlMs: KLINE_TTL_MS })
-const providerRef = () => getProvider()
+const cutoffDate = (): string => {
+  const date = new Date(Date.now() - KLINE_LOOKBACK_DAYS * 86_400_000)
+  const p = (x: number): string => `${x}`.padStart(2, '0')
+  return `${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())}`
+}
 
-const loadBars = async (entry: { market: string; ticker: string }): Promise<KLineData[]> =>
-  barsCache.getOrLoad(`screener:bars:${entry.market}${entry.ticker}`, async () => {
-    const to = Date.now()
-    const from = to - KLINE_LOOKBACK_DAYS * DAY_MS
-    const bars = await providerRef().fetchKLines(
-      { market: entry.market, ticker: entry.ticker },
-      { span: 1, type: 'day' },
-      from,
-      to
-    )
-    if (bars.length === 0) {
-      throw new Error(`no daily bars for ${entry.market}${entry.ticker}`)
-    }
-    return bars
-  })
-
-/** 批量取日 K（长缓存 + 受控并发；失败标的返回 null，不拖垮整片） */
+/** 批量取日 K（单条 SQL 直读 kline_daily；无 K 线标的返回 null，交由指标层保守过滤） */
 export const loadBarsBatch = async (
   entries: Array<{ market: string; ticker: string }>
-): Promise<Array<KLineData[] | null>> =>
-  runWithConcurrency(
-    entries.map((entry) => () => loadBars(entry).catch(() => null)),
-    KLINE_CONCURRENCY
-  )
+): Promise<Array<KLineData[] | null>> => {
+  if (entries.length === 0) {
+    return []
+  }
+  if (!marketDbExists()) {
+    throw new MarketDbMissingError()
+  }
+  const ph = entries.map(() => '?').join(',')
+  const rows = getMarketDb()
+    .prepare(
+      `SELECT code, trade_date, open, high, low, close, volume FROM kline_daily
+       WHERE trade_date >= ? AND code IN (${ph}) ORDER BY code, trade_date`
+    )
+    .all(cutoffDate(), ...entries.map((e) => e.ticker)) as Array<{
+    code: string
+    trade_date: string
+    open: number
+    high: number
+    low: number
+    close: number
+    volume: number
+  }>
+  const byCode = new Map<string, KLineData[]>()
+  for (const r of rows) {
+    // 与腾讯日线同口径：本地时区零点时间戳（parseCnBarTime 约定）
+    const bars = byCode.get(r.code) ?? []
+    bars.push({
+      timestamp: new Date(`${r.trade_date}T00:00:00`).getTime(),
+      open: r.open,
+      high: r.high,
+      low: r.low,
+      close: r.close,
+      volume: r.volume
+    })
+    byCode.set(r.code, bars)
+  }
+  return entries.map((e) => byCode.get(e.ticker) ?? null)
+}

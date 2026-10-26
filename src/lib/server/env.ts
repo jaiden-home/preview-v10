@@ -24,7 +24,9 @@ const envSchema = z.object({
   /** 模拟交易服务实现（trading/registry.ts 登记的 id；接真实交易接口时扩展枚举） */
   SIM_TRADING_PROVIDER: z.enum(['local']).default('local'),
   /** 模拟交易 SQLite 数据库文件路径（相对进程工作目录） */
-  SIM_TRADING_DB_PATH: z.string().default('./dbdata/sim-trading.db')
+  SIM_TRADING_DB_PATH: z.string().default('./dbdata/sim-trading.db'),
+  /** 行情快照库（market.db：stocks/concepts/kline_daily/leader_events）文件路径（相对进程工作目录） */
+  MARKET_DB_PATH: z.string().default('./dbdata/market.db')
 })
 
 export type Env = z.infer<typeof envSchema>

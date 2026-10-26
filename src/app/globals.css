@@ -3536,3 +3536,312 @@ body {
     flex-direction: column;
   }
 }
+
+/* ---- 选股中心（/screener v2.65：领涨看板 + 条件选股双模式） ---- */
+
+/* 看板 Tab 主幅宽（领涨看板宽幅 1560px；条件选股保持 980px 表单窄幅） */
+#app .screener-main-wide {
+  max-width: 1560px;
+}
+
+/* Tab 行：左分段切换 + 右数据截至徽标/刷新 */
+#app .screen-tabs-row {
+  flex: none;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+#app .screen-tabs .tb-btn {
+  padding: 4px 14px;
+  font-weight: 600;
+}
+
+#app .screen-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#app .screen-date-badge {
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--tb-text-sub);
+  background-color: var(--tb-hover);
+  border-radius: 999px;
+}
+
+/* 数据总览：卡片化统计带（auto-fit 自适应列数） */
+#app .screen-overview {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+  gap: 10px;
+  padding: 12px 14px;
+}
+
+#app .screen-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 12px;
+  background-color: var(--tb-hover);
+  border-radius: var(--radius-sm);
+}
+
+#app .screen-stat-k {
+  font-size: 10px;
+  color: var(--tb-text-sub);
+}
+
+#app .screen-stat-v {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--tb-text);
+}
+
+/* 概念热力卡 */
+#app .screen-heat-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+}
+
+#app .screen-heat-head {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+#app .screen-heat-sub {
+  flex: 1 1 240px;
+  min-width: 0;
+  font-size: 11px;
+  color: var(--tb-text-sub);
+}
+
+/* 数值颜色图例：绿跌 — 灰平 — 红涨（满幅随周期），不依赖颜色单独表达 */
+#app .screen-heat-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+#app .screen-legend-bar {
+  width: 110px;
+  height: 8px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--down), var(--tb-border), var(--up));
+}
+
+#app .screen-legend-min {
+  font-size: 10px;
+  color: var(--down);
+}
+
+#app .screen-legend-max {
+  font-size: 10px;
+  color: var(--up);
+}
+
+#app .screen-heat-cloud {
+  position: relative;
+  height: 480px;
+  background-color: var(--tb-hover);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+/* 热力选中色块：品牌蓝内描边（库重建 DOM 后由 JS 重打） */
+#app .screen-heat-cloud .screen-heat-cell-sel {
+  box-shadow: inset 0 0 0 2px var(--tb-active);
+  z-index: 5;
+}
+
+#app .screen-heat-empty {
+  padding: 24px 14px;
+  font-size: 11px;
+  color: var(--tb-text-sub);
+}
+
+/* 已选概念 chips（热力图联动，命中任一 OR 筛表） */
+#app .screen-chips {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+#app .screen-chips-label {
+  font-size: 11px;
+  color: var(--tb-text-sub);
+}
+
+#app .screen-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  font-size: 11px;
+  color: var(--tb-active);
+  background-color: var(--tb-active-bg);
+  border: 1px solid var(--tb-active);
+  border-radius: 999px;
+  cursor: pointer;
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease;
+}
+
+#app .screen-chip:hover {
+  color: var(--tb-text);
+  background-color: var(--tb-hover);
+}
+
+#app .screen-caliber-note {
+  font-size: 10px;
+  line-height: 1.7;
+  color: var(--tb-text-sub);
+}
+
+/* 领涨股表卡（自持卡片样式，含筛选工具条 + 密集宽表 + 口径说明） */
+#app .screen-leaders {
+  display: flex;
+  flex-direction: column;
+  background-color: var(--tb-bg);
+  border: 1px solid var(--tb-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  color: var(--tb-text);
+}
+
+#app .screen-hit-count {
+  margin-left: 8px;
+  padding: 1px 8px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--tb-active);
+  background-color: var(--tb-active-bg);
+  border-radius: var(--radius-sm);
+}
+
+#app .screen-filters {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--tb-border);
+}
+
+#app .screen-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--tb-text-sub);
+}
+
+#app .screen-search {
+  width: 180px;
+}
+
+/* 密集宽表（18 列）：单元格收窄一档（领涨看板专属口径，见 UI_SPEC §3.16 v2.65） */
+#app .screen-leaders-wrap .trade-table th,
+#app .screen-leaders-wrap .trade-table td {
+  padding: 6px 10px;
+}
+
+#app .trade-table th.screen-sortable {
+  text-align: right;
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+#app .trade-table th.screen-sortable:hover {
+  color: var(--tb-active);
+}
+
+/* 概念列：次要色 + 省略（完整列表在行悬浮 title） */
+#app .screen-concepts {
+  max-width: 190px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 11px;
+  color: var(--tb-text-sub);
+}
+
+/* 本月新进红点（涨语义色，悬浮提示完整口径） */
+#app .screen-new-dot {
+  display: inline-block;
+  position: relative;
+  top: -6px;
+  margin-left: 3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--up);
+  cursor: help;
+}
+
+/* 口径说明：4 组横排（窄屏自动换列） */
+#app .screen-caliber {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  padding: 12px 14px;
+  border-top: 1px solid var(--tb-border);
+}
+
+#app .screen-caliber-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--tb-text);
+  margin-bottom: 4px;
+}
+
+#app .screen-caliber ul {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 11px;
+  line-height: 1.7;
+  color: var(--tb-text-sub);
+}
+
+/* ---- 选股中心移动端（≤768px） ---- */
+@media (max-width: 768px) {
+  #app .screen-heat-cloud {
+    height: 320px;
+  }
+
+  #app .screen-heat-sub {
+    flex-basis: 100%;
+  }
+
+  #app .screen-legend-bar {
+    width: 80px;
+  }
+
+  /* 领涨宽表隐藏转票据式列表（复用 .market-list 范式） */
+  #app .screen-leaders-wrap {
+    display: none;
+  }
+
+  #app .screen-leaders .market-list {
+    display: flex;
+    flex-direction: column;
+  }
+
+  #app .screen-search {
+    flex: 1 1 100%;
+    width: auto;
+  }
+}
