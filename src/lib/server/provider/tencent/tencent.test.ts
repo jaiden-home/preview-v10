@@ -615,8 +615,8 @@ describe('tencent provider 契约', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async (url: string) => {
-        if (url.startsWith('https://web.ifzq.gtimg.cn')) {
-          // 风控验证页：非 2xx，fetchJson 抛 UpstreamError
+        if (url.startsWith('https://ifzq.gtimg.cn')) {
+          // 风控验证页：非 2xx，fetchJson 抛 UpstreamError，fetchIfzqJson 换 web. 次选域名重试
           return { ok: false, status: 501, json: async () => ({}) }
         }
         return {

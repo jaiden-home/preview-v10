@@ -2,16 +2,14 @@ import type { SymbolRef, TimeShareSnapshot } from '../../../chart/types'
 import { symbolCode } from '../../../chart/types'
 import { isCnStarMarket, localDayKey, parseCnBarTime, pickPrevClose } from '../../../chart/utils'
 import type { TTLCache } from '../../cache'
-import { fetchJson, UpstreamError } from './http'
+import { fetchIfzqJson, UpstreamError } from './http'
 import { parseTimeShareDay, parseTencentKlines } from './parse'
 
 /** 从最近若干日 K 中补昨收（分时接口缺昨收时的兜底） */
 const fetchPrevClose = async (symbol: SymbolRef, displayedDayKey: string, fallback: number): Promise<number> => {
   const code = symbolCode(symbol)
   try {
-    const result = await fetchJson<Record<string, unknown>>(
-      `https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=${code},day,,,6,`
-    )
+    const result = await fetchIfzqJson<Record<string, unknown>>(`/appstock/app/fqkline/get?param=${code},day,,,6,`)
     const container = (result?.data as Record<string, Record<string, unknown>> | undefined)?.[code] ?? {}
     const days = parseTencentKlines(
       ((container?.day ?? []) as unknown[]).filter((row): row is unknown[] => Array.isArray(row))
@@ -38,9 +36,7 @@ export const fetchTimeShare = async (
   const code = symbolCode(symbol)
   const star = isCnStarMarket(symbol)
   return cache.getOrLoad(`tencent:timeshare:${code}`, async () => {
-    const result = await fetchJson<Record<string, unknown>>(
-      `https://web.ifzq.gtimg.cn/appstock/app/day/query?code=${code}`
-    )
+    const result = await fetchIfzqJson<Record<string, unknown>>(`/appstock/app/day/query?code=${code}`)
     const container = (result?.data as Record<string, Record<string, unknown>> | undefined)?.[code] ?? {}
     const qt = (container?.qt as Record<string, unknown> | undefined)?.[code]
     const prevCloseFromQt = Array.isArray(qt) ? Number(qt[4]) : Number.NaN
@@ -62,13 +58,13 @@ export const fetchTimeShare = async (
       }
     }
     if (best == null) {
-      throw new UpstreamError('time share data is empty', 'web.ifzq.gtimg.cn')
+      throw new UpstreamError('time share data is empty', 'ifzq.gtimg.cn')
     }
     const fallbackPrice = Number.isFinite(prevCloseFromQt) && prevCloseFromQt > 0 ? prevCloseFromQt : Number.NaN
     // 科创板分时量为「股」（每手 200 股），其余板块为「手」（每手 100 股）
     const bars = parseTimeShareDay(best.date, best.points, fallbackPrice, star ? 200 : 1)
     if (bars.length === 0) {
-      throw new UpstreamError('time share points are invalid', 'web.ifzq.gtimg.cn')
+      throw new UpstreamError('time share points are invalid', 'ifzq.gtimg.cn')
     }
     let prevClose = fallbackPrice
     if (!Number.isFinite(prevClose) || prevClose <= 0) {

@@ -48,3 +48,20 @@ export const fetchGbkText = async (url: string): Promise<string> => {
     return new TextDecoder('utf-8').decode(buffer)
   }
 }
+
+// ifzq 双域名互备：2026-10-26 实测 web. 前缀域名被风控（501 + 验证页 HTML），无前缀域名正常——
+// 与 market 项目一致优先无前缀域名；风控在两域名间间歇漂移，失败即换下一个重试。
+const IFZQ_HOSTS = ['https://ifzq.gtimg.cn', 'https://web.ifzq.gtimg.cn']
+
+/** ifzq 系接口 GET JSON（双域名互备：按序尝试，任一成功即返回；全部失败抛最后一次错误） */
+export const fetchIfzqJson = async <T>(path: string): Promise<T> => {
+  let lastError: unknown
+  for (const host of IFZQ_HOSTS) {
+    try {
+      return await fetchJson<T>(`${host}${path}`)
+    } catch (error) {
+      lastError = error
+    }
+  }
+  throw lastError
+}

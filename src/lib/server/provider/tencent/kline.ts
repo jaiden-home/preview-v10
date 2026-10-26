@@ -6,12 +6,11 @@ import { aggregateBars } from '../../../chart/utils'
 import type { TTLCache } from '../../cache'
 import { getEnv } from '../../env'
 import { planPeriod } from '../periods'
-import { fetchJson } from './http'
+import { fetchIfzqJson, fetchJson } from './http'
 import { CN_TENCENT_PERIOD, formatTencentDate, parseTencentKlines } from './parse'
 
 /** 腾讯 K 线响应 → 原始 bars（不含任何请求窗口裁剪，保证缓存内容与窗口无关） */
-const fetchKlineRows = async (code: string, periodKey: string, url: string): Promise<KLineData[]> => {
-  const result = await fetchJson<Record<string, unknown>>(url)
+const parseKlineRows = (code: string, periodKey: string, result: Record<string, unknown>): KLineData[] => {
   const container = (result?.data as Record<string, Record<string, unknown>> | undefined)?.[code] ?? {}
   const rows = ((container[`qfq${periodKey}`] ?? container[periodKey] ?? []) as unknown[]).filter(
     (row): row is unknown[] => Array.isArray(row)
@@ -19,21 +18,10 @@ const fetchKlineRows = async (code: string, periodKey: string, url: string): Pro
   return parseTencentKlines(rows)
 }
 
-// fqkline 双域名互备：上游风控在 web. 前缀与无前缀域名间间歇漂移（501 + 验证页跳转），
-// 单点锁定任一域名都不可靠，失败即换下一个域名重试；mkline 仅无前缀域名可用（单域名）。
-const FQKLINE_HOSTS = ['https://web.ifzq.gtimg.cn', 'https://ifzq.gtimg.cn']
-
-const fetchFqkline = async (code: string, periodKey: string, path: string): Promise<KLineData[]> => {
-  let lastError: unknown
-  for (const host of FQKLINE_HOSTS) {
-    try {
-      return await fetchKlineRows(code, periodKey, `${host}${path}`)
-    } catch (error) {
-      lastError = error
-    }
-  }
-  throw lastError
-}
+// fqkline 走 ifzq 双域名互备（http.ts：无前缀域名优先，web. 风控漂移时自动切换）；
+// mkline 仅无前缀域名可用（单域名）。
+const fetchFqkline = async (code: string, periodKey: string, path: string): Promise<KLineData[]> =>
+  parseKlineRows(code, periodKey, await fetchIfzqJson<Record<string, unknown>>(path))
 
 /**
  * 近端原始 K 线（每 code×上游周期一份，全体用户共享）。
@@ -45,7 +33,7 @@ const fetchRawKLines = (cache: TTLCache<KLineData[]>, code: string, periodKey: s
     // 分钟线接口仅支持 m1/m5/m15/m30/m60；用 /^m\d/ 匹配，避免 'month' 误入分钟接口
     if (/^m\d/.test(periodKey)) {
       const url = `https://ifzq.gtimg.cn/appstock/app/kline/mkline?param=${code},${periodKey},,640`
-      return fetchKlineRows(code, periodKey, url)
+      return parseKlineRows(code, periodKey, await fetchJson<Record<string, unknown>>(url))
     }
     return fetchFqkline(code, periodKey, `/appstock/app/fqkline/get?param=${code},${periodKey},,,640,qfq`)
   })
