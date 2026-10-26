@@ -299,7 +299,7 @@ export default function LeaderTable({
       <div className="screen-filters">
         <input
           type="search"
-          className="screener-input screen-search"
+          className="screen-search"
           placeholder={t('搜索代码 / 名称 / 领涨概念|Search code / name / concept')}
           value={q}
           aria-label={t('搜索领涨股|Search leaders')}

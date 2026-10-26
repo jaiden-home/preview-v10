@@ -3191,7 +3191,7 @@ body {
   }
 }
 
-/* ---------------- 量化选股页（/screener，UI_SPEC §3.16） ---------------- */
+/* ---------------- 选股中心页（/screener 领涨看板，UI_SPEC §3.16） ---------------- */
 
 /* 画布与滚动容器：复用行情中心页面范式（--page-tint + 唯一滚动 + v2.56 工具栏随内容滚动） */
 #app .screener-page {
@@ -3210,341 +3210,30 @@ body {
   flex-direction: column;
 }
 
+/* 看板主幅宽（1560px 宽幅） */
 #app .screener-main {
   flex: none;
   display: flex;
   flex-direction: column;
   gap: 12px;
   padding: 12px;
-  max-width: 980px;
+  max-width: 1560px;
   width: 100%;
   margin: 0 auto;
   box-sizing: border-box;
 }
 
-/* 策略编辑卡 */
-#app .screener-editor {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 14px 16px;
-}
-
-/* 动作行：股票池说明 + 日期区间 + 运行按钮（CTA 品牌蓝实底，§5 主要操作 40px） */
-#app .screener-actions {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-/* 股票池说明胶囊（v2.62 起池固定沪深主板，无切换） */
-#app .screener-universe-hint {
-  display: inline-flex;
-  align-items: center;
-  height: 28px;
-  padding: 0 10px;
-  font-size: 11px;
-  color: var(--tb-text-sub);
-  background-color: var(--tb-hover);
-  border-radius: var(--radius-sm);
-  white-space: nowrap;
-}
-
-#app .screener-run {
-  margin-left: auto;
-  height: 40px;
-  padding: 0 16px;
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--on-solid);
-  background-color: var(--tb-active);
-  border: none;
-  border-radius: var(--radius-md);
-  box-shadow: 0 2px 8px rgba(22, 119, 255, 0.28);
-  cursor: pointer;
-  transition: filter 0.2s ease;
-}
-
-#app .screener-run:hover {
-  filter: brightness(1.06);
-}
-
-/* 条件行：指标下拉 + 参数 + 运算符 + 阈值 + 删除，窄屏自动换行 */
-#app .screener-conditions {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-#app .screener-cond {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding: 8px 10px;
-  background-color: var(--tb-hover);
-  border-radius: var(--radius-md);
-}
-
-#app .screener-key {
-  max-width: 160px;
-}
-
-/* 参数：标签 + 紧凑数字输入（§3.4 规格，num 等宽） */
-#app .screener-param {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 4px;
-}
-
-#app .screener-param-label {
-  font-size: 11px;
-  color: var(--tb-text-sub);
-  white-space: nowrap;
-}
-
-#app .screener-input {
-  width: 76px;
-  box-sizing: border-box;
-  height: 28px;
-  padding: 0 8px;
-  color: var(--tb-text);
-  font-family: var(--font-num);
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-  background-color: var(--tb-bg);
-  border: 1px solid var(--tb-border);
-  border-radius: var(--radius-sm);
-  transition:
-    border-color 0.2s ease,
-    box-shadow 0.2s ease;
-}
-
-#app .screener-input:focus {
-  outline: none;
-  border-color: var(--tb-active);
-  box-shadow: 0 0 0 3px var(--tb-active-bg);
-}
-
-/* 布尔条件：无运算符/阈值，静态命中标签 */
-#app .screener-bool-tag {
-  padding: 0 8px;
-  height: 28px;
-  display: inline-flex;
-  align-items: center;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--tb-active);
-  background-color: var(--tb-active-bg);
-  border-radius: var(--radius-sm);
-  white-space: nowrap;
-}
-
-/* between 双输入 */
-#app .screener-range {
-  display: inline-flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 4px;
-}
-
-/* 截止日期（as-of）：标签 + 日期输入 + 一键恢复最新 */
-#app .screener-asof {
-  position: relative;
-  display: inline-flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 4px;
-}
-
-#app .screener-date {
-  box-sizing: border-box;
-  height: 28px;
-  padding: 0 24px 0 8px;
-  color: var(--tb-text);
-  font-family: var(--font-num);
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-  background-color: var(--tb-bg);
-  border: 1px solid var(--tb-border);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition:
-    border-color 0.2s ease,
-    box-shadow 0.2s ease;
-}
-
-#app .screener-date:focus {
-  outline: none;
-  border-color: var(--tb-active);
-  box-shadow: 0 0 0 3px var(--tb-active-bg);
-}
-
-#app .screener-asof-clear {
-  position: absolute;
-  right: 24px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  padding: 0;
-  border: none;
-  border-radius: 50%;
-  background-color: transparent;
-  color: var(--tb-text-sub);
-  font-size: 14px;
-  line-height: 1;
-  cursor: pointer;
-  transition:
-    color 0.2s ease,
-    background-color 0.2s ease;
-}
-
-#app .screener-asof-clear:hover {
-  background-color: var(--tb-hover);
-  color: var(--tb-text);
-}
-
-#app .screener-dash {
-  color: var(--tb-text-sub);
-}
-
-/* 删除条件：28px 次级控件 */
-#app .screener-remove {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: none;
-  width: 28px;
-  height: 28px;
-  margin-left: auto;
-  padding: 0;
-  border: none;
-  border-radius: var(--radius-sm);
-  background-color: transparent;
-  color: var(--tb-text-sub);
-  font-size: 16px;
-  line-height: 1;
-  cursor: pointer;
-  transition:
-    color 0.2s ease,
-    background-color 0.2s ease;
-}
-
-#app .screener-remove:hover:not(:disabled) {
-  background-color: var(--tb-bg);
-  color: var(--up);
-}
-
-#app .screener-remove:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* 添加条件：幽灵按钮 */
-#app .screener-add {
-  align-self: flex-start;
-  border: 1px dashed var(--tb-border);
-}
-
-#app .screener-add:hover:not(:disabled) {
-  border-color: var(--tb-active);
-  color: var(--tb-active);
-}
-
-#app .screener-add:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* 结果卡 */
-#app .screener-results {
-  display: flex;
-  flex-direction: column;
-}
-
-#app .screener-results-head {
-  flex-direction: row;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-#app .screener-hit-count {
-  margin-left: 6px;
-  padding: 1px 8px;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--tb-active);
-  background-color: var(--tb-active-bg);
-  border-radius: var(--radius-sm);
-}
-
-/* 进度条：轨道 --tb-hover + 填充品牌蓝（宽度为数据驱动内联值） */
-#app .screener-progress {
-  flex: none;
-  height: 3px;
-  margin: 0 14px;
-  background-color: var(--tb-hover);
-  border-radius: 999px;
-  overflow: hidden;
-}
-
-#app .screener-progress-fill {
-  display: block;
-  height: 100%;
-  background-color: var(--tb-active);
-}
-
-/* 业务校验/请求失败横幅 */
-#app .screener-error {
-  padding: 8px 14px;
-  font-size: 12px;
-  color: var(--up);
-  border-bottom: 1px solid var(--tb-border);
-}
-
-/* ---- 量化选股移动端（≤768px） ---- */
+/* ---- 选股中心移动端（≤768px） ---- */
 @media (max-width: 768px) {
   #app .screener-main {
     gap: 8px;
     padding: 8px;
   }
-
-  #app .screener-editor {
-    padding: 10px 12px;
-  }
-
-  /* 运行按钮换行后占满整行（触控优先） */
-  #app .screener-run {
-    flex: 1 1 100%;
-    margin-left: 0;
-  }
-
-  /* 宽表转票据式列表（复用行情中心 .market-list 范式） */
-  #app .screener-results-wrap {
-    display: none;
-  }
-
-  #app .screener-results .market-list {
-    display: flex;
-    flex-direction: column;
-  }
 }
 
-/* ---- 选股中心（/screener v2.65：领涨看板 + 条件选股双模式） ---- */
+/* ---- 领涨看板 ---- */
 
-/* 看板 Tab 主幅宽（领涨看板宽幅 1560px；条件选股保持 980px 表单窄幅） */
-#app .screener-main-wide {
-  max-width: 1560px;
-}
-
-/* Tab 行：左分段切换 + 右数据截至徽标/刷新 */
+/* 头行：数据截至徽标/刷新 */
 #app .screen-tabs-row {
   flex: none;
   display: flex;
@@ -3553,11 +3242,6 @@ body {
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 8px;
-}
-
-#app .screen-tabs .tb-btn {
-  padding: 4px 14px;
-  font-weight: 600;
 }
 
 #app .screen-meta {
@@ -3750,8 +3434,28 @@ body {
   color: var(--tb-text-sub);
 }
 
+/* 搜索框：紧凑输入（num 等宽，§3.4 规格） */
 #app .screen-search {
   width: 180px;
+  box-sizing: border-box;
+  height: 28px;
+  padding: 0 8px;
+  color: var(--tb-text);
+  font-family: var(--font-num);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  background-color: var(--tb-bg);
+  border: 1px solid var(--tb-border);
+  border-radius: var(--radius-sm);
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+#app .screen-search:focus {
+  outline: none;
+  border-color: var(--tb-active);
+  box-shadow: 0 0 0 3px var(--tb-active-bg);
 }
 
 /* 密集宽表（18 列）：单元格收窄一档（领涨看板专属口径，见 UI_SPEC §3.16 v2.65） */

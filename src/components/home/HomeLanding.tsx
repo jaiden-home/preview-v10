@@ -68,7 +68,7 @@ export default function HomeLanding() {
               {t('指数概览、板块榜单与自选收藏|Index overview, board rankings and watchlist')}
             </span>
           </Link>
-          {/* 量化选股入口：条件组合筛选，品牌蓝语义（§3.16） */}
+          {/* 选股中心入口：领涨看板，品牌蓝语义（§3.16） */}
           <Link className="home-card screener" href="/screener">
             <span className="home-card-head">
               <span className="home-card-icon" aria-hidden="true">
@@ -98,10 +98,8 @@ export default function HomeLanding() {
                 </svg>
               </span>
             </span>
-            <span className="home-card-title">{t('量化选股|Stock Screener')}</span>
-            <span className="home-card-desc">
-              {t('自定义量化指标，全池条件筛选|Custom quant conditions, screen the whole pool')}
-            </span>
+            <span className="home-card-title">{t('选股中心|Screener Center')}</span>
+            <span className="home-card-desc">{t('概念热力与趋势领涨看板|Concept heatmap and trend leader board')}</span>
           </Link>
           <Link className="home-card" href="/dashboard">
             <span className="home-card-head">

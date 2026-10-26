@@ -265,16 +265,15 @@
 - **数据与刷新**：SSR 直供默认视图（行业涨幅榜）+ 客户端 3s 轮询（`POLL_INTERVAL_MS`，与终端行情同节奏）；榜单视图/自选变化即重拉；轮询失败保留旧数据、首载失败给行内重试（`.trade-loading` + `.tb-btn`）；榜单上游失败降级空榜（`.trade-empty` + 「稍后自动重试」副文案）。
 - **移动端（≤768px）**：宽表隐藏，改 `.market-list` 票据式条目——头部（排名 `11/num` 次要色 + 板块名 13/600 + 涨跌幅 `12/700/num` 语义色右锚点）+ 元信息行（领涨（星标 + 链接 + 幅）· 成交 · 换手，`11px` 次要色、左缩进 26px 对齐板块名）；自选条目 = 左身份栈（`.cell-name`/`.cell-code`）+ 右行情栈（现价/幅 `12/600/num`）+ 星标；平板（769–1024px）双列并单列、自选收至榜单之下。
 
-### 3.16 选股中心页（/screener，v2.58 起；v2.65 改造为双模式）
+### 3.16 选股中心页（/screener，v2.58 起；v2.65 领涨看板；v2.88 起看板单模式）
 
-本地快照库（market.db，自 market 项目复制，只读）驱动的选股中心：**领涨看板**（概念热力 + 趋势达标领涨股表，口径与 market 首页一致）+ **条件选股**（条件组合器 + 全池分片筛选，v2.65 起数据源切本地库）。视图类型（BoardData/LeaderRow 等）下沉 `lib/screener/types.ts` 双端共用；服务端计算在 `lib/server/market-db/`。
+本地快照库（market.db，自 market 项目复制，只读）驱动的选股中心：**领涨看板**（概念热力 + 趋势达标领涨股表，口径与 market 首页一致）。视图类型（BoardData/LeaderRow 等）下沉 `lib/screener/types.ts` 双端共用；服务端计算在 `lib/server/market-db/`。
 
-- **页面骨架（v2.65）**：`.screener-page` + `.screener-scroll` 唯一滚动容器 + 工具栏（品牌「选股中心」+ 主题开关）；`.screener-main` 下增 **Tab 行 `.screen-tabs-row`**——左 `.period-group.screen-tabs` 分段（领涨看板 / 条件选股，`role="tablist"`）+ 右 `.screen-meta`（`.screen-date-badge` 数据截至徽标 + 刷新按钮）。看板 Tab 主幅宽 `.screener-main-wide`（1560px），条件 Tab 保持 980px 表单窄幅。SSR 直供初载看板（`force-dynamic`，`getBoard()` 5min 进程缓存），缺库/未就绪走 `.trade-empty` 引导态（复制 market.db → 刷新）；刷新按钮走 `GET /api/screener/board?refresh=1` 绕缓存重算（冷算约数秒）。
+- **页面骨架（v2.88 单模式）**：`.screener-page` + `.screener-scroll` 唯一滚动容器 + 工具栏（品牌「选股中心」+ 主题开关）；`.screener-main` 恒宽幅 1560px，头行 `.screen-tabs-row` 右侧 `.screen-meta`（`.screen-date-badge` 数据截至徽标 + 刷新按钮）。SSR 直供初载看板（`force-dynamic`，`getBoard()` 5min 进程缓存），缺库/未就绪走 `.trade-empty` 引导态（复制 market.db → 刷新）；刷新按钮走 `GET /api/screener/board?refresh=1` 绕缓存重算（冷算约数秒）。
 - **数据总览 `.screen-overview`**：`.trade-card` 内 `auto-fit minmax(128px,1fr)` 统计带（历史领涨股/趋势达标/领涨日/启用股票/覆盖概念/停用数）；格 `.screen-stat` = `--tb-hover` 底 + `--radius-sm`，标签 Micro/10 次要色 + 数值 CTA 14/600/num。
 - **概念热力 `.screen-heat-*`（v2.65）**：treemap-heatmap 库（`public/treemap-heatmap.min.js` UMD，`next/script` afterInteractive；`proxy.ts` 根路径白名单放行）；卡头 + `.screen-heat-head`（`.period-group` 周期分段 日/周/月/年 + **数值颜色图例 `.screen-heat-legend`**（渐变条 + 满幅 ±10/20/30/60% 标注，绿跌红涨不依赖颜色单独表达）+ 状态文案 + 放大态「返回总览」）；画布 `.screen-heat-cloud` 480px（移动端 320px）`--tb-hover` 底 + `--radius-md`，`role="application"` + aria-label；选中色块 `.screen-heat-cell-sel` 品牌蓝内描边（MutationObserver 重打）。口径同 market：面积 = 涨股比广度、颜色 = 等权平均涨幅（分叉标度，0% 中性灰）；点击大类放大（tooltip 含 Wilson 95% CI、Esc 返回），放大态点选子概念多选（跨大类、切周期保留）→ `.screen-chips` chips（命中任一 OR）联动筛下方领涨股表。
-- **领涨股表 `.screen-leaders`（v2.65）**：自持卡片（`--tb-bg` + `--radius-lg` + `--shadow-card`）；卡头 = 标题 + 命中数胶囊 `.screen-hit-count`；筛选条 `.screen-filters` = 搜索框 + 大板块下拉 + 11 项字段下拉（档位与 market 首页一致，悬浮 title 含口径）+ 清除按钮；宽表 `.trade-table` 18 列，表头三态排序 `.screen-sortable`（降→升→默认），密集单元格 6px 10px（本表专属口径）；行悬浮 title = 全量领涨概念/事件数/最近领涨日；**本月新进红点 `.screen-new-dot`** 与**新高红价**（收盘即半年最高或半年高点越过一年高点）语义色高亮；名称列深链 `/dashboard?symbol={sh|sz}{code}`；口径说明 `.screen-caliber` 4 组横排。
-- **条件选股（v2.65 数据源切换）**：UI 不变（策略编辑卡 + 筛选结果卡，见 v2.58~v2.62 各条）；池 = market.db `stocks.enabled=1` 全池（名称以库为准），股票池胶囊文案改「池：全市场启用股（本地快照库）」；日 K 直读 `kline_daily`（700 自然日窗、本地零点时间戳与腾讯日线同口径、**不复权**快照）；纯技术策略零上游依赖（全池 ~2s 完成），含基本面条件才触发腾讯批量报价快照回填（24h 缓存，首跑约一分钟）；分片 400/片 + 单请求 1.2s 时间预算连算，`ScreenerRunView` 契约与客户端轮询不变；缺库时 `POST /api/screener` 503 双语引导。
-- **移动端（≤768px）**：看板 Tab——热力画布降 320px、状态文案整行、图例条收窄；领涨宽表隐藏转 `.market-list` 票据式条目（身份栈 + 现价/幅 + 领涨天数/新进标注 + 星标）；条件 Tab 沿用 v2.58 移动端规则。
+- **领涨股表 `.screen-leaders`（v2.65）**：自持卡片（`--tb-bg` + `--radius-lg` + `--shadow-card`）；卡头 = 标题 + 命中数胶囊 `.screen-hit-count`；筛选条 `.screen-filters` = 搜索框（`.screen-search` 紧凑输入，num 等宽，v2.88 起自带完整输入规格）+ 大板块下拉 + 11 项字段下拉（档位与 market 首页一致，悬浮 title 含口径）+ 清除按钮；宽表 `.trade-table` 18 列，表头三态排序 `.screen-sortable`（降→升→默认），密集单元格 6px 10px（本表专属口径）；行悬浮 title = 全量领涨概念/事件数/最近领涨日；**本月新进红点 `.screen-new-dot`** 与**新高红价**（收盘即半年最高或半年高点越过一年高点）语义色高亮；名称列深链 `/dashboard?symbol={sh|sz}{code}`；口径说明 `.screen-caliber` 4 组横排。
+- **移动端（≤768px）**：热力画布降 320px、状态文案整行、图例条收窄；领涨宽表隐藏转 `.market-list` 票据式条目（身份栈 + 现价/幅 + 领涨天数/新进标注 + 星标）。
 
 ## 4. 响应式断点
 
@@ -386,6 +385,7 @@
 
 | v2.86 | **三日比较高点放宽为「不低于」（§3.13）**：强涨链判定由「每日最高价 > 前一日最高价」改为「每日最高价 **≥** 前一日最高价（相等亦算，平高不断链）」；收盘比较仍为严格 >；新增「平高亦算出 B」契约（共 39 条 signal 用例） |
 | v2.87 | **三日比较高点加 0.1% 容差（§3.13）**：判定改为「每日最高价 **≥ 前一日最高价 × 0.999**」（`BUY_HIGH_TOL`，平高与 0.1% 内针尖误差均不断链）；收盘比较仍严格 >；新增「容差内出 B」契约（共 40 条 signal 用例） |
+| v2.88 | **选股中心删除条件选股（§3.16）**：/screener 收敛为领涨看板单模式——删除「领涨看板 / 条件选股」Tab 分段（`.screen-tabs` 样式与 `Screener.tsx` 条件组合器组件、策略编辑卡/筛选结果卡全部样式 `.screener-editor/-actions/-universe-hint/-run/-conditions/-cond/-key/-param*/-input/-bool-tag/-range/-asof*/-date/-dash/-remove/-add/-results*/-hit-count/-progress*/-error` 一并移除）；`.screener-main` 恒宽幅 1560px（`.screener-main-wide` 合并删除）；领涨表搜索框改 `.screen-search` 自带完整输入规格（原复用 `.screener-input`）；服务端删除 `POST /api/screener`、`lib/server/screener/`（universe/service）、`lib/screener/indicators.ts`/`validate.ts`/`screener.test.ts` 与 `schemas.ts` 量化条件 schema，`lib/screener/types.ts` 收敛为看板视图类型；首页入口卡改「选股中心·概念热力与趋势领涨看板」；`GET /api/screener/board` 与看板全功能不变 |
 
 ## 7. AI 交付前检查清单
 
