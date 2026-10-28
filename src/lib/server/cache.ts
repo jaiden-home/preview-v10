@@ -71,6 +71,11 @@ export class TTLCache<T> {
     return task
   }
 
+  /** 删除指定 key（写入方使缓存失效用；在途回源不中断，落地后不再缓存该次结果以外的旧值） */
+  delete(key: string): void {
+    this.entries.delete(key)
+  }
+
   /** 清理已过期条目，避免长期运行下的内存增长 */
   private sweep(): void {
     if (this.entries.size < this.options.maxEntries * 2) {

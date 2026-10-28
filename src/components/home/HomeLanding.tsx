@@ -242,6 +242,40 @@ export default function HomeLanding() {
               {t('模拟标的、区间、倍速、开始暂停与重置|Symbol, date range, speed, run and reset control')}
             </span>
           </Link>
+          {/* 概念管理（admin）入口：品牌蓝语义（§3.17） */}
+          <Link className="home-card concepts" href="/admin/concepts">
+            <span className="home-card-head">
+              <span className="home-card-icon" aria-hidden="true">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0l-7.6-7.6A2 2 0 0 1 2.4 11.6L3 4.6a2 2 0 0 1 1.6-1.6l7-.6a2 2 0 0 1 1.5.6l7.5 7.5a2 2 0 0 1 0 2.9z" />
+                  <circle cx="7.5" cy="7.5" r="1.6" />
+                </svg>
+              </span>
+              <span className="home-card-arrow" aria-hidden="true">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M9 5l7 7-7 7" />
+                </svg>
+              </span>
+            </span>
+            <span className="home-card-title">{t('概念管理|Concept Admin')}</span>
+            <span className="home-card-desc">
+              {t('概念与大类维护、成分股划转|Manage concepts, categories and members')}
+            </span>
+          </Link>
         </nav>
       </div>
     </div>

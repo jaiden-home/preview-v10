@@ -3549,3 +3549,452 @@ body {
     width: auto;
   }
 }
+
+/* ==================== 概念管理页（/admin/concepts，§3.17） ==================== */
+
+/* 页面骨架：卡片化画布 + 唯一滚动容器（同行情中心范式） */
+#app .concept-page {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--page-tint);
+}
+
+#app .concept-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 加载/失败态：文案 + 行内重试 */
+#app .concept-scroll > .trade-loading {
+  flex-direction: row;
+  gap: 8px;
+}
+
+#app .concept-main {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+}
+
+/* 统计带（单元格复用 .screen-stat 范式；数值列本页补等宽字族，.num 仅表格内生效） */
+#app .cpt-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+  gap: 10px;
+  padding: 12px 14px;
+}
+
+#app .cpt-stats .screen-stat-v {
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 双列主体：概念体系 + 成分面板 */
+#app .cpt-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 12px;
+  align-items: start;
+}
+
+/* 概念列表卡：工具头（标题 + 计数 + 过滤 + 新增） */
+#app .cpt-list-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 14px 8px;
+  border-bottom: 1px solid var(--tb-border);
+}
+
+#app .cpt-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--tb-text);
+}
+
+#app .cpt-sub {
+  font-size: 10px;
+  color: var(--tb-text-sub);
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+}
+
+#app .cpt-filter {
+  flex: 1 1 140px;
+  min-width: 0;
+  height: 32px;
+  box-sizing: border-box;
+  border: 1px solid var(--tb-border);
+  background-color: var(--tb-bg);
+  color: var(--tb-text);
+  border-radius: var(--radius-sm);
+  padding: 0 10px;
+  font-size: 12px;
+  outline: none;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+#app .cpt-filter:focus {
+  border-color: var(--tb-active);
+  box-shadow: 0 0 0 3px var(--tb-active-bg);
+}
+
+/* 新增概念：品牌蓝实底 CTA（§2.3 品牌蓝投影） */
+#app .cpt-add-btn {
+  height: 32px;
+  padding: 0 12px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background-color: var(--tb-active);
+  color: var(--on-solid);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(22, 119, 255, 0.28);
+  transition: filter 0.2s ease;
+}
+
+#app .cpt-add-btn:hover {
+  filter: brightness(1.06);
+}
+
+/* 大类分组：描边容器 + 淡底组头 */
+#app .cpt-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+}
+
+#app .cpt-group {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--tb-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+#app .cpt-group-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px 5px 10px;
+  background-color: var(--tb-hover);
+}
+
+#app .cpt-group-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--tb-text);
+}
+
+#app .cpt-group-meta {
+  flex: 1;
+  min-width: 0;
+  font-size: 10px;
+  color: var(--tb-text-sub);
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 概念行：名称（点击看成分）+ 成分数 + 行内操作 */
+#app .cpt-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px 3px 6px;
+  border-top: 1px solid var(--tb-border);
+  transition: background-color 0.2s ease;
+}
+
+#app .cpt-row:hover {
+  background-color: var(--tb-hover);
+}
+
+#app .cpt-row.active {
+  background-color: var(--tb-active-bg);
+}
+
+#app .cpt-row-name {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: var(--tb-text);
+  font-size: 12px;
+  font-family: var(--font-sans);
+  text-align: left;
+  padding: 5px 6px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: color 0.2s ease;
+}
+
+#app .cpt-row-name:hover {
+  color: var(--tb-active);
+}
+
+#app .cpt-row.active .cpt-row-name {
+  color: var(--tb-active);
+  font-weight: 600;
+}
+
+#app .cpt-row-members {
+  flex: none;
+  font-size: 11px;
+  font-family: var(--font-num);
+  color: var(--tb-text-sub);
+  min-width: 30px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+#app .cpt-row-actions {
+  display: flex;
+  gap: 2px;
+}
+
+/* 行内图标按钮（26px 次级控件，aria-label 由组件提供） */
+#app .cpt-icon-btn {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+}
+
+#app .cpt-icon-btn svg {
+  width: 13px;
+  height: 13px;
+}
+
+#app .cpt-empty {
+  padding: 24px 14px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--tb-text-sub);
+}
+
+/* 成分面板：概念名 + 大类 + 数量 + 关闭 */
+#app .cpt-members-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 14px 8px;
+  border-bottom: 1px solid var(--tb-border);
+}
+
+#app .cpt-members-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--tb-text);
+}
+
+#app .cpt-members-sub {
+  font-size: 10px;
+  color: var(--tb-text-sub);
+}
+
+#app .cpt-members-count {
+  margin-left: auto;
+  font-size: 11px;
+  font-family: var(--font-num);
+  color: var(--tb-text-sub);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 股票搜索划入 */
+#app .cpt-pick {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 14px 0;
+}
+
+#app .cpt-pick-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border: 1px solid var(--tb-border);
+  border-radius: var(--radius-md);
+  background-color: var(--dropdown-bg);
+  box-shadow: var(--shadow-pop);
+  padding: 6px;
+  max-height: 224px;
+  overflow-y: auto;
+}
+
+#app .cpt-pick-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: var(--radius-sm);
+  transition: background-color 0.2s ease;
+}
+
+#app .cpt-pick-row:hover {
+  background-color: var(--tb-hover);
+}
+
+#app .cpt-pick-code {
+  flex: none;
+  font-size: 11px;
+  color: var(--tb-text-sub);
+  font-variant-numeric: tabular-nums;
+}
+
+#app .cpt-pick-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#app .cpt-pick-name.halt {
+  color: var(--tb-text-sub);
+}
+
+#app .cpt-pick-concept {
+  flex: none;
+  max-width: 96px;
+  font-size: 10px;
+  color: var(--tb-text-sub);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#app .cpt-pick-add {
+  flex: none;
+  font-size: 11px;
+  padding: 2px 8px;
+}
+
+#app .cpt-pick-empty {
+  padding: 10px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--tb-text-sub);
+}
+
+/* 成分表：移出按钮 = 红描边破坏性次级按钮（同 .sim-reset-btn 语言） */
+#app .cpt-cell-action {
+  text-align: right;
+}
+
+#app .cpt-remove-btn {
+  font-size: 11px;
+  padding: 3px 10px;
+  color: var(--up);
+  border: 1px solid var(--up);
+}
+
+#app .cpt-remove-btn:hover {
+  background-color: var(--up-bg);
+}
+
+/* 停用股弱化 + 中性「停」戳记 */
+#app .cpt-halt {
+  color: var(--tb-text-sub);
+}
+
+#app .cpt-halt-tag {
+  margin-left: 6px;
+  font-size: 10px;
+  color: var(--tb-text-sub);
+  border: 1px solid var(--tb-border);
+  border-radius: var(--radius-sm);
+  padding: 0 4px;
+}
+
+/* 编辑弹窗字段（复用 .modal 壳） */
+#app .cpt-dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+#app .cpt-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+#app .cpt-field-label {
+  font-size: 11px;
+  color: var(--tb-text-sub);
+}
+
+#app .cpt-input {
+  width: 100%;
+  box-sizing: border-box;
+  height: 36px;
+  border: 1px solid var(--tb-border);
+  background-color: var(--tb-bg);
+  color: var(--tb-text);
+  border-radius: var(--radius-sm);
+  padding: 0 10px;
+  font-size: 13px;
+  outline: none;
+  cursor: pointer;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+#app .cpt-input:focus {
+  border-color: var(--tb-active);
+  box-shadow: 0 0 0 3px var(--tb-active-bg);
+}
+
+/* ---- 概念管理移动端（≤768px）：单列、触控放大、行内操作不换行 ---- */
+@media (max-width: 768px) {
+  #app .concept-main {
+    padding: 8px;
+    gap: 8px;
+  }
+
+  #app .cpt-body {
+    grid-template-columns: 1fr;
+  }
+
+  #app .cpt-filter {
+    flex-basis: 100%;
+  }
+
+  #app .cpt-groups {
+    padding: 8px 10px;
+    gap: 8px;
+  }
+
+  #app .cpt-icon-btn {
+    width: 30px;
+    height: 30px;
+  }
+
+  #app .cpt-pick-concept {
+    display: none;
+  }
+}

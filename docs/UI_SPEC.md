@@ -219,11 +219,11 @@
 
 ### 3.12 首页入口页（.home-page，v2.25）
 
-- 结构：`.home-page`（复用卡片化页面范式：`--page-tint` 画布）→ `.home-main`（唯一滚动容器，顶部 `.toolbar` 为首子元素随内容滚动（`align-self: stretch` 横向铺满，v2.56）；hero / 栅格经 auto 边距（hero `margin-top: auto` + 栅格 `margin-bottom: auto`）在工具栏之下的剩余空间垂直居中 + 水平居中，内容超高时 auto 归零自顶滚动，纵向 `gap: 18px`、`padding: 18px 12px`）→ `.home-hero`（Display-S `22/700` 标题 + Base 副文案，居中）+ `.home-grid`（双列等宽入口卡，`gap: 12px`、`max-width: 640px`；≤768px 转单列 `max-width: 360px` 窄幅、侧距 `8px`）。v2.58 起共六张卡满格 2×3：行情中心 / 量化选股 / 看板 / 交易 / 极速模拟 / 模拟设置。
+- 结构：`.home-page`（复用卡片化页面范式：`--page-tint` 画布）→ `.home-main`（唯一滚动容器，顶部 `.toolbar` 为首子元素随内容滚动（`align-self: stretch` 横向铺满，v2.56）；hero / 栅格经 auto 边距（hero `margin-top: auto` + 栅格 `margin-bottom: auto`）在工具栏之下的剩余空间垂直居中 + 水平居中，内容超高时 auto 归零自顶滚动，纵向 `gap: 18px`、`padding: 18px 12px`）→ `.home-hero`（Display-S `22/700` 标题 + Base 副文案，居中）+ `.home-grid`（双列等宽入口卡，`gap: 12px`、`max-width: 640px`；≤768px 转单列 `max-width: 360px` 窄幅、侧距 `8px`）。v2.89 起共七张卡：行情中心 / 量化选股 / 看板 / 交易 / 极速模拟 / 模拟设置 / 概念管理（第七张占第三行左位）。
 - 工具栏：品牌名 `.home-brand`（Title 级静态文本，非按钮）左锚点 + 主题开关推右；首页无图表，主题切换为独立实现（同款 `#app.dark` + `.theme-switching` 抑制过渡，不经 useChartTerminal）。
 - 入口卡 `.home-card`（整卡链接）：`.trade-card` 同款壳（`--tb-bg` + `1px --tb-border` + `--radius-lg` + `--shadow-card`，`padding: 16px 18px`、纵向 `gap: 8px`）；悬停描边换强调色 + 阴影升 `--shadow-pop`（仅 `border-color / box-shadow / color` 过渡）。
 - 卡内结构：头行 `.home-card-head`（左 `.home-card-icon` 40px 淡底圆角块 `--radius-md` + 内联 SVG 22px `stroke: currentColor`；右 `.home-card-arrow` 14px 次要色箭头，悬停随卡换强调色）→ 标题 Title `13/600` → 副文案 Secondary `11px` 次要色。
-- 语义色：行情看板卡 = 品牌蓝（icon `--tb-active` + `--tb-active-bg`）；模拟交易卡 = 买入红（icon `--up` + `--up-bg`，呼应 §0 买入动作色，绿不参与）；极速模拟卡 `.home-card.sim` 与模拟设置卡 `.home-card.settings` = 品牌蓝（复用默认 `.home-card` 语义色，时钟/齿轮图标，设置卡 → `/admin/simtrade`，§3.14）；行情中心卡 `.home-card.market` = 品牌蓝（榜单星标图标，→ `/market`，§3.15）；量化选股卡 `.home-card.screener` = 品牌蓝（筛选曲线图标，→ `/screener`，§3.16）；各卡悬停描边/箭头随各自语义色。
+- 语义色：行情看板卡 = 品牌蓝（icon `--tb-active` + `--tb-active-bg`）；模拟交易卡 = 买入红（icon `--up` + `--up-bg`，呼应 §0 买入动作色，绿不参与）；极速模拟卡 `.home-card.sim` 与模拟设置卡 `.home-card.settings` = 品牌蓝（复用默认 `.home-card` 语义色，时钟/齿轮图标，设置卡 → `/admin/simtrade`，§3.14）；行情中心卡 `.home-card.market` = 品牌蓝（榜单星标图标，→ `/market`，§3.15）；量化选股卡 `.home-card.screener` = 品牌蓝（筛选曲线图标，→ `/screener`，§3.16）；概念管理卡 `.home-card.concepts` = 品牌蓝（标签图标，→ `/admin/concepts`，§3.17）；各卡悬停描边/箭头随各自语义色。
 
 ### 3.13 极速模拟页（/simtrade，v2.27~v2.48）
 
@@ -274,6 +274,18 @@
 - **概念热力 `.screen-heat-*`（v2.65）**：treemap-heatmap 库（`public/treemap-heatmap.min.js` UMD，`next/script` afterInteractive；`proxy.ts` 根路径白名单放行）；卡头 + `.screen-heat-head`（`.period-group` 周期分段 日/周/月/年 + **数值颜色图例 `.screen-heat-legend`**（渐变条 + 满幅 ±10/20/30/60% 标注，绿跌红涨不依赖颜色单独表达）+ 状态文案 + 放大态「返回总览」）；画布 `.screen-heat-cloud` 480px（移动端 320px）`--tb-hover` 底 + `--radius-md`，`role="application"` + aria-label；选中色块 `.screen-heat-cell-sel` 品牌蓝内描边（MutationObserver 重打）。口径同 market：面积 = 涨股比广度、颜色 = 等权平均涨幅（分叉标度，0% 中性灰）；点击大类放大（tooltip 含 Wilson 95% CI、Esc 返回），放大态点选子概念多选（跨大类、切周期保留）→ `.screen-chips` chips（命中任一 OR）联动筛下方领涨股表。
 - **领涨股表 `.screen-leaders`（v2.65）**：自持卡片（`--tb-bg` + `--radius-lg` + `--shadow-card`）；卡头 = 标题 + 命中数胶囊 `.screen-hit-count`；筛选条 `.screen-filters` = 搜索框（`.screen-search` 紧凑输入，num 等宽，v2.88 起自带完整输入规格）+ 大板块下拉 + 11 项字段下拉（档位与 market 首页一致，悬浮 title 含口径）+ 清除按钮；宽表 `.trade-table` 18 列，表头三态排序 `.screen-sortable`（降→升→默认），密集单元格 6px 10px（本表专属口径）；行悬浮 title = 全量领涨概念/事件数/最近领涨日；**本月新进红点 `.screen-new-dot`** 与**新高红价**（收盘即半年最高或半年高点越过一年高点）语义色高亮；名称列深链 `/dashboard?symbol={sh|sz}{code}`；口径说明 `.screen-caliber` 4 组横排。
 - **移动端（≤768px）**：热力画布降 320px、状态文案整行、图例条收窄；领涨宽表隐藏转 `.market-list` 票据式条目（身份栈 + 现价/幅 + 领涨天数/新进标注 + 星标）。
+
+### 3.17 概念管理页（/admin/concepts，v2.89）
+
+market.db 概念体系（concepts 大类×子概念×sort + stock_concepts 一股一概念）的管理中枢；**入口 = 首页「概念管理」卡（§3.12，`.home-card.concepts`）**。数据经 `/api/admin/concepts`（读全景 / 写六动作，服务端 `lib/server/market-db/concepts.ts` 短生命周期可写连接事务完成，写后使领涨看板 5min 缓存失效）。
+
+- **页面骨架 `.concept-page`**：卡片化页面范式（`--page-tint` 画布）+ `.concept-scroll` 唯一滚动容器（顶部 `.toolbar` 为首子元素：左「首页」文字链 + 品牌文本 + 右主题开关，主题独立实现同首页）；`.concept-main`（`flex: none`、纵向 `gap: 12px`、`padding: 12px`，移动端 8px）。
+- **卡 1 统计带 `.cpt-stats`**：`auto-fit minmax(128px,1fr)` 四格（概念总数 / 大类 / 已归类成分股 / 启用股票），单元格复用 `.screen-stat` 范式（`--tb-hover` 底 + `--radius-sm`，标签 Micro + 数值 CTA/num）。
+- **双列主体 `.cpt-body`**：`minmax(0,1fr) 360px`（移动端单列）——左概念体系卡、右成分面板卡。
+- **卡 2 概念体系 `.cpt-list`**：工具头 `.cpt-list-head`（Title + 计数 Micro/num + 过滤输入 `.cpt-filter`（32px，聚焦 §2.8）+ 「+ 新增概念」品牌蓝实底 CTA `.cpt-add-btn`（§2.3 品牌蓝投影）+ 底部结构实线）；正文 `.cpt-groups` 大类分组（描边容器 `--radius-md` + 淡底组头 `.cpt-group-head` = 大类名 12/600 + 概念数/成分数 Micro/num + 改名图标按钮）；概念行 `.cpt-row`（悬停 `--tb-hover`、选中 `--tb-active-bg`）= 名称按钮（点击展开右侧成分面板，选中态 `--tb-active` 600）+ 成分数 Secondary/num 右对齐 + 行内图标操作组 `.cpt-icon-btn`（26px：上移/下移/编辑/删除，内联 SVG + aria-label，移动端 30px）；组内上下移 = 同大类相邻交换 sort；空过滤结果 `.cpt-empty`。
+- **卡 3 成分面板 `.cpt-members`**（选中概念时出现）：头 = 概念名 Title + 所属大类 Micro + 成分数（右锚）+ 关闭按钮；搜索划入 `.cpt-pick`（`.cpt-filter` 300ms 防抖 → `?q=` 结果列表 `.cpt-pick-list`（`--dropdown-bg` + `--radius-md` + `--shadow-pop`，行 = 代码 num / 名称 / 现属概念 Micro / 「划入」按钮；停用股名称弱化、现属概念移动端隐藏；已在当前概念禁用并示「已在此概念」；**一股一概念，划入即从原概念移出**，成功 Toast 带先前概念）；成分表复用 `.trade-table`（代码/名称/交易所/行业/移出），停用股名称 `.cpt-halt` 弱化 + 中性「停」描边戳记 `.cpt-halt-tag`；空态复用 `.trade-empty` 范式；「移出」= 红描边红字破坏性次级按钮 `.cpt-remove-btn`（悬停 `--up-bg`，同 `.sim-reset-btn` 语言）。
+- **弹窗（复用 `.modal-mask/.modal/.modal-header/.modal-body/.modal-footer/.tb-btn.modal-btn(.primary)` 范式）**：新增/编辑概念 = 概念名称输入 `.cpt-input`（36px，§3.4 聚焦）+ 所属大类下拉（现有大类 + 「+ 新建大类…」切换文本输入）；大类改名 = 单文本输入（并入现有大类 = 合并，目标组成员在前、原组按原相对序追加尾部，`window.confirm` 确认）；Enter 提交、无变化/空值禁用保存。
+- **数据与文案**：删除概念 `window.confirm` 二次确认（提示将级联移除成分归类与领涨历史事件）；全部写操作结果走全局 Toast（`.trade-toast`）；加载/失败态复用 `.trade-loading`（失败行内重试）；文案 `t()` 双语，数值/代码 `.num` 等宽。
 
 ## 4. 响应式断点
 
@@ -386,6 +398,7 @@
 | v2.86 | **三日比较高点放宽为「不低于」（§3.13）**：强涨链判定由「每日最高价 > 前一日最高价」改为「每日最高价 **≥** 前一日最高价（相等亦算，平高不断链）」；收盘比较仍为严格 >；新增「平高亦算出 B」契约（共 39 条 signal 用例） |
 | v2.87 | **三日比较高点加 0.1% 容差（§3.13）**：判定改为「每日最高价 **≥ 前一日最高价 × 0.999**」（`BUY_HIGH_TOL`，平高与 0.1% 内针尖误差均不断链）；收盘比较仍严格 >；新增「容差内出 B」契约（共 40 条 signal 用例） |
 | v2.88 | **选股中心删除条件选股（§3.16）**：/screener 收敛为领涨看板单模式——删除「领涨看板 / 条件选股」Tab 分段（`.screen-tabs` 样式与 `Screener.tsx` 条件组合器组件、策略编辑卡/筛选结果卡全部样式 `.screener-editor/-actions/-universe-hint/-run/-conditions/-cond/-key/-param*/-input/-bool-tag/-range/-asof*/-date/-dash/-remove/-add/-results*/-hit-count/-progress*/-error` 一并移除）；`.screener-main` 恒宽幅 1560px（`.screener-main-wide` 合并删除）；领涨表搜索框改 `.screen-search` 自带完整输入规格（原复用 `.screener-input`）；服务端删除 `POST /api/screener`、`lib/server/screener/`（universe/service）、`lib/screener/indicators.ts`/`validate.ts`/`screener.test.ts` 与 `schemas.ts` 量化条件 schema，`lib/screener/types.ts` 收敛为看板视图类型；首页入口卡改「选股中心·概念热力与趋势领涨看板」；`GET /api/screener/board` 与看板全功能不变 |
+| v2.89 | **新增概念管理页（§3.17，/admin/concepts）**：market.db 概念体系的管理中枢——统计带（概念/大类/已归类/启用股）+ 大类分组列表（概念行 = 名称点击看成分 + 成分数 + 上移/下移/编辑/删除）+ 成分面板（股票搜索划入、一股一概念、移出、停用股标注）；新增/编辑概念与大类改名走 `.modal` 弹窗（大类下拉支持「新建大类…」）；删除概念 `window.confirm` 二次确认（级联清除成分与领涨历史事件）；写操作经 `/api/admin/concepts`（GET 全景/?concept= 成分/?q= 搜股；POST 六动作 zod 校验）→ `lib/server/market-db/concepts.ts` 短生命周期**可写连接**事务内完成（defer_foreign_keys，写后 `invalidateBoardCache()` 使看板 5min 缓存失效，TTLCache 新增 `delete`）；sort 口径 = 大类序×1000 + 子概念序，每次写后全表 normalize；概念改名同步改写 stock_concepts / leader_events 概念名（保留领涨历史）；视图类型下沉 `lib/concepts.ts` 双端共用；首页第七张入口卡 `.home-card.concepts`（品牌蓝，→ /admin/concepts） |
 
 ## 7. AI 交付前检查清单
 

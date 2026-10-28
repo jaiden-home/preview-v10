@@ -69,8 +69,32 @@ export const simSessionSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('restart') })
 ])
 
+/** 概念管理（/api/admin/concepts）：概念名/大类名 1~30 字符；动作语义见 lib/concepts.ts */
+const conceptNameField = z.string().trim().min(1, 'concept name is required').max(30, 'concept name is too long')
+const categoryNameField = z.string().trim().min(1, 'category name is required').max(30, 'category name is too long')
+const stockCodeField = z.string().regex(/^\d{6}$/, 'code must be a 6-digit stock code')
+
+export const conceptAdminSchema = z.discriminatedUnion('action', [
+  z.object({ action: z.literal('create'), name: conceptNameField, category: categoryNameField }),
+  z
+    .object({
+      action: z.literal('update'),
+      name: conceptNameField,
+      nextName: conceptNameField.optional(),
+      nextCategory: categoryNameField.optional()
+    })
+    .refine((body) => body.nextName != null || body.nextCategory != null, {
+      message: 'nextName or nextCategory is required'
+    }),
+  z.object({ action: z.literal('delete'), name: conceptNameField }),
+  z.object({ action: z.literal('rename-category'), category: categoryNameField, next: categoryNameField }),
+  z.object({ action: z.literal('set-member'), code: stockCodeField, concept: conceptNameField.nullable() }),
+  z.object({ action: z.literal('reorder'), name: conceptNameField, dir: z.enum(['up', 'down']) })
+])
+
 export type KlineQuery = z.infer<typeof klineQuerySchema>
 export type SearchQuery = z.infer<typeof searchQuerySchema>
 export type ReplayQuery = z.infer<typeof replayQuerySchema>
 export type SimOrderBody = z.infer<typeof simOrderSchema>
 export type SimSessionBody = z.infer<typeof simSessionSchema>
+export type ConceptAdminBody = z.infer<typeof conceptAdminSchema>

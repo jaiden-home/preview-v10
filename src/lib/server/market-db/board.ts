@@ -623,3 +623,8 @@ export const getBoard = (refresh = false): Promise<BoardData | null> =>
     () => Promise.resolve(loadBoardSafe()),
     BOARD_TTL_MS
   )
+
+/** 使看板缓存失效（概念/成分写入后由管理域调用，下一次读取重算） */
+export const invalidateBoardCache = (): void => {
+  boardCache.delete('market-db:board')
+}
