@@ -6,7 +6,7 @@ import { getEnv } from '../env'
 // ==================== 行情快照库连接（进程级单例，只读） ====================
 // market.db 含 stocks / concepts / stock_concepts / kline_daily / leader_events 五表
 //（初始快照自 market 项目复制）。应用侧一律只读；数据更新走脚本侧 scripts/ 任务系统
-//（npm run maintain，腾讯源与 BFF 同上游；自动补漏跑交易日，盘中实时/收盘终值）。
+//（npm run maintain，快照/日历=腾讯源与 BFF 同上游、补数=新浪源；自动补漏跑交易日，盘中实时/收盘终值）。
 // globalThis 缓存防 dev 热重载句柄泄漏；库文件缺失时不创建（复制后可用）。
 
 const globalForDb = globalThis as unknown as { __marketDb?: DatabaseSync }

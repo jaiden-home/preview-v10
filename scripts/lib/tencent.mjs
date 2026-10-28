@@ -1,5 +1,5 @@
 // 腾讯行情接口脚本侧封装：与 BFF provider/tencent 同上游同解析口径（qt.gtimg.cn GBK / ifzq.gtimg.cn JSON），
-// 脚本侧独立实现（不走 BFF 缓存），供 sync 任务使用。
+// 脚本侧独立实现（不走 BFF 缓存），供 sync 任务使用（fqkline 仅用于交易日历；单股日K补数已切新浪 sina.mjs）。
 import { fetchJsonRetry, fetchTextRetry, sleep } from './http.mjs'
 
 // fqkline 双域名互备：2026-10-26 实测 web.ifzq.gtimg.cn 被风控（501/验证页），无前缀域名正常——
@@ -62,17 +62,6 @@ export async function fetchTradingDates(count) {
   return dayRowsOf(json, 'sh000001')
     .map((r) => String(r[0]))
     .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d))
-}
-
-/**
- * 单股不复权日K（fqkline 空 fq → day 键，与库内既有新浪不复权口径一致）。
- * 返回自 from 起全部行（含当日实时 bar），行 [date, open, close, high, low, volume(手)]。
- * 注：腾讯带 end 日期会漏当日 bar，end 一律留空，调用方按日期过滤。
- */
-export async function fetchDayBars(code, exchange, from) {
-  const symbol = `${exchange.toLowerCase()}${code}`
-  const json = await fetchFqkline(`/appstock/app/fqkline/get?param=${symbol},day,${from},,${DAY_COUNT_MAX},`)
-  return dayRowsOf(json, symbol)
 }
 
 /**

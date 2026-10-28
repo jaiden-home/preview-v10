@@ -39,7 +39,7 @@ A 股行情预览 + 模拟交易的 Web 终端：Next.js 16（App Router，stand
 
 ## 代码结构（scripts/，仓库根）
 
-- `scripts/`：market.db 数据维护任务系统（**腾讯源**，与 BFF 同上游；K 线/事件写入只在此处；概念体系（concepts / stock_concepts / 领涨事件概念维度）另可经 /admin/concepts 管理页写入）——`task.mjs` 任务注册表与统一入口、`lib/`（db 连接 WAL + 状态文件 + http 重试 + 腾讯封装）、`sync/kline-daily.mjs` 日 K 同步（自动补漏跑交易日 + 当日实时/终值快照，任意时刻可跑，upsert 幂等，`--status` 查完整性）、`sync/leaders.mjs` 领涨事件本地自算（增量，`--from` 强制重算）、`maintain.mjs` 统一维护入口（`final_through` 完整性口径落 `scripts/task_runs.json`）。
+- `scripts/`：market.db 数据维护任务系统（快照/日历=**腾讯源**与 BFF 同上游，漏跑补数=**新浪源**单股全历史日K（market 项目同款，避开腾讯 fqkline 风控）；K 线/事件写入只在此处；概念体系（concepts / stock_concepts / 领涨事件概念维度）另可经 /admin/concepts 管理页写入）——`task.mjs` 任务注册表与统一入口、`lib/`（db 连接 WAL + 状态文件 + http 重试 + 腾讯/新浪封装）、`sync/kline-daily.mjs` 日 K 同步（自动补漏跑交易日 + 当日实时/终值快照，任意时刻可跑，upsert 幂等，`--status` 查完整性）、`sync/leaders.mjs` 领涨事件本地自算（增量，`--from` 强制重算）、`maintain.mjs` 统一维护入口（`final_through` 完整性口径落 `scripts/task_runs.json`）。
 
 ## 必读文档（按任务选读）
 

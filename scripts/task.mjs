@@ -13,7 +13,7 @@
 
 const TASKS = {
   'sync:kline-daily': {
-    desc: '同步 日K线 → kline_daily（腾讯源；自动补漏跑交易日 + 当日实时/终值快照，任意时刻可跑，幂等；--status 查看数据完整性）',
+    desc: '同步 日K线 → kline_daily（快照/日历=腾讯源，补数=新浪源；自动补漏跑交易日 + 当日实时/终值快照，任意时刻可跑，幂等；--status 查看数据完整性）',
     file: 'sync/kline-daily.mjs'
   },
   'sync:leaders': {

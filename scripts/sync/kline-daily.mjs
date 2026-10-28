@@ -1,4 +1,4 @@
-// sync:kline-daily —— kline_daily 同步任务（L4 日级，任意时刻可跑，幂等；腾讯源，与 BFF 同上游）
+// sync:kline-daily —— kline_daily 同步任务（L4 日级，任意时刻可跑，幂等；快照/日历=腾讯源与 BFF 同上游，补数=新浪源）
 //
 // 用法：npm run task -- run sync:kline-daily [--status]
 //   --status：只读查看数据完整性（不请求行情、不写库）
@@ -6,9 +6,10 @@
 // 行为（自动兼容漏跑交易日，无需单独补数命令）：
 //   ① 市场状态：sh000001 实时行情时间戳 → 今日是否交易日 / 是否已收盘（≥15:00）
 //   ② 交易日历：sh000001 日K 日期序列（腾讯权威日历）
-//   ③ 漏跑补数：final_through（状态文件）之后的交易日缺口 → 逐股拉不复权日K补齐
-//      （串行 + 500ms 间隔 + 熔断 + 末尾重试；缺口日的既有行可能是早前盘中快照，故全量
-//        enabled 股覆盖式重写为终值，不做"已有行即跳过"优化）
+//   ③ 漏跑补数：final_through（状态文件）之后的交易日缺口 → 逐股拉新浪全历史不复权日K补齐
+//      （market 项目同款接口，独立风险池，避开腾讯 fqkline 风控；串行 + 500ms 间隔 +
+//        熔断 + 末尾重试；缺口日的既有行可能是早前盘中快照，故全量 enabled 股覆盖式
+//        重写为终值，不做"已有行即跳过"优化）
 //   ④ 当日快照：qt 批量实时行情，仅写入时间戳=今日的行（防未开盘时昨收错标当日）——
 //        盘中 = 当时实时值（收盘后重跑覆盖终值），收盘后 = 当日终值；
 //      enabled 联动（停牌停用/复牌启用）仅在收盘后执行，防盘中未开盘股被误停用
@@ -18,7 +19,8 @@
 //   qt [35] 第 3 段（精确到元），缺失时 [37](万)×1e4。手取整与股级精度差 <100 股/日，可忽略。
 import { openDb, nowStr, loadTaskState, saveTaskState } from '../lib/db.mjs'
 import { sleep } from '../lib/http.mjs'
-import { fetchMarketPhase, fetchTradingDates, fetchDayBars, fetchQtQuotes } from '../lib/tencent.mjs'
+import { fetchDayHistory } from '../lib/sina.mjs'
+import { fetchMarketPhase, fetchTradingDates, fetchQtQuotes } from '../lib/tencent.mjs'
 
 const TASK_ID = 'sync:kline-daily'
 const FILL_GAP_MS = 500 // 补数请求间隔
@@ -51,6 +53,12 @@ function quoteToRow(code, f, date) {
     volume: volume != null ? Math.round(volume) * 100 : null,
     amount
   }
+}
+
+/** 单股缺口行：新浪全历史日K → 仅缺口日行（不复权，量纲=股，无成交额 → amount=null）。 */
+async function fetchGapRows(code, exchange, missingSet) {
+  const rows = await fetchDayHistory(code, exchange)
+  return rows.filter((r) => missingSet.has(r.trade_date)).map((r) => ({ code, ...r, amount: null }))
 }
 
 export async function run(args = []) {
@@ -136,20 +144,7 @@ export async function run(args = []) {
         break
       }
       try {
-        const bars = await fetchDayBars(code, exchange, missing[0])
-        const rows = bars
-          .filter((b) => missingSet.has(String(b[0])))
-          .map((b) => ({
-            code,
-            trade_date: String(b[0]),
-            open: num(b[1]),
-            high: num(b[3]),
-            low: num(b[4]),
-            close: num(b[2]),
-            volume: num(b[5]) != null ? Math.round(num(b[5])) * 100 : null,
-            amount: null
-          }))
-          .filter((r) => r.open > 0 && r.close > 0)
+        const rows = await fetchGapRows(code, exchange, missingSet)
         if (rows.length > 0) {
           db.exec('BEGIN')
           try {
@@ -179,20 +174,7 @@ export async function run(args = []) {
       for (const code of failed) {
         const { exchange } = db.prepare('SELECT exchange FROM stocks WHERE code=?').get(code)
         try {
-          const bars = await fetchDayBars(code, exchange, missing[0])
-          const rows = bars
-            .filter((b) => missingSet.has(String(b[0])))
-            .map((b) => ({
-              code,
-              trade_date: String(b[0]),
-              open: num(b[1]),
-              high: num(b[3]),
-              low: num(b[4]),
-              close: num(b[2]),
-              volume: num(b[5]) != null ? Math.round(num(b[5])) * 100 : null,
-              amount: null
-            }))
-            .filter((r) => r.open > 0 && r.close > 0)
+          const rows = await fetchGapRows(code, exchange, missingSet)
           db.exec('BEGIN')
           for (const r of rows) upsert.run(r)
           db.exec('COMMIT')
