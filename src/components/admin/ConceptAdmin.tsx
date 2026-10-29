@@ -1,17 +1,24 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react'
+import { useEffect, useMemo, useRef, useState, type DragEvent, type KeyboardEvent, type ReactElement } from 'react'
 import ThemeToggle from '@/components/terminal/ThemeToggle'
 import { useLocale } from '@/components/terminal/useLocale'
 import TradeToast from '@/components/trading/TradeToast'
 import { useNotice } from '@/components/trading/useNotice'
-import type { ConceptAdminAction, ConceptAdminData, ConceptStockRow } from '@/lib/concepts'
+import {
+  UNASSIGNED_CATEGORY,
+  type ConceptAdminAction,
+  type ConceptAdminData,
+  type ConceptRow,
+  type ConceptStockRow
+} from '@/lib/concepts'
 
 /**
  * 概念管理页（/admin/concepts，UI_SPEC §3.17）：维护 market.db 概念体系——
- * 概念/大类增删改与组内排序、成分股划转（一股一概念）。数据经 /api/admin/concepts
- * （写动作成功后服务端已使领涨看板缓存失效）；删除概念级联清除成分与领涨历史事件。
+ * 概念/大类增删改与组内排序；概念折叠面板展开查看成分股（只读，成分划转在数据侧维护）。
+ * 数据经 /api/admin/concepts（写动作成功后服务端已使领涨看板缓存失效）；
+ * 删除概念级联清除成分与领涨历史事件。
  */
 
 type Dialog =
@@ -22,6 +29,34 @@ type Dialog =
 
 /** 编辑弹窗大类选择：现有大类 + 新建项（值为空串） */
 const NEW_CATEGORY = ''
+
+/** 大类本地展示序（仅页面视图，localStorage 持久化，不写 market.db） */
+const CAT_ORDER_KEY = 'klinecharts-concept-cat-order'
+
+const readLocalCatOrder = (): string[] => {
+  if (typeof window === 'undefined') {
+    return []
+  }
+  try {
+    const raw = window.localStorage.getItem(CAT_ORDER_KEY)
+    const parsed = raw != null ? (JSON.parse(raw) as unknown) : null
+    return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === 'string') : []
+  } catch {
+    return []
+  }
+}
+
+const writeLocalCatOrder = (order: string[]): void => {
+  try {
+    window.localStorage.setItem(CAT_ORDER_KEY, JSON.stringify(order))
+  } catch {
+    // 隐私模式等写入失败：仅当次会话生效
+  }
+}
+
+/** 拖拽载荷：大类（排序）、子概念（排序/换组）或个股（划转） */
+type DragPayload =
+  { type: 'category'; category: string } | { type: 'concept'; name: string } | { type: 'stock'; code: string }
 
 const IconBtn = ({
   label,
@@ -41,6 +76,7 @@ const IconBtn = ({
     aria-label={label}
     onClick={onClick}
     disabled={disabled}
+    draggable={false}
   >
     <svg
       viewBox="0 0 24 24"
@@ -68,16 +104,32 @@ export default function ConceptAdmin() {
   const [loadError, setLoadError] = useState(false)
   const [reloadId, setReloadId] = useState(0)
 
-  const [selected, setSelected] = useState<string | null>(null)
+  const [selected, setSelected] = useState<Set<string>>(() => new Set())
   const [filter, setFilter] = useState('')
   const [busy, setBusy] = useState(false)
   const [dialog, setDialog] = useState<Dialog>(null)
 
-  // 成分面板股票搜索（300ms 防抖，与 SymbolPicker 一致）
-  const [query, setQuery] = useState('')
+  // 拖拽（HTML5 DnD）：大类拖排序（仅本机 localStorage）；子概念拖排序/换组；个股拖到概念行 = 划转、拖到未分类 = 移出
+  const dragRef = useRef<DragPayload | null>(null)
+  const [dragOver, setDragOver] = useState<{ key: string; pos: 'before' | 'after' } | null>(null)
+  const [dragOverGroup, setDragOverGroup] = useState<string | null>(null)
+  const [catDragOver, setCatDragOver] = useState<{ key: string; pos: 'before' | 'after' } | null>(null)
+  const [localCatOrder, setLocalCatOrder] = useState<string[]>(readLocalCatOrder)
+
   const busyRef = useRef(false)
 
   const { notice, notify } = useNotice()
+
+  // 大类展示序：本地序（localStorage）覆盖库序；未记录的大类（新增）按库序追加尾部
+  const orderedCategories = useMemo(() => {
+    if (data == null || localCatOrder.length === 0) {
+      return data?.categories ?? []
+    }
+    const rank = new Map(localCatOrder.map((name, i) => [name, i]))
+    const known = data.categories.filter((c) => rank.has(c.name)).sort((a, b) => rank.get(a.name)! - rank.get(b.name)!)
+    const unknown = data.categories.filter((c) => !rank.has(c.name))
+    return [...known, ...unknown]
+  }, [data, localCatOrder])
 
   const withBusy = async (task: () => Promise<void>): Promise<void> => {
     if (busyRef.current) {
@@ -93,18 +145,16 @@ export default function ConceptAdmin() {
     }
   }
 
-  /** 拉全景（含选中概念成分表与在途搜索结果） */
-  const load = async (concept: string | null, q: string): Promise<ConceptAdminData | null> => {
+  /** 拉全景（含各展开概念的成分表，concept 可重复多值） */
+  const load = async (concepts: Iterable<string>): Promise<ConceptAdminData | null> => {
     const params = new URLSearchParams()
-    if (concept != null && concept !== '') {
-      params.set('concept', concept)
-    }
-    if (q !== '') {
-      params.set('q', q)
+    for (const concept of concepts) {
+      params.append('concept', concept)
     }
     const queryString = params.toString()
-    const search = queryString !== '' ? `?${queryString}` : ''
-    const res = await fetch(`/api/admin/concepts${search}`, { cache: 'no-store' })
+    const res = await fetch(`/api/admin/concepts${queryString !== '' ? `?${queryString}` : ''}`, {
+      cache: 'no-store'
+    })
     if (!res.ok) {
       return null
     }
@@ -116,7 +166,7 @@ export default function ConceptAdmin() {
     let cancelled = false
     const run = async () => {
       setLoadError(false)
-      const next = await load(selected, '')
+      const next = await load(selected)
       if (cancelled) {
         return
       }
@@ -133,35 +183,24 @@ export default function ConceptAdmin() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reloadId])
 
-  // 成分面板搜索防抖（只刷 stocks，不动全景）
-  const q = query.trim()
-  useEffect(() => {
-    if (selected == null) {
-      return
+  /** 展开/收起概念折叠面板（多开：展开 = 拉全部已展开概念的成分表） */
+  const toggle = (name: string): void => {
+    const next = new Set(selected)
+    if (next.has(name)) {
+      next.delete(name)
+    } else {
+      next.add(name)
     }
-    const timer = setTimeout(() => {
-      void load(selected, q).then((next) => {
-        if (next != null) {
-          setData(next)
-        }
-      })
-    }, 300)
-    return () => clearTimeout(timer)
-  }, [q, selected])
-
-  /** 选中概念（拉成分表；清空搜索） */
-  const select = (name: string): void => {
-    setSelected(name)
-    setQuery('')
-    void load(name, '').then((next) => {
-      if (next != null) {
-        setData(next)
+    setSelected(next)
+    void load(next).then((data) => {
+      if (data != null) {
+        setData(data)
       }
     })
   }
 
-  const refresh = async (concept: string | null): Promise<void> => {
-    const next = await load(concept, q)
+  const refresh = async (concepts: Iterable<string>): Promise<void> => {
+    const next = await load(concepts)
     if (next != null) {
       setData(next)
     }
@@ -192,7 +231,7 @@ export default function ConceptAdmin() {
       if (result.ok) {
         notify('ok', t('概念已创建|Concept created'), 'global')
         setDialog(null)
-        select(name)
+        toggle(name)
       }
     })
 
@@ -209,11 +248,14 @@ export default function ConceptAdmin() {
       if (result.ok) {
         notify('ok', t('概念已更新|Concept updated'), 'global')
         setDialog(null)
-        const nextSelected = selected === name ? nextName : selected
-        if (selected === name) {
-          setSelected(nextName)
+        // 展开集合内改名跟随（不重开其它面板）
+        if (selected.has(name)) {
+          const next = new Set([...selected].map((n) => (n === name ? nextName : n)))
+          setSelected(next)
+          await refresh(next)
+        } else {
+          await refresh(selected)
         }
-        await refresh(nextSelected)
       }
     })
 
@@ -235,10 +277,14 @@ export default function ConceptAdmin() {
       const result = await post({ action: 'delete', name })
       if (result.ok) {
         notify('ok', t('概念已删除|Concept deleted'), 'global')
-        if (selected === name) {
-          setSelected(null)
+        if (selected.has(name)) {
+          const next = new Set(selected)
+          next.delete(name)
+          setSelected(next)
+          await refresh(next)
+        } else {
+          await refresh(selected)
         }
-        await refresh(selected === name ? null : selected)
       }
     })
 
@@ -271,32 +317,122 @@ export default function ConceptAdmin() {
       }
     })
 
-  const handleRemoveMember = (stock: ConceptStockRow): void =>
+  // —— 拖拽（HTML5 DnD；dragover 期间 dataTransfer 不可读，类型经 dragRef 判定） ——
+
+  const startDrag = (event: DragEvent<HTMLElement>, payload: DragPayload): void => {
+    dragRef.current = payload
+    event.dataTransfer.setData('text/plain', JSON.stringify(payload))
+    event.dataTransfer.effectAllowed = 'move'
+  }
+
+  /** drop 时解析载荷（dataTransfer 可读；异常回退 dragRef） */
+  const parseDrag = (event: DragEvent<HTMLElement>): DragPayload | null => {
+    const raw = event.dataTransfer.getData('text/plain')
+    if (raw !== '') {
+      try {
+        const parsed = JSON.parse(raw) as DragPayload
+        if (parsed != null && (parsed.type === 'concept' || parsed.type === 'stock')) {
+          return parsed
+        }
+      } catch {
+        // 非 JSON 载荷 → 回退 dragRef
+      }
+    }
+    return dragRef.current
+  }
+
+  const endDrag = (): void => {
+    dragRef.current = null
+    setDragOver(null)
+    setDragOverGroup(null)
+    setCatDragOver(null)
+  }
+
+  /** 概念拖拽落点：目标行前/后插入或换组；组头落点 = 追加到该组末尾 */
+  const handleMoveConcept = (name: string, category: string, index: number): void =>
     void withBusy(async () => {
-      const result = await post({ action: 'set-member', code: stock.code, concept: null })
+      const result = await post({ action: 'move', name, category, index })
       if (result.ok) {
-        notify('ok', t(`已移出「${stock.name}」|Removed "${stock.name}"`), 'global')
+        notify('ok', t('概念顺序已更新|Concept order updated'), 'global')
         await refresh(selected)
       }
     })
 
-  const handleAddMember = (stock: ConceptStockRow, concept: string): void =>
+  /** 大类拖拽落点：仅本机展示序重排（localStorage，不写 market.db） */
+  const handleLocalCategoryOrder = (category: string, target: string, pos: 'before' | 'after'): void => {
+    const base = orderedCategories.map((c) => c.name).filter((n) => n !== category)
+    const idx = base.indexOf(target)
+    if (idx < 0) {
+      return
+    }
+    const at = pos === 'after' ? idx + 1 : idx
+    const next = [...base.slice(0, at), category, ...base.slice(at)]
+    setLocalCatOrder(next)
+    writeLocalCatOrder(next)
+    notify('ok', t('大类顺序已更新（仅本机）|Category order updated (this browser only)'), 'global')
+  }
+
+  /** 个股拖拽落点：划入目标概念（concept=null = 移出到未分类） */
+  const handleAssignStock = (code: string, concept: string | null): void =>
     void withBusy(async () => {
-      const result = await post({ action: 'set-member', code: stock.code, concept })
+      const result = await post({ action: 'set-member', code, concept })
       if (!result.ok) {
         return
       }
       const prev = (result.json.prevConcept as string | null | undefined) ?? null
       notify(
         'ok',
-        prev != null && prev !== concept
-          ? t(`已从「${prev}」移入「${concept}」|Moved from "${prev}" to "${concept}"`)
-          : t(`已划入「${concept}」|Added to "${concept}"`),
+        concept == null
+          ? t(`已移出「${prev ?? ''}」至未分类|Removed from "${prev ?? ''}" to uncategorized`)
+          : prev != null && prev !== concept
+            ? t(`已从「${prev}」移入「${concept}」|Moved from "${prev}" to "${concept}"`)
+            : t(`已移入「${concept}」|Added to "${concept}"`),
         'global'
       )
-      setQuery('')
       await refresh(selected)
     })
+
+  /** 概念行/未分类行落点（row head 上的 drop：概念 = 插入该行前/后；个股 = 划入该概念） */
+  const dropOnRowHead = (
+    event: DragEvent<HTMLDivElement>,
+    rowKey: string,
+    resolve: (payload: DragPayload) => 'concept-move' | 'stock-assign' | 'ignore'
+  ): void => {
+    const payload = parseDrag(event)
+    if (payload?.type === 'category') {
+      // 大类载荷不在行头处理：不拦冒泡，交由组卡 onDrop 排序
+      return
+    }
+    event.preventDefault()
+    event.stopPropagation()
+    const over = dragOver
+    endDrag()
+    if (payload == null || over == null || over.key !== rowKey) {
+      return
+    }
+    const kind = resolve(payload)
+    if (kind === 'ignore') {
+      return
+    }
+    if (payload.type === 'concept') {
+      if (data == null) {
+        return
+      }
+      const category = data.concepts.find((c) => c.name === rowKey)?.category
+      if (category == null) {
+        return
+      }
+      // 序位按目标大类全量列表计（不受过滤影响）；after = 目标行之后插入
+      const list = data.concepts.filter((c) => c.category === category)
+      const targetIdx = list.findIndex((c) => c.name === rowKey)
+      if (targetIdx < 0) {
+        return
+      }
+      handleMoveConcept(payload.name, category, targetIdx + (over.pos === 'after' ? 1 : 0))
+    } else {
+      handleAssignStock(payload.code, rowKey === UNASSIGNED_CATEGORY ? null : rowKey)
+    }
+  }
 
   // 每次从 DOM 取反（同首页）：客户端导航往返后主题类随根节点保留
   const toggleTheme = () => {
@@ -319,17 +455,26 @@ export default function ConceptAdmin() {
     [data, filterText]
   )
   const visibleCategories = useMemo(() => {
-    if (data == null) {
-      return []
-    }
     if (filterText === '') {
-      return data.categories
+      return orderedCategories
     }
-    return data.categories.filter((cat) => visibleConcepts.some((c) => c.category === cat.name))
-  }, [data, filterText, visibleConcepts])
+    return orderedCategories.filter((cat) => visibleConcepts.some((c) => c.category === cat.name))
+  }, [orderedCategories, filterText, visibleConcepts])
 
-  const selectedMembers = data?.members ?? []
-  const stockPicks = data?.stocks ?? []
+  // 未分类虚拟分组：仅页面视图（数据侧无落库行），有未归类股票且过滤命中时展示
+  const unassignedCount = data?.stats.unassignedStocks ?? 0
+  const unassignedVisible = unassignedCount > 0 && (filterText === '' || t('未分类|Uncategorized').includes(filterText))
+
+  // 成分展开体（真实概念行与未分类虚拟行共用；多开下各面板按概念名取各自成分表）
+  const memberBodyFor = (key: string): ReactElement => (
+    <MemberBody
+      members={data?.members?.[key] ?? []}
+      busy={busy}
+      onStockDragStart={(event, code) => startDrag(event, { type: 'stock', code })}
+      onDragEnd={endDrag}
+      t={t}
+    />
+  )
 
   return (
     <div className="concept-page">
@@ -356,7 +501,7 @@ export default function ConceptAdmin() {
           <div className="trade-loading">{t('加载中|Loading')}…</div>
         ) : (
           <div className="concept-main">
-            {/* 卡 1：统计带 */}
+            {/* 卡 1：统计带 + 概念体系工具行 */}
             <section className="trade-card">
               <div className="cpt-stats">
                 <span className="screen-stat">
@@ -375,68 +520,258 @@ export default function ConceptAdmin() {
                   <span className="screen-stat-k">{t('启用股票|Enabled stocks')}</span>
                   <span className="screen-stat-v num">{data.stats.enabledStocks}</span>
                 </span>
+                <span className="screen-stat">
+                  <span className="screen-stat-k">{t('未分类|Unassigned')}</span>
+                  <span className="screen-stat-v num">{data.stats.unassignedStocks}</span>
+                </span>
+              </div>
+              <div className="cpt-list-head">
+                <span className="cpt-title">{t('概念体系|Concept system')}</span>
+                <span className="cpt-sub num">{data.stats.concepts}</span>
+                <input
+                  className="cpt-filter"
+                  type="search"
+                  placeholder={t('搜索概念或大类|Search concept or category')}
+                  aria-label={t('搜索概念或大类|Search concept or category')}
+                  value={filter}
+                  onChange={(event) => setFilter(event.target.value)}
+                />
+                <button
+                  type="button"
+                  className="cpt-add-btn"
+                  onClick={() => setDialog({ mode: 'create' })}
+                  disabled={busy}
+                >
+                  + {t('新增|Add')}
+                </button>
               </div>
             </section>
 
-            <div className="cpt-body">
-              {/* 卡 2：概念体系（大类分组列表） */}
-              <section className="trade-card cpt-list">
-                <div className="cpt-list-head">
-                  <span className="cpt-title">{t('概念体系|Concept system')}</span>
-                  <span className="cpt-sub num">{data.stats.concepts}</span>
-                  <input
-                    className="cpt-filter"
-                    type="search"
-                    placeholder={t('搜索概念或大类|Search concept or category')}
-                    aria-label={t('搜索概念或大类|Search concept or category')}
-                    value={filter}
-                    onChange={(event) => setFilter(event.target.value)}
-                  />
-                  <button
-                    type="button"
-                    className="cpt-add-btn"
-                    onClick={() => setDialog({ mode: 'create' })}
-                    disabled={busy}
-                  >
-                    + {t('新增概念|New concept')}
-                  </button>
+            {/* 大类卡片网格：未分类虚拟卡居首，其后每大类一张卡（概念折叠面板，展开即成分股） */}
+            <div className="cpt-groups">
+              {visibleCategories.length === 0 && !unassignedVisible && (
+                <div className="cpt-empty">{t('无匹配概念|No matching concepts')}</div>
+              )}
+
+              {/* 未分类虚拟分组：无 stock_concepts 行的启用股（仅页面视图，数据侧无此大类） */}
+              {unassignedVisible && (
+                <div className="cpt-group virtual">
+                  <div className="cpt-group-head">
+                    <span className="cpt-group-name">{t('未分类|Uncategorized')}</span>
+                    <span className="cpt-group-meta num">
+                      {t(`${unassignedCount} 只未归类成分|${unassignedCount} unassigned stocks`)}
+                    </span>
+                  </div>
+                  <div className={`cpt-row${selected.has(UNASSIGNED_CATEGORY) ? ' open' : ''}`}>
+                    <div
+                      className={`cpt-row-head${dragOver?.key === UNASSIGNED_CATEGORY ? ` drag-${dragOver.pos}` : ''}`}
+                      role="button"
+                      tabIndex={0}
+                      aria-expanded={selected.has(UNASSIGNED_CATEGORY)}
+                      onClick={() => toggle(UNASSIGNED_CATEGORY)}
+                      onKeyDown={(event: KeyboardEvent<HTMLDivElement>) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault()
+                          toggle(UNASSIGNED_CATEGORY)
+                        }
+                      }}
+                      onDragOver={(event) => {
+                        event.stopPropagation()
+                        if (dragRef.current?.type !== 'stock') {
+                          return
+                        }
+                        event.preventDefault()
+                        const rect = event.currentTarget.getBoundingClientRect()
+                        setDragOver({
+                          key: UNASSIGNED_CATEGORY,
+                          pos: event.clientY < rect.top + rect.height / 2 ? 'before' : 'after'
+                        })
+                      }}
+                      onDragLeave={() => setDragOver((cur) => (cur?.key === UNASSIGNED_CATEGORY ? null : cur))}
+                      onDrop={(event) =>
+                        dropOnRowHead(event, UNASSIGNED_CATEGORY, (payload) =>
+                          payload.type === 'stock' ? 'stock-assign' : 'ignore'
+                        )
+                      }
+                    >
+                      <span
+                        className={`cpt-row-chevron${selected.has(UNASSIGNED_CATEGORY) ? ' open' : ''}`}
+                        aria-hidden="true"
+                      >
+                        <svg
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <path d="M9 5l7 7-7 7" />
+                        </svg>
+                      </span>
+                      <span className="cpt-row-name">{t('未分类股票|Uncategorized stocks')}</span>
+                      <span className="cpt-row-members" title={t('成分股数|Member count')}>
+                        {unassignedCount}
+                      </span>
+                    </div>
+                    {selected.has(UNASSIGNED_CATEGORY) && memberBodyFor(UNASSIGNED_CATEGORY)}
+                  </div>
                 </div>
-                <div className="cpt-groups">
-                  {visibleCategories.length === 0 && (
-                    <div className="cpt-empty">{t('无匹配概念|No matching concepts')}</div>
-                  )}
-                  {visibleCategories.map((cat) => (
-                    <div key={cat.name} className="cpt-group">
-                      <div className="cpt-group-head">
-                        <span className="cpt-group-name">{cat.name}</span>
-                        <span className="cpt-group-meta num">
-                          {t(
-                            `${cat.concepts} 个概念 / ${cat.members} 只成分|${cat.concepts} concepts / ${cat.members} stocks`
-                          )}
-                        </span>
-                        <IconBtn
-                          label={t('大类改名|Rename category')}
-                          path={PENCIL}
-                          onClick={() => setDialog({ mode: 'rename-category', category: cat.name })}
-                          disabled={busy}
-                        />
-                      </div>
-                      {visibleConcepts
-                        .filter((c) => c.category === cat.name)
-                        .map((c) => (
-                          <div key={c.name} className={`cpt-row${selected === c.name ? ' active' : ''}`}>
-                            <button
-                              type="button"
-                              className="cpt-row-name"
-                              onClick={() => select(c.name)}
-                              title={t('查看成分|View members')}
-                            >
-                              {c.name}
-                            </button>
-                            <span className="cpt-row-members num" title={t('成分股数|Member count')}>
+              )}
+
+              {visibleCategories.map((cat) => (
+                <div
+                  key={cat.name}
+                  className={`cpt-group${dragOverGroup === cat.name ? ' drag-over' : ''}${
+                    catDragOver?.key === cat.name ? ` cat-${catDragOver.pos}` : ''
+                  }`}
+                  onDragOver={(event) => {
+                    const payload = dragRef.current
+                    if (payload == null) {
+                      return
+                    }
+                    if (payload.type === 'category') {
+                      // 大类拖拽：目标卡上/下半区 = 移到该大类前/后
+                      if (payload.category === cat.name) {
+                        return
+                      }
+                      event.preventDefault()
+                      event.stopPropagation()
+                      const rect = event.currentTarget.getBoundingClientRect()
+                      setCatDragOver({
+                        key: cat.name,
+                        pos: event.clientY < rect.top + rect.height / 2 ? 'before' : 'after'
+                      })
+                      return
+                    }
+                    if (payload.type !== 'concept' || payload.name === cat.name) {
+                      return
+                    }
+                    event.preventDefault()
+                    event.stopPropagation()
+                    setDragOverGroup(cat.name)
+                  }}
+                  onDragLeave={(event) => {
+                    if (event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                      return
+                    }
+                    setDragOverGroup((cur) => (cur === cat.name ? null : cur))
+                    setCatDragOver((cur) => (cur?.key === cat.name ? null : cur))
+                  }}
+                  onDrop={(event) => {
+                    event.preventDefault()
+                    event.stopPropagation()
+                    const payload = parseDrag(event)
+                    const over = catDragOver
+                    endDrag()
+                    if (payload == null) {
+                      return
+                    }
+                    if (payload.type === 'category') {
+                      if (over == null || over.key !== cat.name) {
+                        return
+                      }
+                      // 大类排序仅本机（localStorage），不写库
+                      handleLocalCategoryOrder(payload.category, cat.name, over.pos)
+                      return
+                    }
+                    if (payload.type !== 'concept') {
+                      return
+                    }
+                    // 概念落点 = 追加到该大类末尾（index 由服务端钳制）
+                    const count = data.concepts.filter((c) => c.category === cat.name).length
+                    handleMoveConcept(payload.name, cat.name, count)
+                  }}
+                >
+                  <div
+                    className="cpt-group-head"
+                    draggable={!busy}
+                    onDragStart={(event) => startDrag(event, { type: 'category', category: cat.name })}
+                    onDragEnd={endDrag}
+                  >
+                    <span className="cpt-group-name">{cat.name}</span>
+                    <span className="cpt-group-meta num">
+                      {t(
+                        `${cat.concepts} 个概念 / ${cat.members} 只成分|${cat.concepts} concepts / ${cat.members} stocks`
+                      )}
+                    </span>
+                    <IconBtn
+                      label={t('大类改名|Rename category')}
+                      path={PENCIL}
+                      onClick={() => setDialog({ mode: 'rename-category', category: cat.name })}
+                      disabled={busy}
+                    />
+                  </div>
+                  {visibleConcepts
+                    .filter((c) => c.category === cat.name)
+                    .map((c) => {
+                      const open = selected.has(c.name)
+                      return (
+                        <div key={c.name} className={`cpt-row${open ? ' open' : ''}`}>
+                          <div
+                            className={`cpt-row-head${dragOver?.key === c.name ? ` drag-${dragOver.pos}` : ''}`}
+                            role="button"
+                            tabIndex={0}
+                            aria-expanded={open}
+                            draggable={!busy}
+                            onClick={() => toggle(c.name)}
+                            onKeyDown={(event: KeyboardEvent<HTMLDivElement>) => {
+                              if (event.key === 'Enter' || event.key === ' ') {
+                                event.preventDefault()
+                                toggle(c.name)
+                              }
+                            }}
+                            onDragStart={(event) => startDrag(event, { type: 'concept', name: c.name })}
+                            onDragEnd={endDrag}
+                            onDragOver={(event) => {
+                              const payload = dragRef.current
+                              // 大类载荷不在行头处理（冒泡至组卡排序）
+                              if (payload == null || payload.type === 'category') {
+                                return
+                              }
+                              event.stopPropagation()
+                              if (payload.type === 'concept' && payload.name === c.name) {
+                                return
+                              }
+                              event.preventDefault()
+                              const rect = event.currentTarget.getBoundingClientRect()
+                              setDragOver({
+                                key: c.name,
+                                pos: event.clientY < rect.top + rect.height / 2 ? 'before' : 'after'
+                              })
+                            }}
+                            onDragLeave={() => setDragOver((cur) => (cur?.key === c.name ? null : cur))}
+                            onDrop={(event) =>
+                              dropOnRowHead(event, c.name, (payload) =>
+                                payload.type === 'concept' && payload.name === c.name
+                                  ? 'ignore'
+                                  : payload.type === 'concept'
+                                    ? 'concept-move'
+                                    : 'stock-assign'
+                              )
+                            }
+                          >
+                            <span className={`cpt-row-chevron${open ? ' open' : ''}`} aria-hidden="true">
+                              <svg
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              >
+                                <path d="M9 5l7 7-7 7" />
+                              </svg>
+                            </span>
+                            <span className="cpt-row-name">{c.name}</span>
+                            <span className="cpt-row-members" title={t('成分股数|Member count')}>
                               {c.members}
                             </span>
-                            <span className="cpt-row-actions">
+                            <span
+                              className="cpt-row-actions"
+                              onClick={(event) => event.stopPropagation()}
+                              role="presentation"
+                            >
                               <IconBtn
                                 label={t('上移|Move up')}
                                 path={CHEVRON_UP}
@@ -463,118 +798,12 @@ export default function ConceptAdmin() {
                               />
                             </span>
                           </div>
-                        ))}
-                    </div>
-                  ))}
+                          {open && memberBodyFor(c.name)}
+                        </div>
+                      )
+                    })}
                 </div>
-              </section>
-
-              {/* 卡 3：成分管理（选中概念） */}
-              {selected != null && (
-                <section className="trade-card cpt-members">
-                  <div className="cpt-members-head">
-                    <span className="cpt-members-title">{selected}</span>
-                    <span className="cpt-members-sub">
-                      {(() => {
-                        const cat = data.concepts.find((c) => c.name === selected)?.category
-                        return cat ?? ''
-                      })()}
-                    </span>
-                    <span className="cpt-members-count num">{selectedMembers.length}</span>
-                    <button
-                      type="button"
-                      className="tb-btn tb-clear"
-                      onClick={() => {
-                        setSelected(null)
-                        setQuery('')
-                      }}
-                    >
-                      × {t('关闭|Close')}
-                    </button>
-                  </div>
-
-                  <div className="cpt-pick">
-                    <input
-                      className="cpt-filter"
-                      type="search"
-                      placeholder={t('搜索代码或名称划入成分|Search code or name to assign')}
-                      aria-label={t('搜索代码或名称划入成分|Search code or name to assign')}
-                      value={query}
-                      onChange={(event) => setQuery(event.target.value)}
-                    />
-                    {q !== '' && (
-                      <div className="cpt-pick-list">
-                        {stockPicks.length === 0 && <div className="cpt-pick-empty">{t('无结果|No results')}</div>}
-                        {stockPicks.map((stock) => (
-                          <div key={stock.code} className="cpt-pick-row">
-                            <span className="cpt-pick-code num">{stock.code}</span>
-                            <span className={`cpt-pick-name${stock.enabled ? '' : ' halt'}`}>{stock.name}</span>
-                            <span className="cpt-pick-concept" title={t('现属概念|Current concept')}>
-                              {stock.concept ?? t('未归类|Unassigned')}
-                            </span>
-                            <button
-                              type="button"
-                              className="tb-btn cpt-pick-add"
-                              onClick={() => handleAddMember(stock, selected)}
-                              disabled={busy || stock.concept === selected}
-                            >
-                              {stock.concept === selected ? t('已在此概念|Already here') : t('划入|Assign')}
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {selectedMembers.length === 0 ? (
-                    <div className="trade-empty">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
-                        <circle cx="11" cy="11" r="7" />
-                        <path d="M21 21l-4.35-4.35" strokeLinecap="round" />
-                      </svg>
-                      <div className="trade-empty-title">{t('暂无成分股|No members yet')}</div>
-                      <div className="trade-empty-sub">{t('搜索代码或名称划入成分|Search code or name to assign')}</div>
-                    </div>
-                  ) : (
-                    <div className="trade-table-wrap">
-                      <table className="trade-table">
-                        <thead>
-                          <tr>
-                            <th>{t('代码|Code')}</th>
-                            <th>{t('名称|Name')}</th>
-                            <th>{t('交易所|Exchange')}</th>
-                            <th>{t('行业|Industry')}</th>
-                            <th aria-label={t('操作|Actions')} />
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {selectedMembers.map((stock) => (
-                            <tr key={stock.code}>
-                              <td className="num cell-code">{stock.code}</td>
-                              <td className={stock.enabled ? 'cell-symbol' : 'cell-symbol cpt-halt'}>
-                                {stock.name}
-                                {!stock.enabled && <span className="cpt-halt-tag">{t('停|Halted')}</span>}
-                              </td>
-                              <td className="num">{stock.exchange}</td>
-                              <td>{stock.industry ?? '--'}</td>
-                              <td className="cpt-cell-action">
-                                <button
-                                  type="button"
-                                  className="tb-btn cpt-remove-btn"
-                                  onClick={() => handleRemoveMember(stock)}
-                                  disabled={busy}
-                                >
-                                  {t('移出|Remove')}
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </section>
-              )}
+              ))}
             </div>
           </div>
         )}
@@ -592,6 +821,7 @@ export default function ConceptAdmin() {
           }
           dialog={dialog}
           categories={data?.categories.map((c) => c.name) ?? []}
+          concepts={data?.concepts ?? []}
           busy={busy}
           onCancel={() => setDialog(null)}
           onCreate={handleCreate}
@@ -605,10 +835,59 @@ export default function ConceptAdmin() {
   )
 }
 
-/** 概念/大类编辑弹窗（名称 + 大类选择，支持新建大类） */
+/** 成分展开体（只读列表 + 个股拖拽源；独立组件避免渲染函数内访问 ref 触发 compiler lint） */
+const MemberBody = ({
+  members,
+  busy,
+  onStockDragStart,
+  onDragEnd,
+  t
+}: {
+  members: ConceptStockRow[]
+  busy: boolean
+  onStockDragStart: (event: DragEvent<HTMLElement>, code: string) => void
+  onDragEnd: () => void
+  t: (text: string) => string
+}): ReactElement => (
+  <div className="cpt-row-body">
+    {members.length === 0 ? (
+      <div className="trade-empty">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+          <circle cx="11" cy="11" r="7" />
+          <path d="M21 21l-4.35-4.35" strokeLinecap="round" />
+        </svg>
+        <div className="trade-empty-title">{t('暂无成分股|No members yet')}</div>
+        <div className="trade-empty-sub">{t('该概念暂未归入股票|No stocks assigned to this concept yet')}</div>
+      </div>
+    ) : (
+      <div className="cpt-members">
+        {members.map((stock) => (
+          <div
+            key={stock.code}
+            className="cpt-member-row"
+            draggable={!busy}
+            onDragStart={(event) => onStockDragStart(event, stock.code)}
+            onDragEnd={onDragEnd}
+            title={t('拖拽到概念行划入|Drag onto a concept row to assign')}
+          >
+            <span className="cpt-member-code num">{stock.code}</span>
+            <span className={`cpt-member-name${stock.enabled ? '' : ' cpt-halt'}`}>
+              {stock.name}
+              {!stock.enabled && <span className="cpt-halt-tag">{t('停|Halted')}</span>}
+            </span>
+            <span className="cpt-member-industry">{stock.industry ?? '--'}</span>
+          </div>
+        ))}
+      </div>
+    )}
+  </div>
+)
+
+/** 新增（一级大类 / 二级概念）/ 编辑概念 / 大类改名弹窗（复用 .modal 壳；大类随首个子概念建立） */
 const ConceptDialog = ({
   dialog,
   categories,
+  concepts,
   busy,
   onCancel,
   onCreate,
@@ -617,6 +896,7 @@ const ConceptDialog = ({
 }: {
   dialog: Exclude<Dialog, null>
   categories: string[]
+  concepts: ConceptRow[]
   busy: boolean
   onCancel: () => void
   onCreate: (name: string, category: string) => void
@@ -624,6 +904,8 @@ const ConceptDialog = ({
   onRenameCategory: (category: string, next: string) => void
 }): ReactElement => {
   const { t } = useLocale()
+  // 新增弹窗的一级/二级切换（单入口「+ 新增」，默认二级概念）
+  const [kind, setKind] = useState<'concept' | 'category'>('concept')
   const initialCategory = dialog.mode === 'edit' ? dialog.category : (categories[0] ?? '')
   const [name, setName] = useState(dialog.mode === 'edit' ? dialog.name : '')
   const [category, setCategory] = useState(dialog.mode === 'rename-category' ? dialog.category : initialCategory)
@@ -631,25 +913,46 @@ const ConceptDialog = ({
   const isCustom = category === NEW_CATEGORY
 
   const effectiveCategory = isCustom ? custom.trim() : category
+  // 一级新增 = 仅大类名（以同名概念落库，大类由概念派生）；二级新增/编辑 = 概念名 + 所属大类
+  const addCategory = dialog.mode === 'create' && kind === 'category'
+  // 撞名本地预检（与服务端口径一致）：一级 = 同名且已在同名大类（真重复；在别处则收编）；二级/编辑 = 概念名（编辑自身原名除外）
+  const typedName = addCategory ? custom.trim() : name.trim()
+  const existingRow =
+    dialog.mode !== 'rename-category' && typedName !== '' && typedName !== (dialog.mode === 'edit' ? dialog.name : '')
+      ? concepts.find((c) => c.name === typedName)
+      : undefined
+  const dupName = existingRow != null && (addCategory ? existingRow.category === typedName : true) ? typedName : null
+  // 一级收编：同名概念现挂在别的大类，保存后将归入新建同名大类
+  const adoptFrom =
+    addCategory && existingRow != null && existingRow.category !== typedName ? existingRow.category : null
   const nameOk = name.trim() !== ''
   const categoryOk = effectiveCategory !== ''
-  const valid = nameOk && categoryOk
+  const valid = addCategory ? custom.trim() !== '' && dupName == null : nameOk && categoryOk && dupName == null
   const dirty = dialog.mode === 'edit' ? name.trim() !== dialog.name || effectiveCategory !== dialog.category : true
 
   const title =
     dialog.mode === 'create'
-      ? t('新增概念|New concept')
+      ? addCategory
+        ? t('新增大类|New category')
+        : t('新增概念|New concept')
       : dialog.mode === 'edit'
         ? t('编辑概念|Edit concept')
         : t('大类改名|Rename category')
 
   const submit = (): void => {
     if (dialog.mode === 'create') {
-      onCreate(name.trim(), effectiveCategory)
+      // 一级：大类以同名概念建立（无独立大类表，可后续改名或继续添加子概念）
+      onCreate(addCategory ? custom.trim() : name.trim(), addCategory ? custom.trim() : effectiveCategory)
     } else if (dialog.mode === 'edit') {
       onUpdate(dialog.name, name.trim(), effectiveCategory)
     } else {
       onRenameCategory(dialog.category, effectiveCategory)
+    }
+  }
+
+  const enterSubmit = (event: KeyboardEvent<HTMLInputElement>): void => {
+    if (event.key === 'Enter' && valid && dirty && !busy) {
+      submit()
     }
   }
 
@@ -669,55 +972,120 @@ const ConceptDialog = ({
           </button>
         </div>
         <div className="modal-body cpt-dialog-body">
-          {dialog.mode !== 'rename-category' && (
-            <label className="cpt-field">
-              <span className="cpt-field-label">{t('概念名称|Concept name')}</span>
-              <input
-                className="cpt-input"
-                value={name}
-                maxLength={30}
-                autoFocus
-                onChange={(event) => setName(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' && valid && dirty && !busy) {
-                    submit()
-                  }
-                }}
-              />
-            </label>
+          {dialog.mode === 'create' && (
+            <div className="period-group cpt-kind-group" role="tablist" aria-label={t('新增层级|Add level')}>
+              <button
+                type="button"
+                className={`tb-btn${kind === 'concept' ? ' active' : ''}`}
+                role="tab"
+                aria-selected={kind === 'concept'}
+                onClick={() => setKind('concept')}
+              >
+                {t('二级·概念|Concept')}
+              </button>
+              <button
+                type="button"
+                className={`tb-btn${kind === 'category' ? ' active' : ''}`}
+                role="tab"
+                aria-selected={kind === 'category'}
+                onClick={() => setKind('category')}
+              >
+                {t('一级·大类|Category')}
+              </button>
+            </div>
           )}
-          <label className="cpt-field">
-            <span className="cpt-field-label">{t('所属大类|Category')}</span>
-            {dialog.mode === 'rename-category' ? (
-              <input
-                className="cpt-input"
-                value={category}
-                maxLength={30}
-                autoFocus
-                onChange={(event) => setCategory(event.target.value)}
-              />
-            ) : (
-              <select className="cpt-input" value={category} onChange={(event) => setCategory(event.target.value)}>
-                {categories.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-                <option value={NEW_CATEGORY}>+ {t('新建大类…|New category…')}</option>
-              </select>
-            )}
-          </label>
-          {isCustom && dialog.mode !== 'rename-category' && (
-            <label className="cpt-field">
-              <span className="cpt-field-label">{t('新大类名称|New category name')}</span>
-              <input
-                className="cpt-input"
-                value={custom}
-                maxLength={30}
-                autoFocus
-                onChange={(event) => setCustom(event.target.value)}
-              />
-            </label>
+
+          {addCategory ? (
+            <>
+              <label className="cpt-field">
+                <span className="cpt-field-label">{t('大类名称|Category name')}</span>
+                <input
+                  className="cpt-input"
+                  value={custom}
+                  maxLength={30}
+                  autoFocus
+                  onChange={(event) => setCustom(event.target.value)}
+                  onKeyDown={enterSubmit}
+                />
+              </label>
+              <span className="cpt-field-hint">
+                {t(
+                  '大类以同名概念建立，可后续改名或继续添加子概念|Created with a same-named concept; rename or add more later'
+                )}
+              </span>
+              {adoptFrom != null && (
+                <span className="cpt-field-hint">
+                  {t(
+                    `已存在同名概念（现属「${adoptFrom}」），保存后将归入新大类|Same-named concept found (in "${adoptFrom}"); it will be moved into the new category`
+                  )}
+                </span>
+              )}
+              {dupName != null && (
+                <span className="cpt-field-hint cpt-field-error">
+                  {t(
+                    `已存在同名概念「${dupName}」，请先改名或换一个名称|Concept "${dupName}" already exists; rename it or use another name`
+                  )}
+                </span>
+              )}
+            </>
+          ) : (
+            <>
+              {dialog.mode !== 'rename-category' && (
+                <label className="cpt-field">
+                  <span className="cpt-field-label">{t('概念名称|Concept name')}</span>
+                  <input
+                    className="cpt-input"
+                    value={name}
+                    maxLength={30}
+                    autoFocus
+                    onChange={(event) => setName(event.target.value)}
+                    onKeyDown={enterSubmit}
+                  />
+                </label>
+              )}
+              <label className="cpt-field">
+                <span className="cpt-field-label">{t('所属大类|Category')}</span>
+                {dialog.mode === 'rename-category' ? (
+                  <input
+                    className="cpt-input"
+                    value={category}
+                    maxLength={30}
+                    autoFocus
+                    onChange={(event) => setCategory(event.target.value)}
+                    onKeyDown={enterSubmit}
+                  />
+                ) : (
+                  <select className="cpt-input" value={category} onChange={(event) => setCategory(event.target.value)}>
+                    {categories.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                    <option value={NEW_CATEGORY}>+ {t('新建大类…|New category…')}</option>
+                  </select>
+                )}
+              </label>
+              {isCustom && dialog.mode !== 'rename-category' && (
+                <label className="cpt-field">
+                  <span className="cpt-field-label">{t('新大类名称|New category name')}</span>
+                  <input
+                    className="cpt-input"
+                    value={custom}
+                    maxLength={30}
+                    autoFocus
+                    onChange={(event) => setCustom(event.target.value)}
+                    onKeyDown={enterSubmit}
+                  />
+                </label>
+              )}
+              {dupName != null && (
+                <span className="cpt-field-hint cpt-field-error">
+                  {t(
+                    `已存在同名概念「${dupName}」，请换一个名称|Concept "${dupName}" already exists; use another name`
+                  )}
+                </span>
+              )}
+            </>
           )}
         </div>
         <div className="modal-footer">

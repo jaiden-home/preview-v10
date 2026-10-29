@@ -37,7 +37,7 @@ Next.js App Router 的应用根目录，包含全部页面路由与 BFF 接口�
   - `search/`：标的搜索（6 位代码精确匹配 + smartbox 名称/拼音联想）。
   - `market/`：行情中心总览（`board/sort/dir` 板块榜视图 + `symbols` 自选批量 → `{ indices, ranking, watches }`）。
   - `screener/board/`：领涨看板数据（`GET`：概览 + 概念热力四周期 + 趋势达标领涨股表；`?refresh=1` 绕缓存重算；5min 进程缓存）。
-  - `admin/concepts/`：概念体系管理（`GET` 概念全景，`?concept=` 附成分表、`?q=` 附股票搜索；`POST` 六写动作 create/update/delete/rename-category/set-member/reorder，zod 校验，短生命周期可写连接事务完成，写后使看板缓存失效）。
+  - `admin/concepts/`：概念体系管理（`GET` 概念全景，可重复 `?concept=` 附各展开概念成分表（只读，`__unassigned__` = 未分类虚拟键；多开面板各自独立）；`POST` 七写动作 create/update/delete/rename-category/reorder/move/set-member，zod 校验，短生命周期可写连接事务完成，写后使看板缓存失效；大类顺序仅页面本地 localStorage，不走接口）。
   - `healthz/`：健康检查（`{ status, uptime, timestamp }`，供 Docker HEALTHCHECK 与探活使用）。
 - `dashboard/`：行情看板页（原首页终端整体迁移，默认上证指数，服务端直出首屏行情与日 K；支持 `?symbol=` 深链，非法代码回退默认）。
 - `market/`：行情中心页（指数概览 + 官方板块榜 + 自选收藏，SSR 直供默认视图 + 客户端 3s 轮询）。
@@ -58,7 +58,7 @@ React UI 组件，按页面域分子目录（`terminal/` 行情终端、`trading
 
 - `screener/ScreenCenter.tsx`：选股中心壳（数据截至徽标 + 刷新 + 主题开关）；`LeaderBoard.tsx` 领涨看板（总览卡 + 概念热力 + chips 联动）；`ConceptTreemap.tsx` 热力图封装（treemap-heatmap 库，四周期/放大/多选）；`LeaderTable.tsx` 领涨股表（18 列排序/筛选/搜索/口径说明）。
 
-- `admin/ConceptAdmin.tsx`：概念管理页主组件（/admin/concepts，UI_SPEC §3.17）：统计带 + 大类分组概念列表（增删改/上下移/过滤）+ 成分面板（搜索划入/移出）+ 新增/编辑弹窗；写操作经 /api/admin/concepts。
+- `admin/ConceptAdmin.tsx`：概念管理页主组件（/admin/concepts，UI_SPEC §3.17）：统计带与工具行单卡 + 大类卡片网格（概念折叠面板，展开查看成分股（只读））+ 新增/编辑弹窗；写操作经 /api/admin/concepts。
 
 - `TradingTerminal.tsx`：终端主组件，负责组装工具栏、信息表格与图表挂载点。
 - `SymbolPicker.tsx` / `PeriodGroup.tsx`：标的搜索切换与周期（分时/分钟/日/周/月）切换；`PeriodGroup` 支持 `simple` 精简模式（仅日/周/月，交易页图表用）。
@@ -101,7 +101,7 @@ React UI 组件，按页面域分子目录（`terminal/` 行情终端、`trading
   - `schemas.ts` / `env.ts`：zod 接口参数校验与环境变量解析。
   - `api.ts` / `logger.ts`：路由层公共封装与 pino 结构化日志。
 - `screener/`：领涨看板视图类型域（环境无关，两端共用）——`types.ts` 看板元信息 + 概念热力 + 领涨股行视图模型（SSR 与 /api/screener/board 共用）。
-- 根级文件：`fundamental.ts`（基本面展示回溯与信息表格渲染）、`i18n.ts`（中英双语文案，`#en-US` hash 兼容原 SPA）、`watchlist.ts`（自选收藏 localStorage 存取，行情中心 / 领涨看板共用）、`concepts.ts`（概念管理视图类型（环境无关，两端共用）——全景/概念行/大类分组/成分与搜索行 + 写动作与结果结构，/admin/concepts 与 /api/admin/concepts 共用）。
+- 根级文件：`fundamental.ts`（基本面展示回溯与信息表格渲染）、`i18n.ts`（中英双语文案，`#en-US` hash 兼容原 SPA）、`watchlist.ts`（自选收藏 localStorage 存取，行情中心 / 领涨看板共用）、`concepts.ts`（概念管理视图类型（环境无关，两端共用）——全景/概念行/大类分组/成分行 + 写动作结构，/admin/concepts 与 /api/admin/concepts 共用）。
 
 ## scripts/
 

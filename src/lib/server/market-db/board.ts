@@ -179,13 +179,16 @@ export const loadBoard = (db: DatabaseSync): BoardData | null => {
         .all() as unknown as AggRow[])
     : []
 
-  // 每股全部领涨概念（热力联动/搜索用）
+  // 每股全部领涨概念（热力联动/搜索用）——按**当前归属**（stock_concepts → conceptsOf）归组：
+  // 口径同 sync:leaders「历史成分变动不可考，以当前快照回看历史」，划转/改名后看板即时跟随；
+  // 不再读 leader_events 留档概念名（该表仅在 scripts 重算时按当时映射重建，会与本表口径漂移）；
+  // 行内 category（当前概念所属大类）同源 conceptsOf，两字段永远一致。未归类领涨股 concepts 为空。
   const conceptListOf = new Map<string, string[]>()
-  if (aggRows.length > 0) {
-    const allC = db
-      .prepare('SELECT code, GROUP_CONCAT(DISTINCT concept_name) names FROM leader_events GROUP BY code')
-      .all() as Array<{ code: string; names: string }>
-    for (const r of allC) conceptListOf.set(r.code, r.names.split(','))
+  for (const a of aggRows) {
+    const current = conceptsOf.get(a.code)
+    if (current != null) {
+      conceptListOf.set(a.code, current)
+    }
   }
 
   // 一年领涨天数（近 365 自然日）

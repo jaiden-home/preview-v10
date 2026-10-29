@@ -89,7 +89,13 @@ export const conceptAdminSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('delete'), name: conceptNameField }),
   z.object({ action: z.literal('rename-category'), category: categoryNameField, next: categoryNameField }),
   z.object({ action: z.literal('set-member'), code: stockCodeField, concept: conceptNameField.nullable() }),
-  z.object({ action: z.literal('reorder'), name: conceptNameField, dir: z.enum(['up', 'down']) })
+  z.object({ action: z.literal('reorder'), name: conceptNameField, dir: z.enum(['up', 'down']) }),
+  z.object({
+    action: z.literal('move'),
+    name: conceptNameField,
+    category: categoryNameField,
+    index: z.number().int().min(0, 'index must be >= 0')
+  })
 ])
 
 export type KlineQuery = z.infer<typeof klineQuerySchema>

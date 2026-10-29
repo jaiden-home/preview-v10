@@ -1,5 +1,12 @@
 import { DatabaseSync } from 'node:sqlite'
-import type { ConceptAdminResult, ConceptCategory, ConceptOverview, ConceptRow, ConceptStockRow } from '../../concepts'
+import {
+  UNASSIGNED_CATEGORY,
+  type ConceptAdminResult,
+  type ConceptCategory,
+  type ConceptOverview,
+  type ConceptRow,
+  type ConceptStockRow
+} from '../../concepts'
 import { marketDbPath } from './db'
 
 // ==================== 概念体系管理域（仅服务端；/admin/concepts 与 /api/admin/concepts 后端） ====================
@@ -9,7 +16,8 @@ import { marketDbPath } from './db'
 //
 // 口径说明：
 //   - concepts.sort = 大类序 ×1000 + 子概念序（展示序），每次写操作后 normalize 重排全表；
-//   - 一股一概念（stock_concepts 以 code 为主键），划入即从原概念移出；
+//   - 概念排序 = 组内上下移（reorder）或拖拽至目标大类指定序位（move）；
+//   - 成分（stock_concepts，一股一概念）经 setMember 拖拽划转（concept=null = 移出到未分类）；
 //   - 概念改名同步改写 stock_concepts / leader_events 的概念名（保留领涨历史）；
 //     删除概念则级联清除成分与历史事件（口径同「以当前快照回看历史」，scripts 侧重算亦可）。
 
@@ -97,11 +105,29 @@ const normalizeSort = (db: DatabaseSync): void => {
 const conceptExists = (db: DatabaseSync, name: string): boolean =>
   db.prepare('SELECT 1 FROM concepts WHERE name = ?').get(name) != null
 
-/** 新增概念（新大类自动追加为大类末位；已有大类则入该大类末位） */
+/**
+ * 新增概念（新大类自动追加为大类末位；已有大类则入该大类末位）。
+ * 一级新增撞同名概念（name === category 且该概念在别的大类下）→ **收编**：
+ * 该概念改归新建同名大类（追加为大类末位），不再报 duplicate；
+ * 真重复（同名同大类）与普通二级撞名仍抛 duplicate。
+ */
 export const createConcept = (db: DatabaseSync, input: { name: string; category: string }): void => {
   withTx(db, () => {
-    if (conceptExists(db, input.name)) {
-      throw new ConceptAdminError('duplicate', `concept "${input.name}" already exists`)
+    const existing = db.prepare('SELECT category FROM concepts WHERE name = ?').get(input.name) as
+      { category: string } | undefined
+    if (existing != null) {
+      if (existing.category === input.category || input.name !== input.category) {
+        throw new ConceptAdminError('duplicate', `concept "${input.name}" already exists`)
+      }
+      const tail = (db.prepare('SELECT COALESCE(MAX(sort), 0) + 1 AS s FROM concepts').get() as { s: number }).s
+      db.prepare('UPDATE concepts SET category = ?, sort = ?, updated_at = ? WHERE name = ?').run(
+        input.category,
+        tail,
+        nowText(),
+        input.name
+      )
+      normalizeSort(db)
+      return
     }
     const sort = (db.prepare('SELECT COALESCE(MAX(sort), 0) + 1 AS s FROM concepts').get() as { s: number }).s
     db.prepare('INSERT INTO concepts (name, category, sort, updated_at) VALUES (?, ?, ?, ?)').run(
@@ -196,7 +222,83 @@ export const renameCategory = (db: DatabaseSync, category: string, next: string)
   })
 }
 
-/** 成分划转：一股一概念（concept=null 移出归类）；返回先前概念供提示 */
+/** 组内上下移（同大类相邻交换 sort；无相邻 = 幂等成功） */
+export const reorderConcept = (db: DatabaseSync, name: string, dir: 'up' | 'down'): void => {
+  withTx(db, () => {
+    const row = db.prepare('SELECT name, category, sort FROM concepts WHERE name = ?').get(name) as
+      { name: string; category: string; sort: number } | undefined
+    if (row == null) {
+      throw new ConceptAdminError('not_found', `concept "${name}" not found`)
+    }
+    const neighbor = (
+      dir === 'up'
+        ? db.prepare('SELECT name, sort FROM concepts WHERE category = ? AND sort < ? ORDER BY sort DESC LIMIT 1')
+        : db.prepare('SELECT name, sort FROM concepts WHERE category = ? AND sort > ? ORDER BY sort ASC LIMIT 1')
+    ).get(row.category, row.sort) as { name: string; sort: number } | undefined
+    if (neighbor == null) {
+      return
+    }
+    const upd = db.prepare('UPDATE concepts SET sort = ? WHERE name = ?')
+    upd.run(neighbor.sort, row.name)
+    upd.run(row.sort, neighbor.name)
+  })
+}
+
+/**
+ * 拖拽排序：将概念移至目标大类的指定序位（同大类换序 / 跨大类换组）。
+ * index 按目标大类现有成员（不含被拖概念）序位插入，越界钳制到首/尾；
+ * 全表按「大类首现序 ×1000 + 组内序」重写 sort。
+ */
+export const moveConcept = (db: DatabaseSync, input: { name: string; category: string; index: number }): void => {
+  withTx(db, () => {
+    const row = db.prepare('SELECT name, category FROM concepts WHERE name = ?').get(input.name) as
+      { name: string; category: string } | undefined
+    if (row == null) {
+      throw new ConceptAdminError('not_found', `concept "${input.name}" not found`)
+    }
+    if (
+      input.category !== row.category &&
+      db.prepare('SELECT 1 FROM concepts WHERE category = ?').get(input.category) == null
+    ) {
+      throw new ConceptAdminError('not_found', `category "${input.category}" not found`)
+    }
+    const all = db.prepare('SELECT name, category FROM concepts ORDER BY sort, name').all() as unknown as Array<{
+      name: string
+      category: string
+    }>
+    // 大类首现序取全量（含被拖概念，保证其原大类即使被拖空也保位）
+    const catOrder: string[] = []
+    for (const r of all) {
+      if (!catOrder.includes(r.category)) {
+        catOrder.push(r.category)
+      }
+    }
+    const groups = new Map<string, Array<{ name: string; category: string }>>()
+    for (const c of catOrder) {
+      groups.set(c, [])
+    }
+    for (const r of all) {
+      if (r.name !== input.name) {
+        groups.get(r.category)!.push(r)
+      }
+    }
+    const target = groups.get(input.category)!
+    const index = Math.max(0, Math.min(input.index, target.length))
+    target.splice(index, 0, { name: input.name, category: input.category })
+    // 中间 sort 只需保序（按 catOrder 组序全表递增），×1000 编码统一交 normalizeSort 收口
+    const update = db.prepare('UPDATE concepts SET category = ?, sort = ?, updated_at = ? WHERE name = ?')
+    let sort = 0
+    for (const c of catOrder) {
+      for (const member of groups.get(c)!) {
+        sort += 1
+        update.run(member.category, sort, nowText(), member.name)
+      }
+    }
+    normalizeSort(db)
+  })
+}
+
+/** 成分划转：一股一概念（concept=null 移出到未分类）；返回先前概念供提示 */
 export const setMember = (db: DatabaseSync, code: string, concept: string | null): ConceptAdminResult => {
   return withTx(db, () => {
     if (db.prepare('SELECT 1 FROM stocks WHERE code = ?').get(code) == null) {
@@ -217,28 +319,6 @@ export const setMember = (db: DatabaseSync, code: string, concept: string | null
       ).run(code, concept, nowText())
     }
     return { prevConcept: prev }
-  })
-}
-
-/** 组内上下移（同大类相邻交换 sort；无相邻 = 幂等成功） */
-export const reorderConcept = (db: DatabaseSync, name: string, dir: 'up' | 'down'): void => {
-  withTx(db, () => {
-    const row = db.prepare('SELECT name, category, sort FROM concepts WHERE name = ?').get(name) as
-      { name: string; category: string; sort: number } | undefined
-    if (row == null) {
-      throw new ConceptAdminError('not_found', `concept "${name}" not found`)
-    }
-    const neighbor = (
-      dir === 'up'
-        ? db.prepare('SELECT name, sort FROM concepts WHERE category = ? AND sort < ? ORDER BY sort DESC LIMIT 1')
-        : db.prepare('SELECT name, sort FROM concepts WHERE category = ? AND sort > ? ORDER BY sort ASC LIMIT 1')
-    ).get(row.category, row.sort) as { name: string; sort: number } | undefined
-    if (neighbor == null) {
-      return
-    }
-    const upd = db.prepare('UPDATE concepts SET sort = ? WHERE name = ?')
-    upd.run(neighbor.sort, row.name)
-    upd.run(row.sort, neighbor.name)
   })
 }
 
@@ -273,45 +353,48 @@ export const loadConceptOverview = (db: DatabaseSync): ConceptOverview => {
          (SELECT COUNT(*) FROM concepts) AS concepts,
          (SELECT COUNT(DISTINCT category) FROM concepts) AS categories,
          (SELECT COUNT(*) FROM stock_concepts) AS members,
-         (SELECT COUNT(*) FROM stocks WHERE enabled = 1) AS enabledStocks`
+         (SELECT COUNT(*) FROM stocks WHERE enabled = 1) AS enabledStocks,
+         (SELECT COUNT(*) FROM stocks s LEFT JOIN stock_concepts sc ON sc.code = s.code
+          WHERE sc.code IS NULL AND s.enabled = 1) AS unassignedStocks`
     )
-    .get() as { concepts: number; categories: number; members: number; enabledStocks: number }
+    .get() as {
+    concepts: number
+    categories: number
+    members: number
+    enabledStocks: number
+    unassignedStocks: number
+  }
   return { stats, categories, concepts }
 }
 
-/** LIKE 转义（用户输入含 %/_ 时按字面匹配） */
-const likeOf = (q: string): string => `${q.replace(/[\\%_]/g, (m) => `\\${m}`)}%`
-
-/** 股票搜索（代码前缀 / 名称包含，各取前 limit；启用股优先） */
-export const searchStocks = (db: DatabaseSync, q: string, limit = 20): ConceptStockRow[] => {
-  const like = likeOf(q)
-  const rows = db
-    .prepare(
-      `SELECT s.code, s.name, s.exchange, s.industry, s.enabled, sc.concept_name AS concept
-       FROM stocks s LEFT JOIN stock_concepts sc ON sc.code = s.code
-       WHERE s.code LIKE ? ESCAPE '\\' OR s.name LIKE ? ESCAPE '\\'
-       ORDER BY s.enabled DESC, s.code LIMIT ?`
-    )
-    .all(like, `%${like}`, limit) as unknown as Array<{
-    code: string
-    name: string
-    exchange: string
-    industry: string | null
-    enabled: number
-    concept: string | null
-  }>
-  return rows.map((r) => ({
-    code: r.code,
-    name: r.name,
-    exchange: r.exchange,
-    industry: r.industry,
-    enabled: r.enabled === 1,
-    concept: r.concept
-  }))
-}
-
-/** 概念成分表（按代码序）；概念不存在抛 not_found */
+/**
+ * 概念成分表（只读视图，按代码序）；概念不存在抛 not_found。
+ * concept = UNASSIGNED_CATEGORY 为**未分类虚拟分组**（无落库行，仅页面视图）：
+ * 返回无 stock_concepts 行的**启用股**集合（停用/退市股不计）。
+ */
 export const listMembers = (db: DatabaseSync, concept: string): ConceptStockRow[] => {
+  if (concept === UNASSIGNED_CATEGORY) {
+    const rows = db
+      .prepare(
+        `SELECT s.code, s.name, s.exchange, s.industry, s.enabled
+         FROM stocks s LEFT JOIN stock_concepts sc ON sc.code = s.code
+         WHERE sc.code IS NULL AND s.enabled = 1 ORDER BY s.code`
+      )
+      .all() as unknown as Array<{
+      code: string
+      name: string
+      exchange: string
+      industry: string | null
+      enabled: number
+    }>
+    return rows.map((r) => ({
+      code: r.code,
+      name: r.name,
+      exchange: r.exchange,
+      industry: r.industry,
+      enabled: r.enabled === 1
+    }))
+  }
   if (!conceptExists(db, concept)) {
     throw new ConceptAdminError('not_found', `concept "${concept}" not found`)
   }
@@ -333,7 +416,6 @@ export const listMembers = (db: DatabaseSync, concept: string): ConceptStockRow[
     name: r.name,
     exchange: r.exchange,
     industry: r.industry,
-    enabled: r.enabled === 1,
-    concept
+    enabled: r.enabled === 1
   }))
 }

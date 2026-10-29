@@ -190,6 +190,21 @@ describe('loadBoard', () => {
     expect(row.joinDate).toBeNull()
   })
 
+  it('领涨概念按当前归属归组：划转后即时跟随（不读 leader_events 留档概念名）', () => {
+    // leader_events 留档仍是「银行」；当前归属改到「地产」→ 领涨表概念/大类即时切换
+    db.prepare("UPDATE stock_concepts SET concept_name = '地产' WHERE code = '000001'").run()
+    const board = loadBoard(db)!
+    const row = board.leaders.find((l) => l.code === '000001')!
+    expect(row.concepts).toEqual(['地产'])
+    expect(row.category).toBe('金融')
+    // 移出到未归类 → concepts 为空、大类为 null（热力联动/搜索不再命中）
+    db.prepare('DELETE FROM stock_concepts WHERE code = ?').run('000001')
+    const board2 = loadBoard(db)!
+    const row2 = board2.leaders.find((l) => l.code === '000001')!
+    expect(row2.concepts).toEqual([])
+    expect(row2.category).toBeNull()
+  })
+
   it('B 点日期为横盘转涨后的首个三连涨链第 3 日（此后链不断不再等于 3）', () => {
     const board = loadBoard(db)!
     const row = board.leaders[0]!

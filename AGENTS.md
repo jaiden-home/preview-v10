@@ -26,11 +26,11 @@ A 股行情预览 + 模拟交易的 Web 终端：Next.js 16（App Router，stand
 - `components/terminal/`：行情终端组件（`TradingTerminal` 及工具栏 / 信息表格 / 指标弹窗，图表生命周期统一在 `useChartTerminal`）。
 - `components/trading/`：模拟交易组件（`PaperTrading` / `TradeSummary` / `OrderPanel` / `PositionsTable` / `TradesTable`，`useNotice` + `TradeToast` 为 Toast 通知 hook 与双轨呈现组件）。
 - `components/home/`：首页入口组件（`HomeLanding`：行情中心 / 选股中心 / 看板 / 交易 / 极速模拟 / 模拟设置 / 概念管理七张入口卡片）。
-- `components/admin/`：管理页组件（`ConceptAdmin` 概念管理：概念/大类增删改 + 组内排序 + 成分股划转，经 /api/admin/concepts）。
+- `components/admin/`：管理页组件（`ConceptAdmin` 概念管理：概念/大类增删改 + 大类/概念拖拽排序（`move-category`/`move`）+ 折叠面板查看成分股 + 个股拖拽划转（`set-member`），经 /api/admin/concepts）。
 - `components/market/`：行情中心组件（`MarketCenter`：指数概览 + 板块榜单 + 自选收藏；`StarButton` 自选星标，与领涨看板共用）。
 - `components/screener/`：选股中心组件（`ScreenCenter` 页壳 / `LeaderBoard` 领涨看板 / `ConceptTreemap` 概念热力 / `LeaderTable` 领涨股表）。
 - `lib/screener/`：领涨看板视图类型域（环境无关，两端共用）——`types.ts` 看板元信息 + 概念热力 + 领涨股行视图模型（SSR 与 /api/screener/board 共用）。
-- `lib/concepts.ts`：概念管理视图类型域（环境无关，两端共用）——全景/概念行/大类分组/成分与搜索行 + 写动作结构（/admin/concepts 与 /api/admin/concepts 共用）。
+- `lib/concepts.ts`：概念管理视图类型域（环境无关，两端共用）——全景/概念行/大类分组/成分行 + 写动作结构（/admin/concepts 与 /api/admin/concepts 共用）。
 - `lib/watchlist.ts`：自选收藏 localStorage 存取（行情中心 / 领涨看板共用）。
 - `lib/chart/`：环境无关的图表域逻辑（`ChartTerminal` 命令式控制器、`DataLoader`、分时状态机、纯函数及测试）。对 klinecharts 一律动态 `import()`，**禁止进入服务端模块图**。
 - `lib/server/`：仅服务端（`market-service` 数据源编排、`provider/tencent` 腾讯实现、`trading/` 模拟交易服务域【contract/registry/engine + local（node:sqlite 持久化），/simtrade 账务与回放会话权威结算】、`market-db/` 行情快照库只读访问与领涨看板计算 + `concepts.ts` 概念管理域（**唯一写入口**：短生命周期可写连接事务 + sort normalize，写后失效看板缓存；node:sqlite，dbdata/market.db）、TTLCache、限流、zod、pino），禁止被客户端引用。

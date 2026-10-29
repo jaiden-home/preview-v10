@@ -3,6 +3,9 @@
 // 管理页 /admin/concepts 与 /api/admin/concepts 共用本结构，写操作服务端在
 // lib/server/market-db/concepts.ts。
 
+/** 未分类虚拟分组键（无落库行，仅页面视图：= 无 stock_concepts 行的股票集合） */
+export const UNASSIGNED_CATEGORY = '__unassigned__'
+
 /** 概念行（列表视图；members = 当前成分股数） */
 export interface ConceptRow {
   name: string
@@ -26,6 +29,8 @@ export interface ConceptStats {
   categories: number
   members: number
   enabledStocks: number
+  /** 未归类股票数（无 stock_concepts 行） */
+  unassignedStocks: number
 }
 
 /** 概念全景（GET /api/admin/concepts 主结构） */
@@ -35,20 +40,18 @@ export interface ConceptOverview {
   concepts: ConceptRow[]
 }
 
-/** 成分股行 / 股票搜索行（concept = 现属概念，null = 未归类） */
+/** 成分股行（概念折叠面板展开视图，只读） */
 export interface ConceptStockRow {
   code: string
   name: string
   exchange: string
   industry: string | null
   enabled: boolean
-  concept: string | null
 }
 
-/** GET 响应：全景 + 按需附带（concept= 概念成分表 / q= 股票搜索） */
+/** GET 响应：全景 + 按需附带（可重复 concept=，各展开概念的成分表；键 = 概念名或 UNASSIGNED_CATEGORY） */
 export interface ConceptAdminData extends ConceptOverview {
-  members?: ConceptStockRow[]
-  stocks?: ConceptStockRow[]
+  members?: Record<string, ConceptStockRow[]>
 }
 
 /** 概念管理写动作（POST body；与 lib/server/schemas.ts 的 zod 定义对齐） */
@@ -59,8 +62,9 @@ export type ConceptAdminAction =
   | { action: 'rename-category'; category: string; next: string }
   | { action: 'set-member'; code: string; concept: string | null }
   | { action: 'reorder'; name: string; dir: 'up' | 'down' }
+  | { action: 'move'; name: string; category: string; index: number }
 
-/** 写操作结果（extra 供 Toast 文案，如划转的先前概念） */
+/** 写操作结果（set-member 的 prevConcept 供划转 Toast 文案） */
 export interface ConceptAdminResult {
   prevConcept?: string | null
 }

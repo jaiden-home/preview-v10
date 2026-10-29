@@ -273,7 +273,7 @@ export default function HomeLanding() {
             </span>
             <span className="home-card-title">{t('概念管理|Concept Admin')}</span>
             <span className="home-card-desc">
-              {t('概念与大类维护、成分股划转|Manage concepts, categories and members')}
+              {t('概念与大类的维护与排序|Manage concepts, categories and ordering')}
             </span>
           </Link>
         </nav>

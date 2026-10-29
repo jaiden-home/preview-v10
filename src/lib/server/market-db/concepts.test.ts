@@ -1,20 +1,22 @@
 import { DatabaseSync } from 'node:sqlite'
 import { beforeEach, describe, expect, it } from 'vitest'
+import { UNASSIGNED_CATEGORY } from '../../concepts'
 import {
   ConceptAdminError,
   createConcept,
   deleteConcept,
+  listMembers,
   loadConceptOverview,
+  moveConcept,
   reorderConcept,
   renameCategory,
-  searchStocks,
   setMember,
   updateConcept
 } from './concepts'
 
 // ==================== 概念管理域测试（:memory: 夹具） ====================
-// 覆盖：create/update/delete/rename-category/set-member/reorder 写操作与
-// normalize 排序口径（大类序×1000 + 子概念序）、全景读视图与股票搜索。
+// 覆盖：create/update/delete/rename-category/reorder/move/set-member 写操作与
+// normalize 排序口径（大类序×1000 + 子概念序）、全景读视图与成分视图（含未分类虚拟键）。
 
 const buildDb = (): DatabaseSync => {
   const db = new DatabaseSync(':memory:')
@@ -92,6 +94,25 @@ describe('createConcept', () => {
   it('失败不落库（事务回滚）', () => {
     expect(() => createConcept(db, { name: '半导体', category: '新大类' })).toThrowError(ConceptAdminError)
     expect(db.prepare("SELECT COUNT(*) AS n FROM concepts WHERE category = '新大类'").get()).toEqual({ n: 0 })
+  })
+
+  it('一级新增撞同名概念（在别的大类）→ 收编为同名大类唯一成员', () => {
+    // 夹具中「存储芯片」挂在「芯片」大类下；一级新增「存储芯片」→ 收编为同名大类
+    createConcept(db, { name: '存储芯片', category: '存储芯片' })
+    const overview = loadConceptOverview(db)
+    expect(conceptCategory('存储芯片')).toBe('存储芯片')
+    expect(overview.categories.map((c) => c.name)).toEqual(['半导体', '芯片', '存储芯片'])
+    expect(overview.concepts.filter((c) => c.category === '存储芯片').map((c) => c.name)).toEqual(['存储芯片'])
+    expect(overview.concepts.filter((c) => c.category === '芯片').map((c) => c.name)).toEqual(['芯片'])
+  })
+
+  it('收编后同名同大类 → 真重复 duplicate', () => {
+    createConcept(db, { name: '存储芯片', category: '存储芯片' })
+    expect(() => createConcept(db, { name: '存储芯片', category: '存储芯片' })).toThrowError(ConceptAdminError)
+  })
+
+  it('普通二级撞名（换大类建同名概念）仍 duplicate', () => {
+    expect(() => createConcept(db, { name: '芯片', category: '半导体' })).toThrowError(ConceptAdminError)
   })
 })
 
@@ -172,36 +193,6 @@ describe('renameCategory', () => {
   })
 })
 
-describe('setMember', () => {
-  it('划入空概念股 → 建立', () => {
-    const result = setMember(db, '000001', '芯片')
-    expect(result.prevConcept).toBeNull()
-    expect(rowsOf('SELECT concept_name FROM stock_concepts WHERE code = ?', '000001')).toEqual([
-      { concept_name: '芯片' }
-    ])
-  })
-
-  it('划入已有概念股 → 移出原概念（一股一概念），返回先前概念', () => {
-    const result = setMember(db, '600519', '芯片')
-    expect(result.prevConcept).toBe('半导体')
-    expect(rowsOf('SELECT COUNT(*) AS n FROM stock_concepts WHERE concept_name = ?', '半导体')).toEqual([{ n: 0 }])
-    expect(rowsOf('SELECT concept_name FROM stock_concepts WHERE code = ?', '600519')).toEqual([
-      { concept_name: '芯片' }
-    ])
-  })
-
-  it('concept=null 移出归类（幂等）', () => {
-    expect(setMember(db, '600519', null).prevConcept).toBe('半导体')
-    expect(setMember(db, '600519', null).prevConcept).toBeNull()
-    expect(db.prepare('SELECT COUNT(*) AS n FROM stock_concepts').get()).toEqual({ n: 0 })
-  })
-
-  it('股票或概念不存在 → not_found', () => {
-    expect(() => setMember(db, '999999', '芯片')).toThrowError(ConceptAdminError)
-    expect(() => setMember(db, '000001', '不存在')).toThrowError(ConceptAdminError)
-  })
-})
-
 describe('reorderConcept', () => {
   it('组内上移 = 与前一个交换', () => {
     reorderConcept(db, '半导体设备', 'up')
@@ -228,10 +219,97 @@ describe('reorderConcept', () => {
   })
 })
 
+describe('moveConcept', () => {
+  const namesOf = (category: string): Array<{ name: string; sort: number }> =>
+    rowsOf('SELECT name, sort FROM concepts WHERE category = ? ORDER BY sort', category) as Array<{
+      name: string
+      sort: number
+    }>
+
+  it('同大类拖到指定序位', () => {
+    moveConcept(db, { name: '存储芯片', category: '芯片', index: 0 })
+    expect(namesOf('芯片').map((r) => r.name)).toEqual(['存储芯片', '芯片'])
+    expect(namesOf('芯片').map((r) => r.sort)).toEqual([2001, 2002])
+    // 其他大类不受影响
+    expect(namesOf('半导体').map((r) => r.name)).toEqual(['半导体', '半导体设备'])
+  })
+
+  it('跨大类换组并归入指定序位', () => {
+    moveConcept(db, { name: '半导体', category: '芯片', index: 1 })
+    expect(namesOf('芯片').map((r) => r.name)).toEqual(['芯片', '半导体', '存储芯片'])
+    expect(namesOf('半导体').map((r) => r.name)).toEqual(['半导体设备'])
+    // 全表 sort 仍为 大类序×1000 + 组内序
+    expect(namesOf('半导体')[0]?.sort).toBe(1001)
+    expect(namesOf('芯片').map((r) => r.sort)).toEqual([2001, 2002, 2003])
+  })
+
+  it('index 越界钳制到尾部', () => {
+    moveConcept(db, { name: '半导体', category: '半导体', index: 99 })
+    expect(namesOf('半导体').map((r) => r.name)).toEqual(['半导体设备', '半导体'])
+  })
+
+  it('拖走原大类全部成员后原大类消失（空大类无落库行）', () => {
+    moveConcept(db, { name: '芯片', category: '半导体', index: 0 })
+    moveConcept(db, { name: '存储芯片', category: '半导体', index: 1 })
+    expect(db.prepare("SELECT COUNT(*) AS n FROM concepts WHERE category = '芯片'").get()).toEqual({ n: 0 })
+    expect(namesOf('半导体').map((r) => r.name)).toEqual(['芯片', '存储芯片', '半导体', '半导体设备'])
+  })
+
+  it('跨组往返不污染无关行（回归）', () => {
+    moveConcept(db, { name: '半导体设备', category: '芯片', index: 0 })
+    moveConcept(db, { name: '半导体设备', category: '半导体', index: 1 })
+    expect(namesOf('半导体').map((r) => r.name)).toEqual(['半导体', '半导体设备'])
+    expect(namesOf('芯片').map((r) => r.name)).toEqual(['芯片', '存储芯片'])
+    expect(namesOf('芯片').map((r) => r.sort)).toEqual([2001, 2002])
+  })
+
+  it('概念或目标大类不存在 → not_found', () => {
+    expect(() => moveConcept(db, { name: '不存在', category: '芯片', index: 0 })).toThrowError(ConceptAdminError)
+    expect(() => moveConcept(db, { name: '芯片', category: '不存在', index: 0 })).toThrowError(ConceptAdminError)
+  })
+})
+
+describe('setMember', () => {
+  it('划入空概念股 → 建立', () => {
+    const result = setMember(db, '000001', '芯片')
+    expect(result.prevConcept).toBeNull()
+    expect(rowsOf('SELECT concept_name FROM stock_concepts WHERE code = ?', '000001')).toEqual([
+      { concept_name: '芯片' }
+    ])
+  })
+
+  it('划入已有概念股 → 移出原概念（一股一概念），返回先前概念', () => {
+    const result = setMember(db, '600519', '芯片')
+    expect(result.prevConcept).toBe('半导体')
+    expect(rowsOf('SELECT COUNT(*) AS n FROM stock_concepts WHERE concept_name = ?', '半导体')).toEqual([{ n: 0 }])
+    expect(rowsOf('SELECT concept_name FROM stock_concepts WHERE code = ?', '600519')).toEqual([
+      { concept_name: '芯片' }
+    ])
+  })
+
+  it('concept=null 移出到未分类（幂等）', () => {
+    expect(setMember(db, '600519', null).prevConcept).toBe('半导体')
+    expect(setMember(db, '600519', null).prevConcept).toBeNull()
+    expect(db.prepare('SELECT COUNT(*) AS n FROM stock_concepts').get()).toEqual({ n: 0 })
+  })
+
+  it('股票或概念不存在 → not_found', () => {
+    expect(() => setMember(db, '999999', '芯片')).toThrowError(ConceptAdminError)
+    expect(() => setMember(db, '000001', '不存在')).toThrowError(ConceptAdminError)
+  })
+})
+
 describe('loadConceptOverview', () => {
   it('统计带 + 大类分组（按展示序）+ 概念行成分数', () => {
     const overview = loadConceptOverview(db)
-    expect(overview.stats).toEqual({ concepts: 4, categories: 2, members: 1, enabledStocks: 2 })
+    // 夹具：600519 归入半导体；000001 / 300999 未归类（未分类仅计启用股 → 300999 停用不计）
+    expect(overview.stats).toEqual({
+      concepts: 4,
+      categories: 2,
+      members: 1,
+      enabledStocks: 2,
+      unassignedStocks: 1
+    })
     expect(overview.categories).toEqual([
       { name: '半导体', concepts: 2, members: 1 },
       { name: '芯片', concepts: 2, members: 0 }
@@ -241,34 +319,30 @@ describe('loadConceptOverview', () => {
   })
 })
 
-describe('searchStocks', () => {
-  it('代码前缀 / 名称包含，启用股优先，带现属概念', () => {
-    const byCode = searchStocks(db, '6005')
-    expect(byCode.map((s) => s.code)).toEqual(['600519'])
-    expect(byCode[0]?.concept).toBe('半导体')
-
-    const byName = searchStocks(db, '银行')
-    expect(byName.map((s) => s.code)).toEqual(['000001'])
-    expect(byName[0]?.concept).toBeNull()
-  })
-
-  it('停用股排后且可见', () => {
-    const rows = searchStocks(db, '300')
-    expect(rows.map((s) => s.code)).toContain('300999')
-    expect(rows.find((s) => s.code === '300999')?.enabled).toBe(false)
-  })
-
-  it('LIKE 通配符按字面匹配（不误伤）', () => {
-    expect(searchStocks(db, '%')).toEqual([])
-  })
-
-  it('限制返回条数', () => {
-    const ins = db.prepare(
-      'INSERT INTO stocks (code, name, exchange, board, industry, enabled, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+describe('listMembers', () => {
+  it('按代码序返回成分（只读视图）', () => {
+    db.prepare('INSERT INTO stock_concepts (code, concept_name, updated_at) VALUES (?, ?, ?)').run(
+      '000001',
+      '半导体',
+      '2026-01-01 00:00:00'
     )
-    for (let i = 0; i < 30; i++) {
-      ins.run(`6007${`${i}`.padStart(2, '0')}`, `股${i}`, 'SH', 'main', null, 1, '2026-01-01 00:00:00')
-    }
-    expect(searchStocks(db, '6007', 20)).toHaveLength(20)
+    const members = listMembers(db, '半导体')
+    expect(members.map((m) => m.code)).toEqual(['000001', '600519'])
+    expect(members.find((m) => m.code === '000001')).toEqual({
+      code: '000001',
+      name: '平安银行',
+      exchange: 'SZ',
+      industry: '金融业',
+      enabled: true
+    })
+  })
+
+  it('未分类虚拟键 → 返回未归类启用股（停用股不计）', () => {
+    const members = listMembers(db, UNASSIGNED_CATEGORY)
+    expect(members.map((m) => m.code)).toEqual(['000001'])
+  })
+
+  it('概念不存在 → not_found', () => {
+    expect(() => listMembers(db, '不存在')).toThrowError(ConceptAdminError)
   })
 })

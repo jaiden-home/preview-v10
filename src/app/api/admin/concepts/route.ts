@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server'
 import { allowRequest, jsonError, jsonOk, requestIdOf } from '@/lib/server/api'
 import { requestLogger } from '@/lib/server/logger'
-import type { ConceptAdminData } from '@/lib/concepts'
+import type { ConceptAdminData, ConceptAdminResult, ConceptStockRow } from '@/lib/concepts'
 import { invalidateBoardCache } from '@/lib/server/market-db/board'
 import {
   ConceptAdminError,
@@ -9,9 +9,9 @@ import {
   deleteConcept,
   loadConceptOverview,
   listMembers,
+  moveConcept,
   renameCategory,
   reorderConcept,
-  searchStocks,
   setMember,
   updateConcept,
   withWritableMarketDb
@@ -22,8 +22,8 @@ import { conceptAdminSchema } from '@/lib/server/schemas'
 export const dynamic = 'force-dynamic'
 
 // ==================== 概念体系管理接口（/admin/concepts 页后端） ====================
-// GET：概念全景（统计 + 大类 + 概念行），?concept= 附成分表，?q= 附股票搜索（划入用）。
-// POST：写动作（create/update/delete/rename-category/set-member/reorder），
+// GET：概念全景（统计 + 大类 + 概念行），?concept= 附成分表（只读；__unassigned__ = 未分类虚拟键）。
+// POST：写动作（create/update/delete/rename-category/reorder/move/set-member），
 //       短生命周期可写连接事务内完成，成功后使领涨看板缓存失效。
 
 /** GET：管理页全景数据（只读单例；无进程缓存——数据量小且要求写后即时一致） */
@@ -34,18 +34,17 @@ export async function GET(request: NextRequest) {
   if (!marketDbExists()) {
     return jsonError(503, 'market_db_missing', 'market snapshot database not provisioned')
   }
-  const query = new URL(request.url).searchParams
-  const concept = query.get('concept') ?? ''
-  const q = (query.get('q') ?? '').trim()
+  const concepts = new URL(request.url).searchParams.getAll('concept')
   const log = requestLogger(requestIdOf(request))
   try {
     const db = getMarketDb()
     const data: ConceptAdminData = { ...loadConceptOverview(db) }
-    if (concept !== '') {
-      data.members = listMembers(db, concept)
-    }
-    if (q !== '') {
-      data.stocks = searchStocks(db, q)
+    if (concepts.length > 0) {
+      const members: Record<string, ConceptStockRow[]> = {}
+      for (const concept of concepts) {
+        members[concept] = listMembers(db, concept)
+      }
+      data.members = members
     }
     return jsonOk(data)
   } catch (error) {
@@ -77,7 +76,7 @@ export async function POST(request: NextRequest) {
   }
   const log = requestLogger(requestIdOf(request))
   try {
-    const result = withWritableMarketDb((db) => {
+    const result = withWritableMarketDb((db): Record<string, unknown> | ConceptAdminResult => {
       const action = parsed.data
       switch (action.action) {
         case 'create':
@@ -92,11 +91,14 @@ export async function POST(request: NextRequest) {
         case 'rename-category':
           renameCategory(db, action.category, action.next)
           return {}
-        case 'set-member':
-          return setMember(db, action.code, action.concept)
         case 'reorder':
           reorderConcept(db, action.name, action.dir)
           return {}
+        case 'move':
+          moveConcept(db, action)
+          return {}
+        case 'set-member':
+          return setMember(db, action.code, action.concept)
       }
     })
     invalidateBoardCache()

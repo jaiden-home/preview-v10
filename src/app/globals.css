@@ -3589,6 +3589,7 @@ body {
   grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
   gap: 10px;
   padding: 12px 14px;
+  border-bottom: 1px solid var(--tb-border);
 }
 
 #app .cpt-stats .screen-stat-v {
@@ -3596,22 +3597,13 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* 双列主体：概念体系 + 成分面板 */
-#app .cpt-body {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 360px;
-  gap: 12px;
-  align-items: start;
-}
-
-/* 概念列表卡：工具头（标题 + 计数 + 过滤 + 新增） */
+/* 工具行（标题 + 计数 + 过滤 + 新增；统计卡末段） */
 #app .cpt-list-head {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
-  padding: 10px 14px 8px;
-  border-bottom: 1px solid var(--tb-border);
+  padding: 10px 14px;
 }
 
 #app .cpt-title {
@@ -3649,7 +3641,7 @@ body {
   box-shadow: 0 0 0 3px var(--tb-active-bg);
 }
 
-/* 新增概念：品牌蓝实底 CTA（§2.3 品牌蓝投影） */
+/* 新增：品牌蓝实底 CTA（§2.3 品牌蓝投影）；一级/二级层级在弹窗内切换 */
 #app .cpt-add-btn {
   height: 32px;
   padding: 0 12px;
@@ -3668,19 +3660,22 @@ body {
   filter: brightness(1.06);
 }
 
-/* 大类分组：描边容器 + 淡底组头 */
+/* 大类卡片网格：每大类一张 .trade-card 同款卡 */
 #app .cpt-groups {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 12px 14px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 12px;
+  align-items: start;
 }
 
 #app .cpt-group {
   display: flex;
   flex-direction: column;
+  min-width: 0;
+  background-color: var(--tb-bg);
   border: 1px solid var(--tb-border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
   overflow: hidden;
 }
 
@@ -3688,8 +3683,15 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 5px 8px 5px 10px;
+  padding: 6px 8px 6px 12px;
   background-color: var(--tb-hover);
+  border-bottom: 1px solid var(--tb-border);
+  cursor: grab;
+}
+
+/* 未分类虚拟分组：虚线描边示意非落库分组（数据侧无此大类） */
+#app .cpt-group.virtual {
+  border-style: dashed;
 }
 
 #app .cpt-group-name {
@@ -3710,47 +3712,89 @@ body {
   white-space: nowrap;
 }
 
-/* 概念行：名称（点击看成分）+ 成分数 + 行内操作 */
-#app .cpt-row {
+/* 概念折叠行：头（箭头 + 名称 + 成分数 + 行内操作）+ 展开体（成分股） */
+#app .cpt-row + .cpt-row {
+  border-top: 1px solid var(--tb-border);
+}
+
+#app .cpt-row-head {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 3px 8px 3px 6px;
-  border-top: 1px solid var(--tb-border);
+  padding: 4px 8px 4px 6px;
+  cursor: grab;
   transition: background-color 0.2s ease;
 }
 
-#app .cpt-row:hover {
+#app .cpt-row-head:hover {
   background-color: var(--tb-hover);
 }
 
-#app .cpt-row.active {
+/* 拖拽落点指示：行头上下缘品牌蓝插入线；组卡描边高亮（仅接受对应载荷时组件才挂类） */
+#app .cpt-row-head.drag-before {
+  box-shadow: inset 0 2px 0 var(--tb-active);
+}
+
+#app .cpt-row-head.drag-after {
+  box-shadow: inset 0 -2px 0 var(--tb-active);
+}
+
+#app .cpt-group.drag-over {
+  border-color: var(--tb-active);
+}
+
+/* 大类拖拽落点指示：目标卡上/下缘品牌蓝插入线（叠加卡片阴影） */
+#app .cpt-group.cat-before {
+  box-shadow:
+    var(--shadow-card),
+    inset 0 2px 0 var(--tb-active);
+}
+
+#app .cpt-group.cat-after {
+  box-shadow:
+    var(--shadow-card),
+    inset 0 -2px 0 var(--tb-active);
+}
+
+#app .cpt-row.open .cpt-row-head {
   background-color: var(--tb-active-bg);
+}
+
+#app .cpt-row-chevron {
+  flex: none;
+  display: inline-flex;
+  color: var(--tb-text-sub);
+  transition: transform 0.2s ease;
+}
+
+#app .cpt-row-chevron.open {
+  transform: rotate(90deg);
+}
+
+#app .cpt-row-chevron svg {
+  width: 12px;
+  height: 12px;
 }
 
 #app .cpt-row-name {
   flex: 1;
   min-width: 0;
-  border: none;
-  background: transparent;
   color: var(--tb-text);
   font-size: 12px;
   font-family: var(--font-sans);
   text-align: left;
-  padding: 5px 6px;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
+  padding: 5px 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   transition: color 0.2s ease;
 }
 
-#app .cpt-row-name:hover {
+#app .cpt-row-head:hover .cpt-row-name {
   color: var(--tb-active);
 }
 
-#app .cpt-row.active .cpt-row-name {
+#app .cpt-row.open .cpt-row-name {
   color: var(--tb-active);
   font-weight: 600;
 }
@@ -3787,132 +3831,78 @@ body {
 }
 
 #app .cpt-empty {
+  grid-column: 1 / -1;
   padding: 24px 14px;
   text-align: center;
   font-size: 11px;
   color: var(--tb-text-sub);
 }
 
-/* 成分面板：概念名 + 大类 + 数量 + 关闭 */
-#app .cpt-members-head {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 10px 14px 8px;
-  border-bottom: 1px solid var(--tb-border);
-}
-
-#app .cpt-members-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--tb-text);
-}
-
-#app .cpt-members-sub {
-  font-size: 10px;
-  color: var(--tb-text-sub);
-}
-
-#app .cpt-members-count {
-  margin-left: auto;
-  font-size: 11px;
-  font-family: var(--font-num);
-  color: var(--tb-text-sub);
-  font-variant-numeric: tabular-nums;
-}
-
-/* 股票搜索划入 */
-#app .cpt-pick {
+/* 折叠展开体：淡底容器（搜索划入 + 成分列表） */
+#app .cpt-row-body {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 10px 14px 0;
+  gap: 8px;
+  padding: 10px 12px;
+  background-color: var(--tb-hover);
+  border-top: 1px solid var(--tb-border);
 }
 
-#app .cpt-pick-list {
+#app .cpt-row-body .trade-empty {
+  padding: 14px 12px;
+}
+
+/* 成分列表（卡片列宽内自适应的紧凑行，超长滚动） */
+#app .cpt-members {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  max-height: 320px;
+  overflow-y: auto;
   border: 1px solid var(--tb-border);
   border-radius: var(--radius-md);
   background-color: var(--dropdown-bg);
-  box-shadow: var(--shadow-pop);
   padding: 6px;
-  max-height: 224px;
-  overflow-y: auto;
 }
 
-#app .cpt-pick-row {
+#app .cpt-member-row {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 5px 8px;
+  padding: 4px 8px;
   border-radius: var(--radius-sm);
+  cursor: grab;
   transition: background-color 0.2s ease;
 }
 
-#app .cpt-pick-row:hover {
+#app .cpt-member-row:hover {
   background-color: var(--tb-hover);
 }
 
-#app .cpt-pick-code {
+#app .cpt-member-code {
   flex: none;
   font-size: 11px;
   color: var(--tb-text-sub);
   font-variant-numeric: tabular-nums;
 }
 
-#app .cpt-pick-name {
-  flex: 1;
-  min-width: 0;
+#app .cpt-member-name {
+  flex: none;
+  max-width: 50%;
   font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-#app .cpt-pick-name.halt {
-  color: var(--tb-text-sub);
-}
-
-#app .cpt-pick-concept {
-  flex: none;
-  max-width: 96px;
+#app .cpt-member-industry {
+  flex: 1;
+  min-width: 0;
   font-size: 10px;
   color: var(--tb-text-sub);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-#app .cpt-pick-add {
-  flex: none;
-  font-size: 11px;
-  padding: 2px 8px;
-}
-
-#app .cpt-pick-empty {
-  padding: 10px;
-  text-align: center;
-  font-size: 11px;
-  color: var(--tb-text-sub);
-}
-
-/* 成分表：移出按钮 = 红描边破坏性次级按钮（同 .sim-reset-btn 语言） */
-#app .cpt-cell-action {
-  text-align: right;
-}
-
-#app .cpt-remove-btn {
-  font-size: 11px;
-  padding: 3px 10px;
-  color: var(--up);
-  border: 1px solid var(--up);
-}
-
-#app .cpt-remove-btn:hover {
-  background-color: var(--up-bg);
 }
 
 /* 停用股弱化 + 中性「停」戳记 */
@@ -3934,6 +3924,21 @@ body {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+/* 新增弹窗一级/二级切换分段（复用 .period-group，居中展示） */
+#app .cpt-kind-group {
+  align-self: center;
+}
+
+/* 弹窗字段提示行（Micro 次要色；撞名预检 = 语义红） */
+#app .cpt-field-hint {
+  font-size: 10px;
+  color: var(--tb-text-sub);
+}
+
+#app .cpt-field-hint.cpt-field-error {
+  color: var(--up);
 }
 
 #app .cpt-field {
@@ -3969,15 +3974,11 @@ body {
   box-shadow: 0 0 0 3px var(--tb-active-bg);
 }
 
-/* ---- 概念管理移动端（≤768px）：单列、触控放大、行内操作不换行 ---- */
+/* ---- 概念管理移动端（≤768px）：单列、触控放大、次要信息让位 ---- */
 @media (max-width: 768px) {
   #app .concept-main {
     padding: 8px;
     gap: 8px;
-  }
-
-  #app .cpt-body {
-    grid-template-columns: 1fr;
   }
 
   #app .cpt-filter {
@@ -3985,7 +3986,7 @@ body {
   }
 
   #app .cpt-groups {
-    padding: 8px 10px;
+    grid-template-columns: 1fr;
     gap: 8px;
   }
 
@@ -3994,7 +3995,7 @@ body {
     height: 30px;
   }
 
-  #app .cpt-pick-concept {
+  #app .cpt-member-industry {
     display: none;
   }
 }
