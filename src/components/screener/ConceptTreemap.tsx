@@ -1,11 +1,12 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import Script from 'next/script'
+import Treemap from 'treemap-heatmap'
+import type { TreemapChart } from 'treemap-heatmap'
 import { useLocale } from '@/components/terminal/useLocale'
 import type { ConceptHeat, HeatPeriodKey, HeatPeriods } from '@/lib/screener/types'
 
-/* —— 概念热力 treemap：treemap-heatmap 库（public/treemap-heatmap.min.js，UMD 全局 Treemap） ——
+/* —— 概念热力 treemap：treemap-heatmap 库（npm 依赖 ^1.1.0，客户端组件内静态导入） ——
    口径与 market 项目看板一致：面积 = 涨股比广度（up/evalN × 1000 + 1），颜色 = 周期内平均涨幅
    （满幅按周期固定：日 ±10%、周 ±20%、月 ±30%、年 ±60%）映射库内分叉标度
    （正端红 / 负端绿 / 0% 灰，A 股红涨绿跌）；点击大类放大 / Esc 返回，tooltip 含 Wilson 95% CI；
@@ -14,26 +15,6 @@ import type { ConceptHeat, HeatPeriodKey, HeatPeriods } from '@/lib/screener/typ
 type HeatItem = ConceptHeat & { weight: number }
 type HeatGroup = { name: string; weight: number; up: number; evalN: number; avgPct: number; concepts: HeatItem[] }
 type HeatData = { categories: HeatGroup[]; colorSpan: number }
-
-/** 库实例的最小类型面（UMD 全局，运行时由 /treemap-heatmap.min.js 提供） */
-type TmChart = {
-  data(d: HeatData): TmChart
-  render(): TmChart
-  zoom(i: number): TmChart
-  back(): TmChart
-  zoomed(): HeatGroup | null
-  destroy(): void
-  on(event: 'zoom' | 'back' | 'hover', fn: (...args: never[]) => void): TmChart
-}
-type TmFactory = ((container: HTMLElement, options: Record<string, unknown>) => TmChart) & {
-  wilson?(up: number, n: number, z?: number): { lo: number; hi: number; center: number } | null
-}
-
-declare global {
-  interface Window {
-    Treemap?: TmFactory
-  }
-}
 
 /** 颜色满幅（%）：按周期固定——日 ±10%、周 ±20%、月 ±30%、年 ±60%（0% 锚定中性灰） */
 const COLOR_SPAN: Record<HeatPeriodKey, number> = { day: 10, week: 20, month: 30, year: 60 }
@@ -61,12 +42,10 @@ export default function ConceptTreemap({
 }) {
   const { t } = useLocale()
   const hostRef = useRef<HTMLDivElement>(null)
-  const chartRef = useRef<TmChart | null>(null)
+  const chartRef = useRef<TreemapChart | null>(null)
   const colorSpanRef = useRef(10) // 当期颜色满幅（color accessor 建图时闭包一次，经 ref 取当期值）
   const dataRef = useRef<HeatData>({ categories: [], colorSpan: 10 })
   const selRef = useRef<Set<string>>(new Set())
-  const [libReady, setLibReady] = useState(false)
-  const [libError, setLibError] = useState(false)
   const [period, setPeriod] = useState<HeatPeriodKey>('day')
   const [zoomGroup, setZoomGroup] = useState<HeatGroup | null>(null)
 
@@ -127,13 +106,12 @@ export default function ConceptTreemap({
     setZoomGroup(chart.zoomed() ?? null)
   }, [data])
 
-  /** 建图：脚本就绪后按库口径接线（面积=涨股比广度，颜色=均值满幅映射） */
+  /** 建图：按库口径接线（面积=涨股比广度，颜色=均值满幅映射） */
   useEffect(() => {
-    const factory = window.Treemap
     const host = hostRef.current
-    if (!libReady || factory == null || host == null) return
+    if (host == null) return
     colorSpanRef.current = data.colorSpan
-    const chart = factory(host, {
+    const chart = Treemap(host, {
       data,
       groups: (d: HeatData) => d.categories,
       items: (g: HeatGroup) => g.concepts,
@@ -147,7 +125,7 @@ export default function ConceptTreemap({
       detail: (d: HeatItem) => {
         const parts: string[] = []
         if (d.evalN > 0) {
-          const ci = factory.wilson?.(d.up, d.evalN)
+          const ci = Treemap.wilson(d.up, d.evalN)
           parts.push(
             `${t('涨股比|Up ratio')} ${d.up}/${d.evalN}${ci != null ? `（CI ${Math.round(ci.lo * 100)}–${Math.round(ci.hi * 100)}%）` : ''}`
           )
@@ -163,7 +141,7 @@ export default function ConceptTreemap({
         let html = `<div class="tm-tt">${item.name}<span class="tm-tc">${group.name}</span></div>`
         html += `<div class="tm-tr"><span>${t('平均涨幅|Avg change')}</span><b>${fmtPct(item.avgPct)}</b></div>`
         if (item.evalN > 0) {
-          const ci = factory.wilson?.(item.up, item.evalN)
+          const ci = Treemap.wilson(item.up, item.evalN)
           html += `<div class="tm-tr"><span>${t('涨股比|Up ratio')}</span><b>${item.up}/${item.evalN}（${Math.round((item.up / item.evalN) * 100)}%）</b></div>`
           if (ci != null) {
             html += `<div class="tm-tr"><span>95% CI</span><b>${Math.round(ci.lo * 100)}% – ${Math.round(ci.hi * 100)}%</b></div>`
@@ -201,7 +179,7 @@ export default function ConceptTreemap({
     }
     // 刻意不依赖 data：数据/切周期由上方独立效应经 chart.data() 热更，避免整图重建丢放大态
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [libReady, applySelMarks, t])
+  }, [applySelMarks, t])
 
   /** 放大态点击子概念：选中/取消（捕获阶段取当前态——总览态点击交给库放大，不选中） */
   const onHostClick = (e: React.MouseEvent<HTMLDivElement>): void => {
@@ -254,11 +232,9 @@ export default function ConceptTreemap({
           </button>
         )}
       </div>
-      {data.categories.length === 0 || libError ? (
+      {data.categories.length === 0 ? (
         <div className="screen-heat-empty">
-          {libError
-            ? t('热力组件脚本加载失败（检查 public/treemap-heatmap.min.js）|Heatmap script failed to load')
-            : t('概念热力暂无数据（需当前周期首末两个交易日的 K 线）|No heatmap data for this period')}
+          {t('概念热力暂无数据（需当前周期首末两个交易日的 K 线）|No heatmap data for this period')}
         </div>
       ) : (
         <div
@@ -271,12 +247,6 @@ export default function ConceptTreemap({
           )}
         />
       )}
-      <Script
-        src="/treemap-heatmap.min.js"
-        strategy="afterInteractive"
-        onReady={() => setLibReady(true)}
-        onError={() => setLibError(true)}
-      />
     </div>
   )
 }
