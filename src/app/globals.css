@@ -3999,3 +3999,202 @@ body {
     display: none;
   }
 }
+
+/* ==================== 策略模拟页（/strategy，UI_SPEC §3.18） ====================
+   复用 .screener-page/.screener-scroll/.screen-meta/.trade-card/.stat-* 骨架；
+   本节只补策略页专属件：参数徽章、统计栅格、净值曲线、紧凑表格与状态标签。 */
+
+#app .strategy-params-badge {
+  font-size: 11px;
+  color: var(--tb-text-sub);
+  background: var(--tb-hover);
+  border-radius: var(--radius-sm);
+  padding: 3px 8px;
+}
+
+#app .strategy-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+#app .strategy-stats {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+}
+
+#app .strategy-card-head {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+#app .strategy-card-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--tb-text);
+}
+
+#app .strategy-curve {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+#app .strategy-curve .strategy-card-head {
+  margin-bottom: 0;
+}
+
+#app .strategy-spark {
+  display: block;
+  width: 100%;
+  height: 160px;
+}
+
+#app .strategy-spark-line {
+  fill: none;
+  stroke: var(--tb-active);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+#app .strategy-spark-base {
+  stroke: var(--chart-grid);
+  stroke-width: 1;
+  stroke-dasharray: 4 4;
+}
+
+#app .strategy-curve-axis {
+  display: flex;
+  justify-content: space-between;
+}
+
+#app .strategy-table-wrap {
+  overflow-x: auto;
+}
+
+#app .strategy-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  color: var(--tb-text);
+}
+
+#app .strategy-table th {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--tb-text-sub);
+  text-align: left;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--tb-border);
+  white-space: nowrap;
+}
+
+#app .strategy-table td {
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--tb-border);
+  white-space: nowrap;
+}
+
+#app .strategy-table th.num,
+#app .strategy-table td.num {
+  text-align: right;
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+}
+
+#app .strategy-table tbody tr:hover {
+  background: var(--tb-hover);
+}
+
+#app .strategy-table tr.picked {
+  background: var(--tb-active-bg);
+}
+
+#app .strategy-table tr.picked:hover {
+  background: var(--tb-active-bg);
+}
+
+#app .strategy-table .up {
+  color: var(--up);
+}
+
+#app .strategy-table .down {
+  color: var(--down);
+}
+
+#app .strategy-table .cell-code {
+  font-size: 10px;
+  color: var(--tb-text-sub);
+}
+
+#app .strategy-tag {
+  display: inline-block;
+  font-size: 11px;
+  line-height: 1.3;
+  border-radius: var(--radius-sm);
+  padding: 1px 8px;
+  white-space: nowrap;
+}
+
+#app .strategy-tag.tp {
+  color: var(--up);
+  background: var(--up-bg);
+}
+
+#app .strategy-tag.sell {
+  color: var(--tb-active);
+  background: var(--tb-active-bg);
+}
+
+#app .strategy-tag.be {
+  color: var(--tb-text-sub);
+  background: var(--tb-hover);
+}
+
+#app .strategy-tag.dim {
+  color: var(--tb-text-sub);
+  background: transparent;
+  border: 1px solid var(--tb-border);
+}
+
+#app .strategy-day-actions {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--tb-text);
+}
+
+#app .strategy-day-actions p {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+#app .strategy-empty-row {
+  font-size: 12px;
+  color: var(--tb-text-sub);
+  padding: 6px 0 2px;
+}
+
+@media (max-width: 768px) {
+  #app .strategy-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  #app .strategy-params-badge {
+    display: none;
+  }
+
+  #app .strategy-spark {
+    height: 120px;
+  }
+}

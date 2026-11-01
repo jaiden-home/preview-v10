@@ -208,6 +208,43 @@ export default function HomeLanding() {
               {t('历史 K 线回放，30 秒一个交易日|Replay history, one trading day in 30 seconds')}
             </span>
           </Link>
+          {/* 策略模拟入口：品牌蓝语义（§3.18） */}
+          <Link className="home-card strategy" href="/strategy">
+            <span className="home-card-head">
+              <span className="home-card-icon" aria-hidden="true">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <circle cx="12" cy="12" r="8.5" />
+                  <circle cx="12" cy="12" r="4.5" />
+                  <path d="M12 12l5-3" />
+                </svg>
+              </span>
+              <span className="home-card-arrow" aria-hidden="true">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M9 5l7 7-7 7" />
+                </svg>
+              </span>
+            </span>
+            <span className="home-card-title">{t('策略模拟|Strategy Sim')}</span>
+            <span className="home-card-desc">
+              {t(
+                '周榜连升板块 B 点策略，保本止损与 3% 止盈|Rising-sector B-point strategy with breakeven stop and 3% take profit'
+              )}
+            </span>
+          </Link>
           {/* 模拟设置（admin）入口：品牌蓝语义（§3.14） */}
           <Link className="home-card settings" href="/admin/simtrade">
             <span className="home-card-head">

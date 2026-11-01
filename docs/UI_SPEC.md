@@ -291,6 +291,18 @@ market.db 概念体系（concepts 大类×子概念×sort + stock_concepts 一�
 - **弹窗（复用 `.modal-mask/.modal/.modal-header/.modal-body/.modal-footer/.tb-btn.modal-btn(.primary)` 范式）**：新增弹窗顶部一级/二级切换分段 `.period-group.cpt-kind-group`（v2.93，「二级·概念」默认 /「一级·大类」）——二级 = 概念名称输入 `.cpt-input`（36px，§3.4 聚焦）+ 所属大类下拉（现有大类 + 「+ 新建大类…」切换文本输入）；一级 = **大类名称单输入**（v2.99 去「首个概念名称」——**大类以同名概念落库**：大类非独立表、由概念派生，同名概念可后续改名或继续添加子概念，Micro 提示行 `.cpt-field-hint` 说明），保存即 `create`（新大类追加为大类末位）；编辑概念 = 名称 + 大类下拉；大类改名 = 单文本输入（并入现有大类 = 合并，目标组成员在前、原组按原相对序追加尾部，`window.confirm` 确认）；Enter 提交、无变化/空值禁用保存。
 - **数据与文案**：删除概念 `window.confirm` 二次确认（提示将级联移除成分归类与领涨历史事件）；全部写操作结果走全局 Toast（`.trade-toast`）；加载/失败态复用 `.trade-loading`（失败行内重试）；文案 `t()` 双语，数值/代码等宽字族 + `tabular-nums`（`.num` 仅表格内生效，本页数值类样式自带 `--font-num`）。
 
+### 3.18 策略模拟页（/strategy）
+
+A‴ 策略模拟交易（market.db 只读快照回放）：**入口 = 首页「策略模拟」卡（`.home-card.strategy`，品牌蓝语义）**。SSR 初载 `lib/server/market-db/strategy.ts`（5min 缓存，冷算约数秒；起始日 2026-07-13，B 点复用 `lib/trading/signal.ts`），刷新走 `/api/strategy?refresh=1`；缺库/数据不足走 `.trade-empty` 引导空态（同选股中心范式）。
+
+- **页面骨架**：复用 `.screener-page/.screener-scroll/.toolbar/.screen-meta` 范式（§3.12 选股中心同款），`.screener-main` 内五张 `.trade-card` 纵向排布。
+- **工具行**：`.screen-date-badge`（截至/起始日）+ `.strategy-params-badge`（参数串「日榜前20·周榜3周连升·涨幅3~5%·止盈3%/保本·前3只」，移动端隐藏）+「刷新」`.tb-btn`。
+- **卡 1 概览 `.strategy-summary`**：`.strategy-stats` 六格统计（期末净值 / 总收益 / 现金 / 持仓市值 / 平仓/胜 / 交易日），单元格复用 `.stat-label/.stat-value`，收益红涨绿跌。
+- **卡 2 净值曲线 `.strategy-curve`**：`.strategy-spark` 内联 SVG 折线（`--tb-active` 描边，初始资金基线 `--chart-grid` 虚线），头部 `min ~ max` 等宽数值，轴标首末日期。
+- **卡 3 最新决策**：最近交易日 `.strategy-table` 走查表（日榜前 20：名次/板块/日涨幅/周榜链/昨/状态）；入选行 `.picked`（`--tb-active-bg`）；状态标签 `.strategy-tag`（`.tp` 入选=红淡底、`.sell` 卖出=品牌蓝淡底、`.be`/`.dim` 中性）；表下 `.strategy-day-actions` 当日买卖摘要。
+- **卡 4 当前持仓 / 卡 5 成交记录 / 卡 6 每日流水**：`.strategy-table`（`.num` 右对齐等宽；`.cell-code` 10px；涨跌红绿带符号；离场标签止盈=蓝/保本=中性；表格容器内横滚）。
+- **策略口径**（改参数须同步 `strategy.ts` 常量与本徽章）：买入 = 日榜前 20 逐名「周榜 3 周连升（含今日>昨日）+ 板块内有当日 B 点且涨幅 3~5% 的候选」取第一个双通过板块，按均线比 MA30÷MA60 取前 3 只资金均分；卖出 = 收盘 < 买入价（保本）或 ≥ 买入价×1.03（止盈），全部收盘价成交、先卖后买。
+
 ## 4. 响应式断点
 
 - 平板（769–1024px）：交易页委托面板（含账户摘要）收窄至 `320px`（摘要栅格维持 2×2）。

@@ -11,6 +11,7 @@ const RESERVED_ROOT_SEGMENTS = new Set([
   'market',
   'screener',
   'simtrade',
+  'strategy',
   'admin'
 ])
 const SYMBOL_PATTERN = /^(sh|sz|bj)\d{6}$/
