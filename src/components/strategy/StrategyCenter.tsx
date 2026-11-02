@@ -196,14 +196,6 @@ export default function StrategyCenter({ initialBundle }: { initialBundle: Strat
                                 {(
                                   [
                                     {
-                                      key: 'start',
-                                      name: t('起始日|Start'),
-                                      desc: t(
-                                        '回放起点（含）；无截止日，随数据自动延伸|Replay start (incl.); open-ended, extends with data'
-                                      ),
-                                      value: (d: StrategyData) => d.meta.startDate
-                                    },
-                                    {
                                       key: 'walkN',
                                       name: t('日榜走查深度|Day-rank walk depth'),
                                       desc: t(
