@@ -22,9 +22,11 @@ body {
   --dropdown-bg: #ffffff;
   /* 与 klinecharts 浅色主题网格线一致（#EDEDED dashed） */
   --chart-grid: #ededed;
-  /* 版本对比序列色（v2+ 净值曲线/图例，暖琥珀；v1 恒用品牌蓝 --tb-active） */
+  /* 版本对比序列色（v2 净值曲线/图例暖琥珀；v1 恒用品牌蓝 --tb-active；v3+ 紫 --tb-violet） */
   --tb-warm: #d97706;
   --tb-warm-bg: rgba(217, 119, 6, 0.1);
+  --tb-violet: #7c3aed;
+  --tb-violet-bg: rgba(124, 58, 237, 0.1);
   /* 红涨绿跌（A 股语义，与 constants.ts 的 CN_UP_COLOR/CN_DOWN_COLOR 一致，深浅主题共用） */
   --up: #ef2323;
   --down: #14a143;
@@ -81,6 +83,8 @@ body {
   --chart-grid: #292929;
   --tb-warm: #f59e0b;
   --tb-warm-bg: rgba(245, 158, 11, 0.2);
+  --tb-violet: #a78bfa;
+  --tb-violet-bg: rgba(167, 139, 250, 0.2);
   --up-bg: rgba(239, 35, 35, 0.2);
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.28), 0 6px 16px rgba(0, 0, 0, 0.34);
   --shadow-pop: 0 8px 24px rgba(0, 0, 0, 0.5), 0 16px 40px rgba(0, 0, 0, 0.4);
@@ -4294,13 +4298,22 @@ body {
   stroke-linecap: round;
 }
 
-/* 版本对比序列（v2+）：暖琥珀（§2.1 --tb-warm），与 v1 品牌蓝同宽实线 */
+/* 版本对比序列（v2）：暖琥珀（§2.1 --tb-warm），与 v1 品牌蓝同宽实线 */
 #app .strategy-spark-line.alt {
   stroke: var(--tb-warm);
 }
 
 #app .strategy-spark-dot.alt {
   fill: var(--tb-warm);
+}
+
+/* 版本对比序列（v3+）：紫（§2.1 --tb-violet），三版本起与蓝/琥珀区分 */
+#app .strategy-spark-line.alt2 {
+  stroke: var(--tb-violet);
+}
+
+#app .strategy-spark-dot.alt2 {
+  fill: var(--tb-violet);
 }
 
 /* 多版本图例（≥2 版本时显示）：chip = 色点 + 版本号 + 区间收益，当前版本品牌蓝描边 */
@@ -4341,6 +4354,14 @@ body {
 /* 取值浮层行内裸用色点（不在 chip 内）：v2+ 版本同暖琥珀 */
 #app .strategy-legend-dot.alt {
   background: var(--tb-warm);
+}
+
+#app .strategy-legend-chip.alt2 .strategy-legend-dot {
+  background: var(--tb-violet);
+}
+
+#app .strategy-legend-dot.alt2 {
+  background: var(--tb-violet);
 }
 
 #app .strategy-legend-chip .chip-note {
@@ -4542,6 +4563,60 @@ body {
   background: var(--tb-active-bg);
   border-radius: var(--radius-sm);
   padding: 2px 8px;
+}
+
+/* 当前执行版本切换器（v2.116，多版本时替换静态徽章）：标签 + 每版本一枚带色点按钮，激活项品牌蓝淡底描边 */
+#app .strategy-ver-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+#app .strategy-ver-switch-label {
+  font-size: 11px;
+  color: var(--tb-text-sub);
+}
+
+#app .strategy-ver-switch-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--tb-text-sub);
+  background: var(--tb-hover);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: 2px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease;
+}
+
+#app .strategy-ver-switch-btn:hover {
+  color: var(--tb-text);
+}
+
+#app .strategy-ver-switch-btn.active {
+  color: var(--tb-active);
+  background: var(--tb-active-bg);
+  border-color: var(--tb-active);
+  font-weight: 600;
+}
+
+#app .strategy-ver-switch-btn .strategy-legend-dot {
+  width: 7px;
+  height: 7px;
+}
+
+#app .strategy-ver-switch-btn.alt .strategy-legend-dot {
+  background: var(--tb-warm);
+}
+
+#app .strategy-ver-switch-btn.alt2 .strategy-legend-dot {
+  background: var(--tb-violet);
 }
 
 #app .strategy-version-label {

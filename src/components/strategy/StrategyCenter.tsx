@@ -18,6 +18,10 @@ import {
 
 const money = (x: number): string => (Number.isFinite(x) ? Math.round(x).toLocaleString('en-US') : '-')
 const pct = (x: number): string => (Number.isFinite(x) ? `${x >= 0 ? '+' : ''}${x.toFixed(2)}%` : '-')
+/** 参数值展示：百分比一位小数去尾零（12 → 12%，2.5 → 2.5%） */
+const pctParam = (x: number): string => `${(x * 100).toFixed(1).replace(/\.0$/, '')}%`
+/** 版本序列色类：v1 品牌蓝（无后缀）/ v2 琥珀 alt / v3+ 紫 alt2 */
+const verCls = (idx: number): string => (idx === 0 ? '' : idx === 1 ? ' alt' : ' alt2')
 const pnlClass = (x: number): string => (x > 0 ? 'up' : x < 0 ? 'down' : '')
 
 const buyText = (b: StrategyBuy): string => `${b.name} ${b.pct.toFixed(1)}%`
@@ -27,10 +31,13 @@ const FLOW_PREVIEW = 10
 
 export default function StrategyCenter({
   initialBundle,
-  initialRange
+  initialRange,
+  initialVersion
 }: {
   initialBundle: StrategyBundle
   initialRange: StrategyRange | null
+  /** 深链指定的当前执行版本（?v=，须为注册版本；空 = 注册表末位默认） */
+  initialVersion: string | null
 }) {
   const { t } = useLocale()
   const [bundle, setBundle] = useState<StrategyBundle>(initialBundle)
@@ -40,6 +47,8 @@ export default function StrategyCenter({
   const [walkAll, setWalkAll] = useState(false)
   /** 净值曲线十字光标（类 K 线交互）：悬停索引 → unionDates 下标 */
   const [hoverIdx, setHoverIdx] = useState<number | null>(null)
+  /** 当前执行版本（视图切换：KPI/决策/持仓/成交/流水随它走；默认 = 注册表末位，?v= 深链可指定） */
+  const [activeVer, setActiveVer] = useState(initialVersion ?? initialBundle.active)
   /** 版本折叠面板收起态（收起的版本 id）：默认全部收起（仅面板头一行），点击展开 */
   const [collapsed, setCollapsed] = useState<string[]>(() => [...initialBundle.order])
   /** 时间范围覆盖（当前数据束所用 = applied；输入框草稿 = fromDraft/toDraft，空串 = 未设置） */
@@ -49,7 +58,26 @@ export default function StrategyCenter({
   const rangeValid = fromDraft === '' || toDraft === '' || fromDraft <= toDraft
   const rangeDirty = fromDraft !== (range?.from ?? '') || toDraft !== (range?.to ?? '')
 
-  /** 区间 → 查询串（'?from=..&to=..'；空 = 默认窗口） */
+  /** URL 深链查询串：v（用户切换的版本，与注册表默认一致时省略）+ from/to；空 = 默认窗口 */
+  const deepLinkQuery = useCallback(
+    (ver: string, r: StrategyRange | null): string => {
+      const qs = new URLSearchParams()
+      if (ver !== bundle.active) {
+        qs.set('v', ver)
+      }
+      if (r?.from != null) {
+        qs.set('from', r.from)
+      }
+      if (r?.to != null) {
+        qs.set('to', r.to)
+      }
+      const s = qs.toString()
+      return s ? `?${s}` : ''
+    },
+    [bundle.active]
+  )
+
+  /** 区间 → 拉取查询串（'?from=..&to=..'；空 = 默认窗口） */
   const rangeQuery = (r: StrategyRange | null): string => {
     const qs = new URLSearchParams()
     if (r?.from != null) {
@@ -109,7 +137,7 @@ export default function StrategyCenter({
     await fetchBundle(`?${qs.toString()}`)
   }, [fetchBundle, range, refreshing])
 
-  /** 应用时间范围（空 = 回默认窗口）：成功后同步 URL 深链（replaceState 不触发 SSR 重渲染） */
+  /** 应用时间范围（空 = 回默认窗口）：成功后同步 URL 深链（replaceState 不触发 SSR 重渲染，保留已切版本） */
   const applyRange = useCallback(
     async (nextFrom: string, nextTo: string) => {
       if (refreshing) {
@@ -119,11 +147,22 @@ export default function StrategyCenter({
       const ok = await fetchBundle(rangeQuery(next))
       if (ok) {
         setRange(next)
-        window.history.replaceState(null, '', next != null ? rangeQuery(next) : window.location.pathname)
+        const qs = deepLinkQuery(activeVer, next)
+        window.history.replaceState(null, '', qs !== '' ? qs : window.location.pathname)
       }
     },
-    [fetchBundle, refreshing]
+    [activeVer, deepLinkQuery, fetchBundle, refreshing]
   )
+
+  /** 切换当前执行版本（纯视图切换：束内全版本数据俱在，KPI/决策/持仓/成交/流水随之切换；?v= 深链同步） */
+  const switchVersion = (id: string): void => {
+    if (id === activeVer) {
+      return
+    }
+    setActiveVer(id)
+    const qs = deepLinkQuery(id, range)
+    window.history.replaceState(null, '', qs !== '' ? qs : window.location.pathname)
+  }
 
   const toggleTheme = (): void => {
     const root = document.getElementById('app')
@@ -133,7 +172,7 @@ export default function StrategyCenter({
     window.setTimeout(() => root?.classList.remove('theme-switching'), 50)
   }
 
-  const data = bundle.versions[bundle.active] ?? null
+  const data = bundle.versions[activeVer] ?? null
   /** 版本对比序列（注册序、剔除未就绪；≥2 条时净值曲线叠加 + 图例） */
   const series = bundle.order.map((id) => bundle.versions[id]).filter((d): d is StrategyData => d != null)
   const lastDay = data?.days[data.days.length - 1] ?? null
@@ -204,7 +243,7 @@ export default function StrategyCenter({
               {data != null ? (
                 <span className="strategy-params-badge num" title={t('策略参数|Strategy params')}>
                   {`${data.meta.version} · ${t(
-                    `日榜前${String(data.meta.params.walkN)}·周榜${String(data.meta.params.weeks)}周连升·涨幅${String(data.meta.params.pctLo)}~${String(data.meta.params.pctHi)}%·止盈${(data.meta.params.takeProfit * 100).toFixed(0)}%/保本·前${String(data.meta.params.maxPick)}只|Top${String(data.meta.params.walkN)} walk·${String(data.meta.params.weeks)}W rise·${String(data.meta.params.pctLo)}~${String(data.meta.params.pctHi)}%·TP${(data.meta.params.takeProfit * 100).toFixed(0)}%/breakeven·top${String(data.meta.params.maxPick)}`
+                    `日榜前${String(data.meta.params.walkN)}·周榜${String(data.meta.params.weeks)}周连升·涨幅${String(data.meta.params.pctLo)}~${String(data.meta.params.pctHi)}%·止盈${pctParam(data.meta.params.takeProfit)}/保本·前${String(data.meta.params.maxPick)}只|Top${String(data.meta.params.walkN)} walk·${String(data.meta.params.weeks)}W rise·${String(data.meta.params.pctLo)}~${String(data.meta.params.pctHi)}%·TP${pctParam(data.meta.params.takeProfit)}/breakeven·top${String(data.meta.params.maxPick)}`
                   )}`}
                 </span>
               ) : null}
@@ -273,10 +312,36 @@ export default function StrategyCenter({
               <section className="trade-card strategy-card" aria-label={t('策略规则|Strategy rules')}>
                 <div className="strategy-card-head">
                   <span className="strategy-card-title">{t('策略规则|Strategy rules')}</span>
-                  <span className="strategy-version-badge">
-                    {t('当前执行|Running')} <span className="num">{data.meta.version}</span>
-                    {series.length > 1 ? t(' · 多版本曲线对比中| · curve comparison on') : ''}
-                  </span>
+                  {series.length > 1 ? (
+                    <span
+                      className="strategy-ver-switch"
+                      role="tablist"
+                      aria-label={t('切换当前执行版本|Switch running version')}
+                    >
+                      <span className="strategy-ver-switch-label">{t('当前执行|Running')}</span>
+                      {series.map((d, idx) => {
+                        const on = d.meta.version === activeVer
+                        return (
+                          <button
+                            key={d.meta.version}
+                            type="button"
+                            role="tab"
+                            aria-selected={on}
+                            className={`strategy-ver-switch-btn${verCls(idx)}${on ? ' active' : ''}`}
+                            title={d.meta.versionLabel}
+                            onClick={() => switchVersion(d.meta.version)}
+                          >
+                            <span className="strategy-legend-dot" />
+                            <span className="num">{d.meta.version}</span>
+                          </button>
+                        )
+                      })}
+                    </span>
+                  ) : (
+                    <span className="strategy-version-badge">
+                      {t('当前执行|Running')} <span className="num">{data.meta.version}</span>
+                    </span>
+                  )}
                 </div>
                 <p className="strategy-version-label">
                   {t(
@@ -286,7 +351,7 @@ export default function StrategyCenter({
                 {/* 版本折叠面板（Collapse）：点头部整版收起/展开；当前执行版本品牌蓝描边 + 「当前」标签 */}
                 <div className="strategy-versions">
                   {series.map((d, idx) => {
-                    const isActive = d.meta.version === bundle.active
+                    const isActive = d.meta.version === activeVer
                     const open = !collapsed.includes(d.meta.version)
                     return (
                       <div
@@ -300,7 +365,7 @@ export default function StrategyCenter({
                           title={t('收起 / 展开该版本参数|Collapse / expand this version')}
                           onClick={() => toggleVersion(d.meta.version)}
                         >
-                          <span className={`strategy-legend-dot${idx > 0 ? ' alt' : ''}`} />
+                          <span className={`strategy-legend-dot${verCls(idx)}`} />
                           <span className="num">{d.meta.version}</span>
                           {isActive ? <span className="strategy-tag sell">{t('当前|current')}</span> : null}
                           <span className="strategy-ver-label">{d.meta.versionLabel}</span>
@@ -413,7 +478,7 @@ export default function StrategyCenter({
                                           key: 'takeProfit',
                                           name: t('止盈线|Take profit'),
                                           desc: t('收盘 ≥ 买入价×(1+N%) 即止盈离场|Exit at close ≥ buy×(1+N%)'),
-                                          value: (d: StrategyData) => `+${(d.meta.params.takeProfit * 100).toFixed(0)}%`
+                                          value: (d: StrategyData) => `+${pctParam(d.meta.params.takeProfit)}`
                                         },
                                         {
                                           key: 'stopBuffer',
@@ -421,8 +486,7 @@ export default function StrategyCenter({
                                           desc: t(
                                             '收盘 < 买入价×(1−N%) 即保本离场；0 = 无缓冲，跌破买入价即离场|Exit at close < buy×(1−N%); 0 = no buffer'
                                           ),
-                                          value: (d: StrategyData) =>
-                                            `${((d.meta.params.stopBuffer ?? 0) * 100).toFixed(1)}%`
+                                          value: (d: StrategyData) => pctParam(d.meta.params.stopBuffer ?? 0)
                                         }
                                       ]
                                     }
@@ -562,16 +626,14 @@ export default function StrategyCenter({
                       {series.map((d, idx) => (
                         <span
                           key={d.meta.version}
-                          className={`strategy-legend-chip${idx > 0 ? ' alt' : ''}${
-                            d.meta.version === bundle.active ? ' active' : ''
+                          className={`strategy-legend-chip${verCls(idx)}${
+                            d.meta.version === activeVer ? ' active' : ''
                           }`}
                         >
                           <span className="strategy-legend-dot" />
                           <span className="num">{d.meta.version}</span>
                           <span className={`num ${pnlClass(d.summary.returnPct)}`}>{pct(d.summary.returnPct)}</span>
-                          {d.meta.version === bundle.active ? (
-                            <span className="chip-note">{t('当前|current')}</span>
-                          ) : null}
+                          {d.meta.version === activeVer ? <span className="chip-note">{t('当前|current')}</span> : null}
                         </span>
                       ))}
                     </div>
@@ -593,7 +655,7 @@ export default function StrategyCenter({
                             <span key={d.meta.version} className="strategy-curve-readout-row">
                               {series.length > 1 ? (
                                 <>
-                                  <span className={`strategy-legend-dot${idx > 0 ? ' alt' : ''}`} />
+                                  <span className={`strategy-legend-dot${verCls(idx)}`} />
                                   <span className="num">{d.meta.version}</span>
                                 </>
                               ) : null}
@@ -639,7 +701,7 @@ export default function StrategyCenter({
                     {seriesPoints.map((points, idx) => (
                       <polyline
                         key={series[idx]?.meta.version ?? idx}
-                        className={`strategy-spark-line${idx > 0 ? ' alt' : ''}`}
+                        className={`strategy-spark-line${verCls(idx)}`}
                         points={points}
                       />
                     ))}
@@ -656,7 +718,7 @@ export default function StrategyCenter({
                       end != null ? (
                         <circle
                           key={series[idx]?.meta.version ?? idx}
-                          className={`strategy-spark-dot${idx > 0 ? ' alt' : ''}`}
+                          className={`strategy-spark-dot${verCls(idx)}`}
                           cx={end[0].toFixed(1)}
                           cy={end[1].toFixed(1)}
                           r="3.5"
@@ -669,7 +731,7 @@ export default function StrategyCenter({
                           return v != null ? (
                             <circle
                               key={`hover-${d.meta.version}`}
-                              className={`strategy-spark-dot hover${idx > 0 ? ' alt' : ''}`}
+                              className={`strategy-spark-dot hover${verCls(idx)}`}
                               cx={hoverX.toFixed(1)}
                               cy={pt(hoverIdx ?? 0, v)[1].toFixed(1)}
                               r="4"

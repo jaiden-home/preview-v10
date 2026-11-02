@@ -77,7 +77,7 @@ describe.skipIf(!existsSync(resolve(process.cwd(), 'dbdata/market.db')))('loadSt
         expect(pickedRow.rising).toBe(true)
       }
 
-      // 版本注册表：v1 止盈 12% 进攻版 + v2 高胜率防守版（当前执行；追加 v3 时本断言须一并更新）
+      // 版本注册表：v1 进攻版 + v2 高胜率防守版（当前执行，含平高容差/止盈2.5% 定版；追加 v3 时本断言须一并更新）
       expect(STRATEGY_VERSIONS.map((v) => v.id)).toEqual(['v1', 'v2'])
       expect(ACTIVE_VERSION.id).toBe('v2')
       expect(ACTIVE_VERSION.start).toBe('2026-11-02')
@@ -86,11 +86,16 @@ describe.skipIf(!existsSync(resolve(process.cwd(), 'dbdata/market.db')))('loadSt
         weeks: 3,
         pctLo: 2.5,
         pctHi: 4,
-        takeProfit: 0.03,
+        takeProfit: 0.025,
         stopBuffer: 0.02,
         maxPick: 3
       })
-      expect(ACTIVE_VERSION.params.bPoint).toMatchObject({ ...STRATEGY_VERSIONS[0]!.params.bPoint, runDays: 4 })
+      // v2 的 B 点与 v1 差异：窗口 3→4 日、高点容差 0.999→1（平高亦算）
+      expect(ACTIVE_VERSION.params.bPoint).toMatchObject({
+        ...STRATEGY_VERSIONS[0]!.params.bPoint,
+        runDays: 4,
+        highTol: 1
+      })
 
       // 股票池 = 全部启用股（停牌不参与）：全程任意买入 ∈ 启用股，且买入日必有该股 K 线、成交价 = 当日收盘
       const db = getMarketDb()
