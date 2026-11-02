@@ -6,9 +6,11 @@ import { useLocale } from '@/components/terminal/useLocale'
 import { DEFAULT_B_POINT } from '@/lib/trading/signal'
 import {
   STRATEGY_CAPITAL,
+  parseStrategyRange,
   type StrategyBundle,
   type StrategyBuy,
   type StrategyData,
+  type StrategyRange,
   type StrategySell
 } from '@/lib/strategy/types'
 
@@ -23,7 +25,13 @@ const sellText = (s: StrategySell): string => `${s.name} ${pct(s.pnlPct)}`
 
 const FLOW_PREVIEW = 10
 
-export default function StrategyCenter({ initialBundle }: { initialBundle: StrategyBundle }) {
+export default function StrategyCenter({
+  initialBundle,
+  initialRange
+}: {
+  initialBundle: StrategyBundle
+  initialRange: StrategyRange | null
+}) {
   const { t } = useLocale()
   const [bundle, setBundle] = useState<StrategyBundle>(initialBundle)
   const [refreshing, setRefreshing] = useState(false)
@@ -32,27 +40,88 @@ export default function StrategyCenter({ initialBundle }: { initialBundle: Strat
   const [walkAll, setWalkAll] = useState(false)
   /** 版本折叠面板收起态（收起的版本 id）：默认全部收起（仅面板头一行），点击展开 */
   const [collapsed, setCollapsed] = useState<string[]>(() => [...initialBundle.order])
+  /** 时间范围覆盖（当前数据束所用 = applied；输入框草稿 = fromDraft/toDraft，空串 = 未设置） */
+  const [range, setRange] = useState<StrategyRange | null>(initialRange)
+  const [fromDraft, setFromDraft] = useState(initialRange?.from ?? '')
+  const [toDraft, setToDraft] = useState(initialRange?.to ?? '')
+  const rangeValid = fromDraft === '' || toDraft === '' || fromDraft <= toDraft
+  const rangeDirty = fromDraft !== (range?.from ?? '') || toDraft !== (range?.to ?? '')
+
+  /** 区间 → 查询串（'?from=..&to=..'；空 = 默认窗口） */
+  const rangeQuery = (r: StrategyRange | null): string => {
+    const qs = new URLSearchParams()
+    if (r?.from != null) {
+      qs.set('from', r.from)
+    }
+    if (r?.to != null) {
+      qs.set('to', r.to)
+    }
+    const s = qs.toString()
+    return s ? `?${s}` : ''
+  }
+
+  /** 拉取全版本束（query 含 refresh/区间参数）；成功返回 true 并更新 bundle */
+  const fetchBundle = useCallback(
+    async (query: string): Promise<boolean> => {
+      setRefreshing(true)
+      setError(null)
+      try {
+        const res = await fetch(`/api/strategy${query}`, { cache: 'no-store' })
+        // 成功 = 全版本束 { active, order, versions }（jsonOk 直出）；失败 = { error: { code, message } }
+        const body = (await res.json()) as StrategyBundle | { error: { code: string; message: string } }
+        if (res.ok && 'versions' in body) {
+          setBundle(body)
+          setRefreshing(false)
+          return true
+        }
+        const code = 'error' in body ? body.error.code : null
+        const message = 'error' in body ? body.error.message : null
+        setError(
+          code === 'strategy_unavailable'
+            ? t(
+                '区间内无交易日或数据不足，请调整时间范围|No trading days in range or insufficient data; adjust the range'
+              )
+            : (message ?? t('数据暂不可用|Data unavailable'))
+        )
+      } catch {
+        setError(t('网络异常，请重试|Network error, retry'))
+      }
+      setRefreshing(false)
+      return false
+    },
+    [t]
+  )
 
   const refresh = useCallback(async () => {
     if (refreshing) {
       return
     }
-    setRefreshing(true)
-    setError(null)
-    try {
-      const res = await fetch('/api/strategy?refresh=1', { cache: 'no-store' })
-      // 成功 = 全版本束 { active, order, versions }（jsonOk 直出）；失败 = { error: { code, message } }
-      const body = (await res.json()) as StrategyBundle | { error: { code: string; message: string } }
-      if (res.ok && 'versions' in body) {
-        setBundle(body)
-      } else {
-        setError(('error' in body ? body.error.message : null) ?? t('数据暂不可用|Data unavailable'))
-      }
-    } catch {
-      setError(t('网络异常，请重试|Network error, retry'))
+    // refresh=1 绕过服务端缓存重算，保留当前生效区间
+    const qs = new URLSearchParams({ refresh: '1' })
+    if (range?.from != null) {
+      qs.set('from', range.from)
     }
-    setRefreshing(false)
-  }, [refreshing, t])
+    if (range?.to != null) {
+      qs.set('to', range.to)
+    }
+    await fetchBundle(`?${qs.toString()}`)
+  }, [fetchBundle, range, refreshing])
+
+  /** 应用时间范围（空 = 回默认窗口）：成功后同步 URL 深链（replaceState 不触发 SSR 重渲染） */
+  const applyRange = useCallback(
+    async (nextFrom: string, nextTo: string) => {
+      if (refreshing) {
+        return
+      }
+      const next = parseStrategyRange(nextFrom, nextTo)
+      const ok = await fetchBundle(rangeQuery(next))
+      if (ok) {
+        setRange(next)
+        window.history.replaceState(null, '', next != null ? rangeQuery(next) : window.location.pathname)
+      }
+    },
+    [fetchBundle, refreshing]
+  )
 
   const toggleTheme = (): void => {
     const root = document.getElementById('app')
@@ -120,6 +189,59 @@ export default function StrategyCenter({ initialBundle }: { initialBundle: Strat
                   {`${data.meta.version} · ${t(
                     `日榜前${String(data.meta.params.walkN)}·周榜${String(data.meta.params.weeks)}周连升·涨幅${String(data.meta.params.pctLo)}~${String(data.meta.params.pctHi)}%·止盈${(data.meta.params.takeProfit * 100).toFixed(0)}%/保本·前${String(data.meta.params.maxPick)}只|Top${String(data.meta.params.walkN)} walk·${String(data.meta.params.weeks)}W rise·${String(data.meta.params.pctLo)}~${String(data.meta.params.pctHi)}%·TP${(data.meta.params.takeProfit * 100).toFixed(0)}%/breakeven·top${String(data.meta.params.maxPick)}`
                   )}`}
+                </span>
+              ) : null}
+              <span
+                className="sim-set-dates strategy-range"
+                title={t(
+                  '回放时间范围：留空 = 版本起始日至数据尽头|Replay range: empty = version start to latest data'
+                )}
+              >
+                <input
+                  type="date"
+                  className="sim-set-input"
+                  aria-label={t('起始日（留空默认）|From date (empty = default)')}
+                  value={fromDraft}
+                  max={toDraft || undefined}
+                  onChange={(event) => setFromDraft(event.target.value)}
+                />
+                <span className="sim-set-dash" aria-hidden="true">
+                  ~
+                </span>
+                <input
+                  type="date"
+                  className="sim-set-input"
+                  aria-label={t('截至日（留空默认）|To date (empty = default)')}
+                  value={toDraft}
+                  min={fromDraft || undefined}
+                  onChange={(event) => setToDraft(event.target.value)}
+                />
+              </span>
+              <button
+                type="button"
+                className="tb-btn"
+                disabled={refreshing || !rangeValid || !rangeDirty}
+                onClick={() => void applyRange(fromDraft, toDraft)}
+              >
+                {t('查询|Apply')}
+              </button>
+              {fromDraft !== '' || toDraft !== '' ? (
+                <button
+                  type="button"
+                  className="tb-btn"
+                  disabled={refreshing}
+                  onClick={() => {
+                    setFromDraft('')
+                    setToDraft('')
+                    void applyRange('', '')
+                  }}
+                >
+                  {t('重置|Reset')}
+                </button>
+              ) : null}
+              {error != null ? (
+                <span className="strategy-range-error" role="alert">
+                  {error}
                 </span>
               ) : null}
               <button type="button" className="tb-btn" disabled={refreshing} onClick={() => void refresh()}>
@@ -658,7 +780,11 @@ export default function StrategyCenter({ initialBundle }: { initialBundle: Strat
                     ? t('全量回放计算中，约需数秒~半分钟|Replaying the strategy, may take a while')
                     : error != null
                       ? error
-                      : t('将 market.db 复制到 dbdata/ 后点「刷新」|Copy market.db into dbdata/ then hit Refresh')}
+                      : range != null
+                        ? t(
+                            '区间内无交易日或数据不足，请调整时间范围|No trading days in range or insufficient data; adjust the range'
+                          )
+                        : t('将 market.db 复制到 dbdata/ 后点「刷新」|Copy market.db into dbdata/ then hit Refresh')}
                 </span>
                 {!refreshing && (
                   <button type="button" className="tb-btn" onClick={() => void refresh()}>

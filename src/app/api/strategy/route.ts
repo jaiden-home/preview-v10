@@ -3,10 +3,12 @@ import { allowRequest, jsonError, jsonOk, requestIdOf } from '@/lib/server/api'
 import { requestLogger } from '@/lib/server/logger'
 import { getStrategyBundle } from '@/lib/server/market-db/strategy'
 import { marketDbExists } from '@/lib/server/market-db/db'
+import { parseStrategyRange } from '@/lib/strategy/types'
 
 export const dynamic = 'force-dynamic'
 
-/** 策略模拟数据（A‴ 方案，market.db 只读快照计算；全版本束 { active, order, versions }，?refresh=1 绕过缓存重算） */
+/** 策略模拟数据（A‴ 方案，market.db 只读快照计算；全版本束 { active, order, versions }，
+ *  ?refresh=1 绕过缓存重算；?from=&to= 覆盖回放时间范围——单边非法丢该边、倒置整体忽略（回退默认窗口）） */
 export async function GET(request: NextRequest) {
   if (!allowRequest(request)) {
     return jsonError(429, 'rate_limited', 'too many requests')
@@ -17,7 +19,8 @@ export async function GET(request: NextRequest) {
   const log = requestLogger(requestIdOf(request))
   try {
     const params = new URL(request.url).searchParams
-    const bundle = await getStrategyBundle(params.get('refresh') === '1')
+    const range = parseStrategyRange(params.get('from'), params.get('to'))
+    const bundle = await getStrategyBundle(params.get('refresh') === '1', range)
     if (bundle.versions[bundle.active] == null) {
       return jsonError(503, 'strategy_unavailable', 'strategy data not ready')
     }

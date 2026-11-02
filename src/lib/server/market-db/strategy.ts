@@ -6,6 +6,7 @@ import {
   type StrategyData,
   type StrategyDay,
   type StrategyPosition,
+  type StrategyRange,
   type StrategySell,
   type StrategyVersionDef,
   type StrategyWalkRow
@@ -91,17 +92,21 @@ const hasTable = (db: DatabaseSync, name: string): boolean =>
   db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(name) != null
 
 /** 计算策略模拟全量数据（market.db 只读；按版本定义回放；表缺失/数据不足返回 null）。
- *  pool = 候选股票池（选股中心领涨股表口径，null = 不过滤）；概念榜单恒用全启用股（同选股中心概念热力）。 */
+ *  pool = 候选股票池（选股中心领涨股表口径，null = 不过滤）；概念榜单恒用全启用股（同选股中心概念热力）。
+ *  range = 时间范围覆盖（缺省 = 版本起始日 → 数据尽头）：from 覆盖起始日、to 截断回放（含端点；
+ *  区间内无交易日/起始日前无预热数据返回 null）。 */
 export const loadStrategy = (
   db: DatabaseSync,
   def: StrategyVersionDef,
-  pool: Set<string> | null = null
+  pool: Set<string> | null = null,
+  range?: StrategyRange | null
 ): StrategyData | null => {
   if (!hasTable(db, 'kline_daily') || !hasTable(db, 'stock_concepts')) {
     return null
   }
   const P = def.params
-  const startInput = def.start
+  const startInput = range?.from ?? def.start
+  const endInput = range?.to ?? null
 
   // 交易日历与窗口
   const warm = shiftDate(startInput, -WARM_DAYS)
@@ -117,7 +122,7 @@ export const loadStrategy = (
     return null // 起始日前无预热数据 / 无模拟日（起始日起仅 1 个交易日亦可回放）
   }
   const start = days[startIdx] as string
-  const btDays = days.slice(startIdx)
+  const btDays = endInput != null ? days.slice(startIdx).filter((d) => d <= endInput) : days.slice(startIdx)
   const prevOf = new Map<string, string>()
   for (let i = 1; i < days.length; i++) {
     prevOf.set(days[i] as string, days[i - 1] as string)
@@ -486,12 +491,16 @@ export const loadStrategy = (
 const strategyCache = new TTLCache<StrategyData | null>({ maxEntries: 8, defaultTtlMs: STRATEGY_TTL_MS })
 
 /** 安全读取（库未复制/数据不足/异常返回 null） */
-export const loadStrategySafe = (def: StrategyVersionDef, pool: Set<string> | null = null): StrategyData | null => {
+export const loadStrategySafe = (
+  def: StrategyVersionDef,
+  pool: Set<string> | null = null,
+  range?: StrategyRange | null
+): StrategyData | null => {
   if (!marketDbExists()) {
     return null
   }
   try {
-    return loadStrategy(getMarketDb(), def, pool)
+    return loadStrategy(getMarketDb(), def, pool, range)
   } catch {
     return null
   }
@@ -511,22 +520,27 @@ const leaderPoolOf = async (): Promise<Set<string> | null> => {
   }
 }
 
-/** 缓存版读取（按版本 id 缓存；refresh=true 绕过缓存重算，冷算约数秒/版本）。
+/** 缓存版读取（按版本 id + 时间范围分键缓存；refresh=true 绕过缓存重算，冷算约数秒/版本）。
  *  缓存命中直接返回，未命中才解析选股中心股票池（避免热路径白等看板冷算）。 */
-export const getStrategyVersion = async (def: StrategyVersionDef, refresh = false): Promise<StrategyData | null> => {
-  const key = refresh ? `market-db:strategy:${def.id}:${Date.now()}` : `market-db:strategy:${def.id}`
+export const getStrategyVersion = async (
+  def: StrategyVersionDef,
+  refresh = false,
+  range?: StrategyRange | null
+): Promise<StrategyData | null> => {
+  const rk = range != null && (range.from != null || range.to != null) ? `:${range.from ?? ''}~${range.to ?? ''}` : ''
+  const key = refresh ? `market-db:strategy:${def.id}${rk}:${Date.now()}` : `market-db:strategy:${def.id}${rk}`
   const hit = strategyCache.get(key)
   if (hit !== undefined) {
     return hit
   }
   const pool = await leaderPoolOf()
-  return strategyCache.getOrLoad(key, () => Promise.resolve(loadStrategySafe(def, pool)), STRATEGY_TTL_MS)
+  return strategyCache.getOrLoad(key, () => Promise.resolve(loadStrategySafe(def, pool, range)), STRATEGY_TTL_MS)
 }
 
-/** 全版本数据束（SSR 首屏与 /api/strategy 共用；末位注册版本 = 当前执行） */
-export const getStrategyBundle = async (refresh = false): Promise<StrategyBundle> => {
+/** 全版本数据束（SSR 首屏与 /api/strategy 共用；末位注册版本 = 当前执行；range 透传各版本统一覆盖） */
+export const getStrategyBundle = async (refresh = false, range?: StrategyRange | null): Promise<StrategyBundle> => {
   const entries = await Promise.all(
-    STRATEGY_VERSIONS.map(async (def) => [def.id, await getStrategyVersion(def, refresh)] as const)
+    STRATEGY_VERSIONS.map(async (def) => [def.id, await getStrategyVersion(def, refresh, range)] as const)
   )
   return {
     active: ACTIVE_VERSION.id,

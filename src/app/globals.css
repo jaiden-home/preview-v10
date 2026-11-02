@@ -4017,6 +4017,19 @@ body {
   padding: 3px 8px;
 }
 
+/* 回放时间范围（工具行）：复用模拟设置 .sim-set-dates/.sim-set-input 规格，收窄为工具行紧凑尺寸 */
+#app .strategy-range .sim-set-input {
+  flex: none;
+  width: 132px;
+  height: 28px;
+  font-size: 11px;
+}
+
+#app .strategy-range-error {
+  font-size: 11px;
+  color: var(--up);
+}
+
 /* 卡片基准内边距（UI_SPEC §2.7：卡片 14px 16px；.trade-card 本体不带 padding） */
 #app .strategy-card {
   padding: 14px 16px;

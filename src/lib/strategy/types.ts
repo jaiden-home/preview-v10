@@ -17,6 +17,51 @@ export interface BPointParams {
 /** 初始资金（元）——固定值，非版本参数：全部版本同一起点，净值曲线直接可比 */
 export const STRATEGY_CAPITAL = 1_000_000
 
+/** 回放时间范围覆盖（SSR searchParams 与 /api/strategy 查询参数共用）：
+ *  缺省 = 版本起始日 → 数据尽头（默认窗口）；设置即覆盖（均为含端点交易日口径，非交易日取其后首个交易日） */
+export interface StrategyRange {
+  /** 起始日（含；覆盖该版本 def.start） */
+  from?: string
+  /** 截至日（含；回放截断于此） */
+  to?: string
+}
+
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+
+/** YYYY-MM-DD 且为真实日历日期（往返校验，拦截 02-30/13 月类越界——Date 解析会静默回滚而非 NaN） */
+const isIsoDate = (v?: string | null): v is string => {
+  if (v == null || !ISO_DATE_RE.test(v)) {
+    return false
+  }
+  const dt = new Date(`${v}T00:00:00Z`)
+  return (
+    !Number.isNaN(dt.getTime()) &&
+    dt.getUTCFullYear() === Number(v.slice(0, 4)) &&
+    dt.getUTCMonth() === Number(v.slice(5, 7)) - 1 &&
+    dt.getUTCDate() === Number(v.slice(8, 10))
+  )
+}
+
+/** 解析时间范围参数（逐边校验）：单边格式非法只丢弃该边；双边均合法且倒置（from > to）整体视为未设置 */
+export const parseStrategyRange = (from?: string | null, to?: string | null): StrategyRange | null => {
+  const f = isIsoDate(from) ? from : null
+  const t = isIsoDate(to) ? to : null
+  if (f == null && t == null) {
+    return null
+  }
+  if (f != null && t != null && f > t) {
+    return null
+  }
+  const range: StrategyRange = {}
+  if (f != null) {
+    range.from = f
+  }
+  if (t != null) {
+    range.to = t
+  }
+  return range
+}
+
 /** 策略参数（与回测定型版一致；展示用，暂不开放调参） */
 export interface StrategyParams {
   /** 日榜走查深度（前 N 名逐个校验） */
