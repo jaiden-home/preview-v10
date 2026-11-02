@@ -2,10 +2,17 @@ import { describe, expect, it } from 'vitest'
 import { existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { getMarketDb, marketDbPath } from './db'
-import { loadStrategy } from './strategy'
+import { ACTIVE_VERSION, loadStrategy, STRATEGY_VERSIONS } from './strategy'
+import type { StrategyVersionDef } from '../../strategy/types'
 
-// 回测验证锚点：与运行时 DEFAULT_START（现为 2026-11-02）解耦——历史断言锚定 07-13 不可变事实
+// 回测验证锚点：v1 参数 + 07-13 起始（与运行时 ACTIVE_VERSION 的起始日解耦——历史断言锚定不可变事实）
 const BACKTEST_ANCHOR = '2026-07-13'
+const anchorDef: StrategyVersionDef = {
+  id: 'backtest',
+  label: 'smoke anchor',
+  start: BACKTEST_ANCHOR,
+  params: STRATEGY_VERSIONS[0]!.params
+}
 
 // 真库冒烟（dbdata/market.db 存在时才执行；CI/其它环境自动跳过）
 // 断言全部锚定「历史不可变事实」（07-13 起的回放不会因快照库追加新交易日而变化），
@@ -16,7 +23,7 @@ describe.skipIf(!existsSync(resolve(process.cwd(), 'dbdata/market.db')))('loadSt
     { timeout: 60_000 }, // 冷算含全市场 dailySignals，约 5~15s
     () => {
       const t0 = Date.now()
-      const data = loadStrategy(getMarketDb(), BACKTEST_ANCHOR)
+      const data = loadStrategy(getMarketDb(), anchorDef)
       const ms = Date.now() - t0
       expect(data).not.toBeNull()
       const d = data!
@@ -25,8 +32,24 @@ describe.skipIf(!existsSync(resolve(process.cwd(), 'dbdata/market.db')))('loadSt
       expect(ms).toBeLessThan(45_000)
 
       // 窗口与参数
+      expect(d.meta.version).toBe('backtest')
       expect(d.meta.startDate).toBe(BACKTEST_ANCHOR)
-      expect(d.meta.params).toMatchObject({ walkN: 20, weeks: 3, pctLo: 3, pctHi: 5, takeProfit: 0.03, maxPick: 3 })
+      expect(d.meta.params).toMatchObject({
+        walkN: 20,
+        weeks: 3,
+        pctLo: 3,
+        pctHi: 5,
+        takeProfit: 0.03,
+        stopBuffer: 0,
+        maxPick: 3
+      })
+      expect(d.meta.params.bPoint).toMatchObject({
+        runDays: 3,
+        highTol: 0.999,
+        maDays: 30,
+        tailRepairMin: 0.5,
+        fadeRatio: 0.15
+      })
       expect(d.days.length).toBe(d.meta.tradingDays)
       expect(d.equityCurve.length).toBe(d.days.length)
 
@@ -53,6 +76,19 @@ describe.skipIf(!existsSync(resolve(process.cwd(), 'dbdata/market.db')))('loadSt
       if (pickedRow != null) {
         expect(pickedRow.rising).toBe(true)
       }
+
+      // 版本注册表：当前仅 v1（追加 v2 时本断言与 ACTIVE_VERSION 期望须一并更新）
+      expect(STRATEGY_VERSIONS.map((v) => v.id)).toEqual(['v1'])
+      expect(ACTIVE_VERSION.id).toBe('v1')
+      expect(ACTIVE_VERSION.start).toBe('2026-11-02')
+
+      // 股票池过滤（选股中心领涨股表口径，运行时经 getBoard 同源注入）：池外股不得成为候选——
+      // 以「首个入选日买入集合」为池重放，全程任意买入必须 ∈ 池
+      const firstPick = d.days.find((x) => x.selected != null)!
+      const poolCodes = new Set(firstPick.buys.map((b) => b.code))
+      const pooled = loadStrategy(getMarketDb(), anchorDef, poolCodes)
+      expect(pooled).not.toBeNull()
+      expect(pooled!.days.every((x) => x.buys.every((b) => poolCodes.has(b.code)))).toBe(true)
     }
   )
 })

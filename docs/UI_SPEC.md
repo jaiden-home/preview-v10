@@ -36,23 +36,25 @@
 
 ### 2.1 颜色
 
-| 变量             | 浅色值                | 深色值                | 用途                                                     |
-| ---------------- | --------------------- | --------------------- | -------------------------------------------------------- |
-| `--bg`           | `#ffffff`             | `#121212`             | 页面根背景（终端页）                                     |
-| `--page-tint`    | `#eef1f6`             | `#0e1219`             | 卡片化页面画布底（交易页）                               |
-| `--tb-bg`        | `#ffffff`             | `#1c212b`             | 工具栏/卡片/表格/输入框背景                              |
-| `--tb-text`      | `#1f2733`             | `#dde3ee`             | 主文本                                                   |
-| `--tb-text-sub`  | `#5c6779`             | `#98a2b3`             | 次要文本（标签、提示、表头）                             |
-| `--tb-border`    | `#e5e9f0`             | `#2a3140`             | 结构性边框（实线）                                       |
-| `--tb-hover`     | `#f1f4f9`             | `#262d3a`             | 悬停底色/弱底色容器                                      |
-| `--tb-active`    | `#1677ff`             | `#3c82f7`             | 强调色（选中、聚焦、品牌蓝、卖出动作）                   |
-| `--tb-active-bg` | `rgba(22,119,255,.1)` | `rgba(22,119,255,.2)` | 选中浅底/输入聚焦光环                                    |
-| `--dropdown-bg`  | `#ffffff`             | `#1c212b`             | 下拉/弹窗背景                                            |
-| `--chart-grid`   | `#ededed`             | `#292929`             | 图表网格线/图表邻接虚线                                  |
-| `--up`           | `#ef2323`             | `#ef2323`             | 涨/盈亏为正/买入（红，深浅共用）                         |
-| `--up-bg`        | `rgba(239,35,35,.1)`  | `rgba(239,35,35,.2)`  | 语义红淡底（方向戳记等，与 `--tb-active-bg` 同范式派生） |
-| `--down`         | `#14a143`             | `#14a143`             | 跌/亏损（绿，深浅共用；不用于卖出）                      |
-| `--on-solid`     | `#ffffff`             | `#ffffff`             | 实底上的文字与纯白装饰件（深浅共用）                     |
+| 变量             | 浅色值                | 深色值                | 用途                                                      |
+| ---------------- | --------------------- | --------------------- | --------------------------------------------------------- |
+| `--bg`           | `#ffffff`             | `#121212`             | 页面根背景（终端页）                                      |
+| `--page-tint`    | `#eef1f6`             | `#0e1219`             | 卡片化页面画布底（交易页）                                |
+| `--tb-bg`        | `#ffffff`             | `#1c212b`             | 工具栏/卡片/表格/输入框背景                               |
+| `--tb-text`      | `#1f2733`             | `#dde3ee`             | 主文本                                                    |
+| `--tb-text-sub`  | `#5c6779`             | `#98a2b3`             | 次要文本（标签、提示、表头）                              |
+| `--tb-border`    | `#e5e9f0`             | `#2a3140`             | 结构性边框（实线）                                        |
+| `--tb-hover`     | `#f1f4f9`             | `#262d3a`             | 悬停底色/弱底色容器                                       |
+| `--tb-active`    | `#1677ff`             | `#3c82f7`             | 强调色（选中、聚焦、品牌蓝、卖出动作）                    |
+| `--tb-active-bg` | `rgba(22,119,255,.1)` | `rgba(22,119,255,.2)` | 选中浅底/输入聚焦光环                                     |
+| `--dropdown-bg`  | `#ffffff`             | `#1c212b`             | 下拉/弹窗背景                                             |
+| `--chart-grid`   | `#ededed`             | `#292929`             | 图表网格线/图表邻接虚线                                   |
+| `--up`           | `#ef2323`             | `#ef2323`             | 涨/盈亏为正/买入（红，深浅共用）                          |
+| `--tb-warm`      | `#d97706`             | `#f59e0b`             | 版本对比序列色（策略页 v2+ 净值曲线/图例；v1 恒用品牌蓝） |
+| `--tb-warm-bg`   | `rgba(217,119,6,.1)`  | `rgba(245,158,11,.2)` | 版本对比淡底（与 `--tb-active-bg` 同范式派生）            |
+| `--up-bg`        | `rgba(239,35,35,.1)`  | `rgba(239,35,35,.2)`  | 语义红淡底（方向戳记等，与 `--tb-active-bg` 同范式派生）  |
+| `--down`         | `#14a143`             | `#14a143`             | 跌/亏损（绿，深浅共用；不用于卖出）                       |
+| `--on-solid`     | `#ffffff`             | `#ffffff`             | 实底上的文字与纯白装饰件（深浅共用）                      |
 
 ### 2.2 圆角（令牌化，禁止阶外圆角）
 
@@ -293,16 +295,17 @@ market.db 概念体系（concepts 大类×子概念×sort + stock_concepts 一�
 
 ### 3.18 策略模拟页（/strategy）
 
-A‴ 策略模拟交易（market.db 只读快照回放）：**入口 = 首页「策略模拟」卡（`.home-card.strategy`，品牌蓝语义）**。SSR 初载 `lib/server/market-db/strategy.ts`（5min 缓存，冷算约数秒；起始日 2026-11-02、**无截止日**——回放至快照库最新交易日，market.db 每日追加后自动延伸，B 点复用 `lib/trading/signal.ts`），刷新走 `/api/strategy?refresh=1`；缺库/数据不足走 `.trade-empty` 引导空态（同选股中心范式）。
+A‴ 策略模拟交易（market.db 只读快照回放）：**入口 = 首页「策略模拟」卡（`.home-card.strategy`，品牌蓝语义）**。**版本化（v1 起）**：条件参数集 = 版本（注册表 `STRATEGY_VERSIONS`，`lib/server/market-db/strategy.ts`；末位注册 = 当前执行）；**改条件 = 追加新版本（v2、v3…），历史版本保留**——API `/api/strategy` 与 SSR 均返回全版本束 `{ active, order, versions }`（5min 缓存，冷算约数秒/版本；起始日 2026-11-02、**无截止日**——回放至快照库最新交易日，market.db 每日追加后自动延伸，B 点复用 `lib/trading/signal.ts`），刷新走 `/api/strategy?refresh=1`；缺库/数据不足走 `.trade-empty` 引导空态（同选股中心范式）。
 
-- **页面骨架**：复用 `.screener-page/.screener-scroll/.toolbar/.screen-meta` 范式（§3.12 选股中心同款），`.screener-main` 内六张 `.trade-card` 纵向排布；信息层级 = 决策 Hero → 资产 → 透视 → 持仓 → 成交 → 流水。
-- **工具行**：`.screen-date-badge`（截至/起始日）+ `.strategy-params-badge`（参数串「日榜前20·周榜3周连升·涨幅3~5%·止盈3%/保本·前3只」，移动端隐藏）+「刷新」`.tb-btn`。
+- **页面骨架**：复用 `.screener-page/.screener-scroll/.toolbar/.screen-meta` 范式（§3.12 选股中心同款），`.screener-main` 内七张 `.trade-card` 纵向排布；信息层级 = 规则（页首，版本+参数解释）→ 决策 Hero → 资产（多版本曲线对比）→ 透视 → 持仓 → 成交 → 流水。
+- **工具行**：`.screen-date-badge`（截至/起始日）+ `.strategy-params-badge`（**当前版本号前缀** + 参数串「v1 · 日榜前20·周榜3周连升·涨幅3~5%·止盈3%/保本·前3只」，移动端隐藏）+「刷新」`.tb-btn`。
+- **卡 0 策略规则（页首）**：卡头 = 标题 + `.strategy-version-badge`（品牌蓝淡底「当前执行 v1」，多版本时缀「多版本曲线对比中」）；其下一行 `.strategy-version-label` = **总则**（先卖后买 · 全部收盘价成交 · 事实 T+1 · 停牌继续持有 · 启用股池一股一概念 · 改条件 = 追加新版本对比）；主体 = **版本折叠面板 `.strategy-versions`（Collapse 范式）**——每版本一枚 `.strategy-ver-panel`：头 `.strategy-ver-head`（整宽按钮，`aria-expanded`；= 同曲线图例色点 v1 蓝 / v2+ 暖琥珀 + 版本号 + 当前执行版本「当前」`.strategy-tag.sell` 标签 + 版本说明 `.strategy-ver-label`（单行省略）+ 右缘 chevron 内联 SVG，收起态 `.closed` 右指 `rotate(-90deg)` 0.2s ease；当前执行版本面板品牌蓝描边 `.active`），体 `.strategy-ver-body` = **参数解释表 `.strategy-table.wrap.strategy-params-table`**（参数 | 说明 | 该版本值 三列；`.wrap` 允许换行、`.desc` 说明列次级色并**承载规则语境**——榜单口径 / 走查走到即停 / 连升定义 / 候选三条件 / 买卖离场线 / B 点五参；值列 `.num` 等宽右对齐；「买入点（B 点）」行五参压缩为一串值）——**点头部整版收起/展开（任意版本可收，收起仅留面板头一行；**默认全部收起**，首屏只见面板头行、点击展开）**，多版本各自独立折叠、展开即并列对照；规则数值全部取自版本参数，不另设规则块。
 - **卡 1 决策流水带 `.strategy-hero`（决策账本）**：最近 5 个交易日横排成列（`.strategy-ledger`，最新在左、`.today` 列淡底+「今」红淡底戳记），每列 = 日期 / 入选板块大字（`.strategy-pick-name`）+ 周榜链注记 / 买入 chips（`.strategy-chip.buy` 红淡底）/ 卖出 chips（`.strategy-chip.sell` 品牌蓝淡底，附止盈/保本注记）/ 列底净值（`.strategy-ledger-equity`）；无入选日显示「空仓等待」；窄屏列宽收缩容器内横滚。
-- **卡 2 资产 `.strategy-asset`**：桌面两列（账户条 2fr + 曲线 3fr，移动端堆叠）——左侧**账户横带 `.strategy-tape`**（主格 `.main`：`.strategy-kpi-main` Display 26px 净值 + `.strategy-kpi-return` 收益红涨绿跌，虚线分隔；下接现金/持仓市值/平仓·胜/交易日四行小格，结构实线分隔，复用 `.stat-label/.stat-value`）；右侧 `.strategy-curve` 内联 SVG 折线（`--tb-active` 描边 + 终点圆点 `.strategy-spark-dot`，初始资金基线 `--chart-grid` 虚线），头部 `min ~ max`、轴标首末日期与期末值。
+- **卡 2 资产 `.strategy-asset`**：桌面两列（账户条 2fr + 曲线 3fr，移动端堆叠）——左侧**账户横带 `.strategy-tape`**（主格 `.main`：`.strategy-kpi-main` Display 26px 净值 + `.strategy-kpi-return` 收益红涨绿跌，虚线分隔；下接现金/持仓市值/平仓·胜/交易日四行小格，结构实线分隔，复用 `.stat-label/.stat-value`；KPI 恒为**当前执行版本**）；右侧 `.strategy-curve` 内联 SVG 折线（初始资金基线 `--chart-grid` 虚线），**多版本对比**：全部注册版本曲线叠加——并集日期为共享横轴、全序列共享纵轴刻度（同尺度才可比），第 1 版本 `--tb-active` 描边 + 终点圆点 `.strategy-spark-dot`，第 2+ 版本 `.alt` 暖琥珀（`--tb-warm`）；≥2 版本时头部下沿 `.strategy-curve-legend` 图例行（`.strategy-legend-chip`：色点 `.strategy-legend-dot` + 版本号 + 区间收益红涨绿跌，当前版本品牌蓝描边 `.active` + 「当前」注记）；头部 `min ~ max` 取全序列并集，轴标首末日期（并集）与当前版本期末值。
 - **卡 3 走查透视（走到即停）**：最近交易日 `.strategy-table`（名次/板块/日涨幅/周榜链/昨/状态）——**只展示 1..入选名次的前缀**（走查在第一个双通过板块即停，后续名次未走查，属领域事实）；卡头注记「走到第 N 名即入选」，表下 `.strategy-walk-more` 按钮可展开后续名次对照；降噪层级——未连升行 `tr.dim` 整行次级色、入选行 `tr.picked`（`--tb-active-bg` + 左缘 2px 品牌蓝 `inset` 条）；状态标签 `.strategy-tag`（`.tp` 入选=红淡底、`.sell` 卖出=品牌蓝淡底、`.be`/`.dim` 中性）。
 - **卡 4 当前持仓 / 卡 5 成交记录**：`.strategy-table`（`.num` 右对齐等宽；`.cell-code` 10px；涨跌红绿带符号；离场标签止盈=蓝/保本=中性；表格容器内横滚）。
 - **卡 6 每日流水（渐进披露）**：默认最近 10 行，卡头「显示全部 N 行 / 收起」`.tb-btn` 切换；有入选的行 `tr.rising` 正常色，其余行同表格默认。
-- **策略口径**（改参数须同步 `strategy.ts` 常量与本徽章）：买入 = 日榜前 20 逐名「周榜 3 周连升（含今日>昨日）+ 板块内有当日 B 点且涨幅 3~5% 的候选」取第一个双通过板块，按均线比 MA30÷MA60 取前 3 只资金均分；卖出 = 收盘 < 买入价（保本）或 ≥ 买入价×1.03（止盈），全部收盘价成交、先卖后买。
+- **策略口径与版本管理**（改条件——**含 B 点口径 `bPoint`（runDays/highTol/maDays/tailRepairMin/fadeRatio，`lib/trading/signal.ts` 可参数化，默认 = `DEFAULT_B_POINT` 定型口径）与卖出 `takeProfit`/`stopBuffer`（止盈线 / 保本止损缓冲，v1 = 3% / 0 无缓冲）**——须在 `strategy.ts` 的 `STRATEGY_VERSIONS` **追加新版本**，并同步本节 + 参数徽章/参数表 + 冒烟测试的版本断言）：**候选股票池 = 选股中心领涨股表**（`getBoard()` 同一缓存同源注入，池外股不成候选；看板不可用时降级为全启用股）；概念日榜/周榜恒用全启用股（同选股中心概念热力口径）；买入 = 日榜前 20 逐名「周榜 3 周连升（含今日>昨日）+ 板块内有当日 B 点且涨幅 3~5% 的候选」取第一个双通过板块，按均线比 MA30÷MA60 取前 3 只资金均分；卖出 = 收盘 < 买入价×(1−stopBuffer)（保本）或 ≥ 买入价×(1+takeProfit)（止盈），全部收盘价成交、先卖后买。
 
 ## 4. 响应式断点
 

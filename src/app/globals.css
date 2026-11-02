@@ -22,6 +22,9 @@ body {
   --dropdown-bg: #ffffff;
   /* 与 klinecharts 浅色主题网格线一致（#EDEDED dashed） */
   --chart-grid: #ededed;
+  /* 版本对比序列色（v2+ 净值曲线/图例，暖琥珀；v1 恒用品牌蓝 --tb-active） */
+  --tb-warm: #d97706;
+  --tb-warm-bg: rgba(217, 119, 6, 0.1);
   /* 红涨绿跌（A 股语义，与 constants.ts 的 CN_UP_COLOR/CN_DOWN_COLOR 一致，深浅主题共用） */
   --up: #ef2323;
   --down: #14a143;
@@ -76,6 +79,8 @@ body {
   --dropdown-bg: #1c212b;
   /* 与 klinecharts 深色主题网格线一致（#292929 dashed） */
   --chart-grid: #292929;
+  --tb-warm: #f59e0b;
+  --tb-warm-bg: rgba(245, 158, 11, 0.2);
   --up-bg: rgba(239, 35, 35, 0.2);
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.28), 0 6px 16px rgba(0, 0, 0, 0.34);
   --shadow-pop: 0 8px 24px rgba(0, 0, 0, 0.5), 0 16px 40px rgba(0, 0, 0, 0.4);
@@ -4234,6 +4239,112 @@ body {
   stroke-linecap: round;
 }
 
+/* 版本对比序列（v2+）：暖琥珀（§2.1 --tb-warm），与 v1 品牌蓝同宽实线 */
+#app .strategy-spark-line.alt {
+  stroke: var(--tb-warm);
+}
+
+#app .strategy-spark-dot.alt {
+  fill: var(--tb-warm);
+}
+
+/* 多版本图例（≥2 版本时显示）：chip = 色点 + 版本号 + 区间收益，当前版本品牌蓝描边 */
+#app .strategy-curve-legend {
+  display: flex;
+  flex-flow: row wrap;
+  gap: 8px;
+}
+
+#app .strategy-legend-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--tb-text);
+  background: var(--tb-hover);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: 2px 8px;
+  transition: border-color 0.2s ease;
+}
+
+#app .strategy-legend-chip.active {
+  border-color: var(--tb-active);
+}
+
+#app .strategy-legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--tb-active);
+}
+
+#app .strategy-legend-chip.alt .strategy-legend-dot {
+  background: var(--tb-warm);
+}
+
+#app .strategy-legend-chip .chip-note {
+  font-size: 10px;
+  color: var(--tb-text-sub);
+}
+
+/* 卡 0 版本折叠面板（Collapse 范式）：面板 = 头（色点 + 版本号 + 「当前」标签 + 说明 + chevron）+ 参数表体；
+   点头部整版收起/展开（aria-expanded），当前执行版本品牌蓝描边 .active；chevron 收起态右指 */
+#app .strategy-versions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+#app .strategy-ver-panel {
+  border: 1px solid var(--tb-border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  transition: border-color 0.2s ease;
+}
+
+#app .strategy-ver-panel.active {
+  border-color: var(--tb-active);
+}
+
+#app .strategy-ver-head {
+  display: flex;
+  flex-flow: row wrap;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  background: var(--tb-hover);
+  border: none;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  text-align: left;
+}
+
+#app .strategy-ver-label {
+  flex: 1;
+  min-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--tb-text-sub);
+}
+
+#app .strategy-ver-chevron {
+  flex: none;
+  color: var(--tb-text-sub);
+  transition: transform 0.2s ease;
+}
+
+#app .strategy-ver-panel.closed .strategy-ver-chevron {
+  transform: rotate(-90deg);
+}
+
+#app .strategy-ver-body {
+  padding: 10px 12px;
+}
+
 #app .strategy-spark-base {
   stroke: var(--chart-grid);
   stroke-width: 1;
@@ -4353,6 +4464,33 @@ body {
   font-size: 12px;
   color: var(--tb-text-sub);
   padding: 6px 0 2px;
+}
+
+/* 卡 0 页首规则卡：当前执行版本徽章（品牌蓝淡底）+ 版本/总则说明行 + 参数解释表（说明列换行、次级色） */
+#app .strategy-version-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--tb-active);
+  background: var(--tb-active-bg);
+  border-radius: var(--radius-sm);
+  padding: 2px 8px;
+}
+
+#app .strategy-version-label {
+  margin: -4px 0 10px;
+  font-size: 11px;
+  color: var(--tb-text-sub);
+}
+
+#app .strategy-table.wrap th,
+#app .strategy-table.wrap td {
+  white-space: normal;
+}
+
+#app .strategy-params-table td.desc {
+  color: var(--tb-text-sub);
 }
 
 @media (max-width: 768px) {

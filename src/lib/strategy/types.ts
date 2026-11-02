@@ -1,5 +1,19 @@
 /** 策略模拟（A‴ 方案）视图类型域（环境无关，SSR 与 /api/strategy 共用） */
 
+/** B 点（买入信号）参数：lib/trading/signal 的买入口径，策略按版本可调（SimTrading 极速模拟用默认值） */
+export interface BPointParams {
+  /** 连续强涨窗口长度（日；窗口末日为第 N 日） */
+  runDays: number
+  /** 高点容差：窗口内每日 最高 ≥ 前日最高 × N（0.999 = 平高/针尖误差亦算） */
+  highTol: number
+  /** 均线门槛：窗口末日收盘 ≥ MA(N)（窗口不足不判定） */
+  maDays: number
+  /** 动能保护·修复下限：窗口末两日涨幅之和 ≥ 首日涨幅 × N */
+  tailRepairMin: number
+  /** 动能保护·衰减下限：末日涨幅 ≥ 前日涨幅 × N */
+  fadeRatio: number
+}
+
 /** 策略参数（与回测定型版一致；展示用，暂不开放调参） */
 export interface StrategyParams {
   /** 日榜走查深度（前 N 名逐个校验） */
@@ -12,10 +26,34 @@ export interface StrategyParams {
   pctHi: number
   /** 止盈线（小数，0.03 = +3%） */
   takeProfit: number
+  /** 保本止损缓冲（小数，0 = 无缓冲：收盘 < 买入价即离场；0.02 = 收盘 < 买入价×0.98 离场） */
+  stopBuffer: number
   /** 单板块持仓上限（按均线比降序取前 N 只） */
   maxPick: number
   /** 初始资金（元） */
   capital: number
+  /** 买入点（B 点）口径 */
+  bPoint: BPointParams
+}
+
+/** 策略版本定义：条件参数集 + 起始日。改条件 = 在注册表追加新版本（v2、v3…），不覆盖历史版本——净值曲线按版本对比 */
+export interface StrategyVersionDef {
+  /** 版本号（'v1' | 'v2' …，注册表末位 = 当前执行版本） */
+  id: string
+  /** 版本说明（一句话变更点，页面展示） */
+  label: string
+  /** 起始日（含） */
+  start: string
+  params: StrategyParams
+}
+
+/** 多版本策略数据束（SSR 与 /api/strategy 共用） */
+export interface StrategyBundle {
+  /** 当前执行版本 id（注册表末位） */
+  active: string
+  /** 版本注册顺序（id 升序 = 注册顺序） */
+  order: string[]
+  versions: Record<string, StrategyData | null>
 }
 
 /** 买入成交 */
@@ -101,6 +139,10 @@ export interface StrategyDay {
 /** 策略模拟数据（market.db 只读快照计算） */
 export interface StrategyData {
   meta: {
+    /** 策略版本（StrategyVersionDef.id） */
+    version: string
+    /** 版本说明（StrategyVersionDef.label） */
+    versionLabel: string
     /** 策略起始日（含） */
     startDate: string
     /** 快照数据截至日 */

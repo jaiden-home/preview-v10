@@ -1,34 +1,55 @@
 import type { DatabaseSync } from 'node:sqlite'
 import type {
   StrategyBuy,
+  StrategyBundle,
   StrategyData,
   StrategyDay,
   StrategyPosition,
   StrategySell,
+  StrategyVersionDef,
   StrategyWalkRow
 } from '../../strategy/types'
-import { dailySignals } from '../../trading/signal'
+import { dailySignals, DEFAULT_B_POINT } from '../../trading/signal'
 import { TTLCache } from '../cache'
+import { getBoard } from './board'
 import { getMarketDb, marketDbExists } from './db'
 
-export type { StrategyData } from '../../strategy/types'
+export type { StrategyBundle, StrategyData, StrategyVersionDef } from '../../strategy/types'
 
 // ==================== 策略模拟（A‴ 方案）数据服务（仅服务端，只读查询） ====================
-// 买入：概念热力日榜前 WALK_N 名逐个校验「周榜排名 WEEKS 周连升 + 板块内有候选」，
+// 版本化：条件参数集 = 版本（当前 v1）；改条件在 STRATEGY_VERSIONS 追加 v2/v3…（保留历史版本），
+// 页面按版本回放并对比净值曲线，注册表末位 = 当前执行版本。
+// 买入：概念热力日榜前 walkN 名逐个校验「周榜排名 weeks 周连升 + 板块内有候选」，
 //       第一个双通过板块入选；候选 = 当日出 B 点（lib/trading/signal 的 dailySignals，
-//       B/S 成对口径）且当日涨幅在 (PCT_LO, PCT_HI)；超 MAX_PICK 只按均线比 MA30÷MA60 降序取前 N，资金均分。
-// 卖出：收盘 < 买入价（保本止损）或收盘 ≥ 买入价×(1+TAKE_PROFIT)（止盈），当日收盘价成交。
-// 引擎口径与回测定型版一致（/tmp/bt 参数扫描结论：20/3 周/3~5%/3%/前 3）。
+//       B/S 成对口径）且当日涨幅在 (pctLo, pctHi)；超 maxPick 只按均线比 MA30÷MA60 降序取前 N，资金均分。
+// 卖出：收盘 < 买入价（保本止损）或收盘 ≥ 买入价×(1+takeProfit)（止盈），当日收盘价成交。
+// v1 引擎口径与回测定型版一致（/tmp/bt 参数扫描结论：20/3 周/3~5%/3%/前 3）。
 
-/* —— 策略参数（定型，暂不开放调参；如调整须同步 UI_SPEC §3.18 与页面参数徽章） —— */
-const WALK_N = 20 // 日榜走查深度
-const WEEKS = 3 // 周榜连升快照数（3 = 两周前→上周→本周）
-const PCT_LO = 3 // 当日涨幅下限（%，不含）
-const PCT_HI = 5 // 当日涨幅上限（%，不含）
-const TAKE_PROFIT = 0.03 // 止盈线（+3%，按收盘价成交）
-const MAX_PICK = 3 // 单板块持仓上限（均线比降序取前 N）
-const CAPITAL = 1_000_000 // 初始资金（元）
-export const DEFAULT_START = '2026-11-02' // 默认起始日（固定；无截止日——回放至快照库最新交易日，market.db 每日追加后自动延伸）
+/* —— 策略版本注册表（改条件 = 在此追加新版本，勿改历史版本） —— */
+export const STRATEGY_VERSIONS: StrategyVersionDef[] = [
+  {
+    id: 'v1',
+    label: '定型口径（回测扫描：日榜前 20 · 周榜 3 周连升 · 涨幅 3~5% · 止盈 3%/保本 · 前 3 只）',
+    start: '2026-11-02',
+    params: {
+      walkN: 20,
+      weeks: 3,
+      pctLo: 3,
+      pctHi: 5,
+      takeProfit: 0.03,
+      // 卖出（保本/止盈）也是版本参数：v1 = 无缓冲保本（收盘 < 买入价即离场）
+      stopBuffer: 0,
+      maxPick: 3,
+      capital: 1_000_000,
+      // B 点口径也是版本参数（v1 = signal.ts 定型默认）
+      bPoint: { ...DEFAULT_B_POINT }
+    }
+  }
+  // 以后更改条件在此追加，例如：
+  // { id: 'v2', label: '走查深度 20→30 + B 点窗口 3→4 日', start: '2026-11-02',
+  //   params: { …v1, walkN: 30, bPoint: { …DEFAULT_B_POINT, runDays: 4 } } }
+]
+export const ACTIVE_VERSION: StrategyVersionDef = STRATEGY_VERSIONS[STRATEGY_VERSIONS.length - 1] as StrategyVersionDef
 const WARM_DAYS = 160 // 起始日前预热自然日（MA60 + 周榜快照回看 + 连涨链热身）
 const STRATEGY_TTL_MS = 5 * 60 * 1000
 
@@ -69,11 +90,18 @@ const tsOf = (d: string): number => new Date(`${d}T00:00:00`).getTime()
 const hasTable = (db: DatabaseSync, name: string): boolean =>
   db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(name) != null
 
-/** 计算策略模拟全量数据（market.db 只读；表缺失/数据不足返回 null） */
-export const loadStrategy = (db: DatabaseSync, startInput: string): StrategyData | null => {
+/** 计算策略模拟全量数据（market.db 只读；按版本定义回放；表缺失/数据不足返回 null）。
+ *  pool = 候选股票池（选股中心领涨股表口径，null = 不过滤）；概念榜单恒用全启用股（同选股中心概念热力）。 */
+export const loadStrategy = (
+  db: DatabaseSync,
+  def: StrategyVersionDef,
+  pool: Set<string> | null = null
+): StrategyData | null => {
   if (!hasTable(db, 'kline_daily') || !hasTable(db, 'stock_concepts')) {
     return null
   }
+  const P = def.params
+  const startInput = def.start
 
   // 交易日历与窗口
   const warm = shiftDate(startInput, -WARM_DAYS)
@@ -180,7 +208,7 @@ export const loadStrategy = (db: DatabaseSync, startInput: string): StrategyData
         meta.maRatio.set(date, sum30 / 30 / (sum60 / 60))
       }
     }
-    for (const p of dailySignals(bars, start)) {
+    for (const p of dailySignals(bars, start, P.bPoint)) {
       if (p.signal !== 'buy') {
         continue
       }
@@ -235,17 +263,20 @@ export const loadStrategy = (db: DatabaseSync, startInput: string): StrategyData
     return m
   }
 
-  /** 某日某板块是否为候选（当日 B 点 + 涨幅区间内） */
+  /** 某日某板块是否为候选（当日 B 点 + 涨幅区间内 + 属选股中心股票池） */
   const candidatesOf = (date: string, concept: string): StrategyBuy[] => {
     const out: StrategyBuy[] = []
     for (const code of membersOf.get(concept) ?? []) {
+      if (pool != null && !pool.has(code)) {
+        continue // 池外股不得成为候选（股票池 = 选股中心领涨股表）
+      }
       const meta = metaOf.get(code)
       if (meta == null || !meta.buys.has(date)) {
         continue
       }
       const pct = meta.pct.get(date)
       const close = meta.closeAt.get(date)
-      if (pct != null && close != null && pct > PCT_LO && pct < PCT_HI) {
+      if (pct != null && close != null && pct > P.pctLo && pct < P.pctHi) {
         out.push({ code, name: meta.name, concept, pct, maRatio: meta.maRatio.get(date) ?? null, price: close })
       }
     }
@@ -260,14 +291,14 @@ export const loadStrategy = (db: DatabaseSync, startInput: string): StrategyData
     rD: number | null
     rising: boolean
   }
-  /** 日榜前 WALK_N 的连升状态（快照：本周/上周/两周前；rising 含「今日较昨日上升」） */
+  /** 日榜前 walkN 的连升状态（快照：本周/上周/两周前；rising 含「今日较昨日上升」） */
   const riseInfoOf = (date: string): RiseRow[] => {
     const wPrevDay = prevOf.get(date) != null ? rankOf(prevOf.get(date) as string, 'week') : null
     return rankAt(date, 'day')
-      .slice(0, WALK_N)
+      .slice(0, P.walkN)
       .map(([concept, dayAvg], i) => {
         const rs: Array<number | null> = []
-        for (let k = 0; k < WEEKS; k++) {
+        for (let k = 0; k < P.weeks; k++) {
           const dk = k === 0 ? date : baseAt(shiftDate(date, -7 * k))
           rs.push(dk != null ? (rankOf(dk, 'week').get(concept) ?? null) : null)
         }
@@ -291,7 +322,7 @@ export const loadStrategy = (db: DatabaseSync, startInput: string): StrategyData
     cost: number
     lastClose: number
   }
-  let cash = CAPITAL
+  let cash = P.capital
   const positions = new Map<string, Position>()
   const trades: StrategySell[] = []
   const days2: StrategyDay[] = []
@@ -308,8 +339,13 @@ export const loadStrategy = (db: DatabaseSync, startInput: string): StrategyData
         continue // 停牌：继续持有
       }
       p.lastClose = close
+      // 卖出（版本参数）：保本止损线 = 买入价×(1−stopBuffer)（v1 无缓冲）；止盈线 = 买入价×(1+takeProfit)
       const reason: StrategySell['reason'] | null =
-        close < p.buyPrice ? 'breakeven' : close >= p.buyPrice * (1 + TAKE_PROFIT) ? 'takeprofit' : null
+        close < p.buyPrice * (1 - P.stopBuffer)
+          ? 'breakeven'
+          : close >= p.buyPrice * (1 + P.takeProfit)
+            ? 'takeprofit'
+            : null
       if (reason == null) {
         continue
       }
@@ -345,7 +381,7 @@ export const loadStrategy = (db: DatabaseSync, startInput: string): StrategyData
           continue // 排名通过但无候选 → 看下一名
         }
         cands.sort((a, b) => (b.maRatio ?? -Infinity) - (a.maRatio ?? -Infinity))
-        const picks = cands.slice(0, MAX_PICK)
+        const picks = cands.slice(0, P.maxPick)
         const per = cash / picks.length
         for (const c of picks) {
           const qty = per / c.price
@@ -403,8 +439,8 @@ export const loadStrategy = (db: DatabaseSync, startInput: string): StrategyData
     lastClose: p.lastClose,
     floatPct: (p.lastClose / p.buyPrice - 1) * 100,
     value: p.qty * p.lastClose,
-    toTp: ((p.buyPrice * (1 + TAKE_PROFIT)) / p.lastClose - 1) * 100,
-    toStop: (p.lastClose / p.buyPrice - 1) * 100
+    toTp: ((p.buyPrice * (1 + P.takeProfit)) / p.lastClose - 1) * 100,
+    toStop: (p.lastClose / (p.buyPrice * (1 - P.stopBuffer)) - 1) * 100
   }))
 
   // 最近交易日走查透视
@@ -424,24 +460,18 @@ export const loadStrategy = (db: DatabaseSync, startInput: string): StrategyData
   const equity = lastDay.equity
   return {
     meta: {
+      version: def.id,
+      versionLabel: def.label,
       startDate: start,
       lastDate: lastDay.date,
       tradingDays: days2.length,
-      params: {
-        walkN: WALK_N,
-        weeks: WEEKS,
-        pctLo: PCT_LO,
-        pctHi: PCT_HI,
-        takeProfit: TAKE_PROFIT,
-        maxPick: MAX_PICK,
-        capital: CAPITAL
-      }
+      params: { ...P }
     },
     summary: {
       equity,
       cash: lastDay.cash,
       marketValue,
-      returnPct: (equity / CAPITAL - 1) * 100,
+      returnPct: (equity / P.capital - 1) * 100,
       closedCount: trades.length,
       winCount: trades.filter((t) => t.pnl > 0).length
     },
@@ -453,24 +483,54 @@ export const loadStrategy = (db: DatabaseSync, startInput: string): StrategyData
   }
 }
 
-const strategyCache = new TTLCache<StrategyData | null>({ maxEntries: 4, defaultTtlMs: STRATEGY_TTL_MS })
+const strategyCache = new TTLCache<StrategyData | null>({ maxEntries: 8, defaultTtlMs: STRATEGY_TTL_MS })
 
 /** 安全读取（库未复制/数据不足/异常返回 null） */
-export const loadStrategySafe = (start: string): StrategyData | null => {
+export const loadStrategySafe = (def: StrategyVersionDef, pool: Set<string> | null = null): StrategyData | null => {
   if (!marketDbExists()) {
     return null
   }
   try {
-    return loadStrategy(getMarketDb(), start)
+    return loadStrategy(getMarketDb(), def, pool)
   } catch {
     return null
   }
 }
 
-/** 缓存版读取（SSR 首屏与 /api/strategy 共用；refresh=true 绕过缓存重算，冷算约数秒） */
-export const getStrategy = (start: string = DEFAULT_START, refresh = false): Promise<StrategyData | null> =>
-  strategyCache.getOrLoad(
-    refresh ? `market-db:strategy:${start}:${Date.now()}` : `market-db:strategy:${start}`,
-    () => Promise.resolve(loadStrategySafe(start)),
-    STRATEGY_TTL_MS
+/** 候选股票池 = 选股中心领涨股表（getBoard 同一缓存，口径永远一致）；
+ *  看板不可用/领涨股为空时返回 null（不过滤，页面可用性优先）。 */
+const leaderPoolOf = async (): Promise<Set<string> | null> => {
+  try {
+    const board = await getBoard()
+    if (board == null || board.leaders.length === 0) {
+      return null
+    }
+    return new Set(board.leaders.map((l) => l.code))
+  } catch {
+    return null
+  }
+}
+
+/** 缓存版读取（按版本 id 缓存；refresh=true 绕过缓存重算，冷算约数秒/版本）。
+ *  缓存命中直接返回，未命中才解析选股中心股票池（避免热路径白等看板冷算）。 */
+export const getStrategyVersion = async (def: StrategyVersionDef, refresh = false): Promise<StrategyData | null> => {
+  const key = refresh ? `market-db:strategy:${def.id}:${Date.now()}` : `market-db:strategy:${def.id}`
+  const hit = strategyCache.get(key)
+  if (hit !== undefined) {
+    return hit
+  }
+  const pool = await leaderPoolOf()
+  return strategyCache.getOrLoad(key, () => Promise.resolve(loadStrategySafe(def, pool)), STRATEGY_TTL_MS)
+}
+
+/** 全版本数据束（SSR 首屏与 /api/strategy 共用；末位注册版本 = 当前执行） */
+export const getStrategyBundle = async (refresh = false): Promise<StrategyBundle> => {
+  const entries = await Promise.all(
+    STRATEGY_VERSIONS.map(async (def) => [def.id, await getStrategyVersion(def, refresh)] as const)
   )
+  return {
+    active: ACTIVE_VERSION.id,
+    order: STRATEGY_VERSIONS.map((def) => def.id),
+    versions: Object.fromEntries(entries)
+  }
+}

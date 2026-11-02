@@ -3,12 +3,13 @@
 import { useCallback, useState } from 'react'
 import ThemeToggle from '@/components/terminal/ThemeToggle'
 import { useLocale } from '@/components/terminal/useLocale'
-import type { StrategyBuy, StrategyData, StrategySell } from '@/lib/strategy/types'
+import { DEFAULT_B_POINT } from '@/lib/trading/signal'
+import type { StrategyBundle, StrategyBuy, StrategyData, StrategySell } from '@/lib/strategy/types'
 
-/** 策略模拟（A‴ 方案）：Hero=最新交易日决策，资产卡=KPI+净值曲线，走查/持仓/成交/流水渐进披露 */
+/** 策略模拟（A‴ 方案）：页首规则卡（版本 + 参数解释）→ 决策 Hero → 资产（多版本净值对比）→ 透视 → 持仓 → 成交 → 流水 */
 
-const money = (x: number): string => Math.round(x).toLocaleString('en-US')
-const pct = (x: number): string => `${x >= 0 ? '+' : ''}${x.toFixed(2)}%`
+const money = (x: number): string => (Number.isFinite(x) ? Math.round(x).toLocaleString('en-US') : '-')
+const pct = (x: number): string => (Number.isFinite(x) ? `${x >= 0 ? '+' : ''}${x.toFixed(2)}%` : '-')
 const pnlClass = (x: number): string => (x > 0 ? 'up' : x < 0 ? 'down' : '')
 
 const buyText = (b: StrategyBuy): string => `${b.name} ${b.pct.toFixed(1)}%`
@@ -16,13 +17,15 @@ const sellText = (s: StrategySell): string => `${s.name} ${pct(s.pnlPct)}`
 
 const FLOW_PREVIEW = 10
 
-export default function StrategyCenter({ initialData }: { initialData: StrategyData | null }) {
+export default function StrategyCenter({ initialBundle }: { initialBundle: StrategyBundle }) {
   const { t } = useLocale()
-  const [data, setData] = useState<StrategyData | null>(initialData)
+  const [bundle, setBundle] = useState<StrategyBundle>(initialBundle)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [flowAll, setFlowAll] = useState(false)
   const [walkAll, setWalkAll] = useState(false)
+  /** 版本折叠面板收起态（收起的版本 id）：默认全部收起（仅面板头一行），点击展开 */
+  const [collapsed, setCollapsed] = useState<string[]>(() => [...initialBundle.order])
 
   const refresh = useCallback(async () => {
     if (refreshing) {
@@ -32,10 +35,10 @@ export default function StrategyCenter({ initialData }: { initialData: StrategyD
     setError(null)
     try {
       const res = await fetch('/api/strategy?refresh=1', { cache: 'no-store' })
-      // 成功 = 裸 StrategyData（jsonOk 直出）；失败 = { error: { code, message } }（jsonError 形状）
-      const body = (await res.json()) as StrategyData | { error: { code: string; message: string } }
-      if (res.ok && 'meta' in body) {
-        setData(body)
+      // 成功 = 全版本束 { active, order, versions }（jsonOk 直出）；失败 = { error: { code, message } }
+      const body = (await res.json()) as StrategyBundle | { error: { code: string; message: string } }
+      if (res.ok && 'versions' in body) {
+        setBundle(body)
       } else {
         setError(('error' in body ? body.error.message : null) ?? t('数据暂不可用|Data unavailable'))
       }
@@ -53,19 +56,34 @@ export default function StrategyCenter({ initialData }: { initialData: StrategyD
     window.setTimeout(() => root?.classList.remove('theme-switching'), 50)
   }
 
+  const data = bundle.versions[bundle.active] ?? null
+  /** 版本对比序列（注册序、剔除未就绪；≥2 条时净值曲线叠加 + 图例） */
+  const series = bundle.order.map((id) => bundle.versions[id]).filter((d): d is StrategyData => d != null)
   const lastDay = data?.days[data.days.length - 1] ?? null
-  const curve = data?.equityCurve ?? []
-  const curveMin = curve.length > 0 ? Math.min(...curve.map((p) => p.equity)) : 0
-  const curveMax = curve.length > 0 ? Math.max(...curve.map((p) => p.equity)) : 0
+  const toggleVersion = (id: string): void => {
+    setCollapsed((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
+  }
+
+  // 多版本净值曲线：并集日期为共享横轴、全序列共享纵轴刻度（同尺度才可比）
+  const unionDates = [...new Set(series.flatMap((d) => d.equityCurve.map((p) => p.date)))].sort()
+  const xIndexOf = new Map(unionDates.map((date, i) => [date, i]))
+  const curveValues = series.flatMap((d) => d.equityCurve.map((p) => p.equity))
+  const curveMin = curveValues.length > 0 ? Math.min(...curveValues) : 0
+  const curveMax = curveValues.length > 0 ? Math.max(...curveValues) : 0
   const span = curveMax - curveMin || 1
   // 坐标内缩：给 2px 描边与 r=3.5 终点圆点留边界余量，避免 viewBox 边缘截断
   const pt = (i: number, equity: number): [number, number] => [
-    6 + (i / Math.max(1, curve.length - 1)) * 588,
+    6 + (i / Math.max(1, unionDates.length - 1)) * 588,
     148 - ((equity - curveMin) / span) * 136
   ]
-  const sparkPoints = curve.map((p, i) => pt(i, p.equity).join(',')).join(' ')
-  const baseY = curve.length > 0 ? pt(0, data?.meta.params.capital ?? curveMin)[1] : 0
-  const endPoint = curve.length > 0 ? pt(curve.length - 1, curve[curve.length - 1]?.equity ?? 0) : null
+  const baseY = unionDates.length > 0 ? pt(0, data?.meta.params.capital ?? curveMin)[1] : 0
+  const seriesPoints = series.map((d) =>
+    d.equityCurve.map((p) => pt(xIndexOf.get(p.date) ?? 0, p.equity).join(',')).join(' ')
+  )
+  const seriesEnds = series.map((d) => {
+    const last = d.equityCurve[d.equityCurve.length - 1]
+    return last != null ? pt(xIndexOf.get(last.date) ?? 0, last.equity) : null
+  })
   const flowRows = flowAll
     ? [...(data?.days ?? [])].reverse()
     : [...(data?.days ?? [])].reverse().slice(0, FLOW_PREVIEW)
@@ -93,9 +111,9 @@ export default function StrategyCenter({ initialData }: { initialData: StrategyD
               ) : null}
               {data != null ? (
                 <span className="strategy-params-badge num" title={t('策略参数|Strategy params')}>
-                  {t(
+                  {`${data.meta.version} · ${t(
                     `日榜前${String(data.meta.params.walkN)}·周榜${String(data.meta.params.weeks)}周连升·涨幅${String(data.meta.params.pctLo)}~${String(data.meta.params.pctHi)}%·止盈${(data.meta.params.takeProfit * 100).toFixed(0)}%/保本·前${String(data.meta.params.maxPick)}只|Top${String(data.meta.params.walkN)} walk·${String(data.meta.params.weeks)}W rise·${String(data.meta.params.pctLo)}~${String(data.meta.params.pctHi)}%·TP${(data.meta.params.takeProfit * 100).toFixed(0)}%/breakeven·top${String(data.meta.params.maxPick)}`
-                  )}
+                  )}`}
                 </span>
               ) : null}
               <button type="button" className="tb-btn" disabled={refreshing} onClick={() => void refresh()}>
@@ -106,6 +124,167 @@ export default function StrategyCenter({ initialData }: { initialData: StrategyD
 
           {data != null && lastDay != null ? (
             <>
+              {/* 卡 0 · 策略规则（页首）：当前执行版本 + 总则一行 + 参数解释表（说明列承载规则语境，多版本并列对比） */}
+              <section className="trade-card strategy-card" aria-label={t('策略规则|Strategy rules')}>
+                <div className="strategy-card-head">
+                  <span className="strategy-card-title">{t('策略规则|Strategy rules')}</span>
+                  <span className="strategy-version-badge">
+                    {t('当前执行|Running')} <span className="num">{data.meta.version}</span>
+                    {series.length > 1 ? t(' · 多版本曲线对比中| · curve comparison on') : ''}
+                  </span>
+                </div>
+                <p className="strategy-version-label">
+                  {t(
+                    '总则：先卖后买 · 全部收盘价成交 · 事实 T+1 · 停牌继续持有 · 股票池 = 选股中心领涨股表（同源）· 一股一概念 · 改条件 = 追加新版本对比|Framework: sell first · fills at close · T+1 · hold if suspended · stock pool = screener leader board (same source) · one concept per stock · changing rules = appending a version'
+                  )}
+                </p>
+                {/* 版本折叠面板（Collapse）：点头部整版收起/展开；当前执行版本品牌蓝描边 + 「当前」标签 */}
+                <div className="strategy-versions">
+                  {series.map((d, idx) => {
+                    const isActive = d.meta.version === bundle.active
+                    const open = !collapsed.includes(d.meta.version)
+                    return (
+                      <div
+                        key={d.meta.version}
+                        className={`strategy-ver-panel${isActive ? ' active' : ''}${open ? '' : ' closed'}`}
+                      >
+                        <button
+                          type="button"
+                          className="strategy-ver-head"
+                          aria-expanded={open}
+                          title={t('收起 / 展开该版本参数|Collapse / expand this version')}
+                          onClick={() => toggleVersion(d.meta.version)}
+                        >
+                          <span className={`strategy-legend-dot${idx > 0 ? ' alt' : ''}`} />
+                          <span className="num">{d.meta.version}</span>
+                          {isActive ? <span className="strategy-tag sell">{t('当前|current')}</span> : null}
+                          <span className="strategy-ver-label">{d.meta.versionLabel}</span>
+                          <svg
+                            className="strategy-ver-chevron"
+                            viewBox="0 0 12 12"
+                            width="12"
+                            height="12"
+                            aria-hidden="true"
+                          >
+                            <path
+                              d="M2.5 4.5L6 8l3.5-3.5"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="1.5"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                        </button>
+                        {open ? (
+                          <div className="strategy-ver-body">
+                            <table className="strategy-table wrap strategy-params-table">
+                              <thead>
+                                <tr>
+                                  <th>{t('参数|Param')}</th>
+                                  <th>{t('说明|Description')}</th>
+                                  <th className="num">{d.meta.version}</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {(
+                                  [
+                                    {
+                                      key: 'start',
+                                      name: t('起始日|Start'),
+                                      desc: t(
+                                        '回放起点（含）；无截止日，随数据自动延伸|Replay start (incl.); open-ended, extends with data'
+                                      ),
+                                      value: (d: StrategyData) => d.meta.startDate
+                                    },
+                                    {
+                                      key: 'walkN',
+                                      name: t('日榜走查深度|Day-rank walk depth'),
+                                      desc: t(
+                                        '只在前 N 名板块里逐个找「连升 + 有候选」，走到即停|Walk top N day ranks for rising + candidates; stop at first pass'
+                                      ),
+                                      value: (d: StrategyData) => String(d.meta.params.walkN)
+                                    },
+                                    {
+                                      key: 'weeks',
+                                      name: t('周榜连升快照数|Week-rank snapshots'),
+                                      desc: t(
+                                        '榜 = 成分股平均涨幅（周榜对 7 自然日前最近交易日）；名次 两周前→上周→本周 连升，且今日 < 昨日|Ranks = member-average change (week vs ~7 calendar days ago); rising across snapshots, today < yesterday'
+                                      ),
+                                      value: (d: StrategyData) => String(d.meta.params.weeks)
+                                    },
+                                    {
+                                      key: 'pct',
+                                      name: t('候选当日涨幅区间|Candidate daily change'),
+                                      desc: t(
+                                        '属选股中心股票池（领涨股表）、当日出 B 点、涨幅落在开区间内且未持仓才成候选（不含端点）|In the screener leader pool, B-point today, change inside the open range, and not held'
+                                      ),
+                                      value: (d: StrategyData) =>
+                                        `${String(d.meta.params.pctLo)}~${String(d.meta.params.pctHi)}%`
+                                    },
+                                    {
+                                      key: 'bPoint',
+                                      name: t('买入点（B 点）|Buy point (B)'),
+                                      desc: t(
+                                        '连续 N 日强涨的末日出 B 点：高点容差 + MA 门槛 + 动能保护（详见下方 B 点块）|B-point at end of an N-day strong run: tolerance + MA gate + momentum guard (see block below)'
+                                      ),
+                                      value: (d: StrategyData) => {
+                                        const b = d.meta.params.bPoint ?? DEFAULT_B_POINT
+                                        return `${String(b.runDays)}日·×${String(b.highTol)}·MA${String(b.maDays)}·${(b.tailRepairMin * 100).toFixed(0)}%/${(b.fadeRatio * 100).toFixed(0)}%`
+                                      }
+                                    },
+                                    {
+                                      key: 'takeProfit',
+                                      name: t('止盈线|Take profit'),
+                                      desc: t('收盘 ≥ 买入价×(1+N%) 即止盈离场|Exit at close ≥ buy×(1+N%)'),
+                                      value: (d: StrategyData) => `+${(d.meta.params.takeProfit * 100).toFixed(0)}%`
+                                    },
+                                    {
+                                      key: 'stopBuffer',
+                                      name: t('保本止损缓冲|Breakeven buffer'),
+                                      desc: t(
+                                        '收盘 < 买入价×(1−N%) 即保本离场；0 = 无缓冲，跌破买入价即离场|Exit at close < buy×(1−N%); 0 = no buffer'
+                                      ),
+                                      value: (d: StrategyData) =>
+                                        `${((d.meta.params.stopBuffer ?? 0) * 100).toFixed(1)}%`
+                                    },
+                                    {
+                                      key: 'maxPick',
+                                      name: t('单板块持仓上限|Per-sector cap'),
+                                      desc: t(
+                                        '候选按均线比 MA30÷MA60 降序取前 N，资金均分|Top N candidates by MA30÷MA60, cash split evenly'
+                                      ),
+                                      value: (d: StrategyData) => String(d.meta.params.maxPick)
+                                    },
+                                    {
+                                      key: 'capital',
+                                      name: t('初始资金|Initial capital'),
+                                      desc: t('元；全部版本同起点可比|CNY; same start for all versions'),
+                                      value: (d: StrategyData) => money(d.meta.params.capital)
+                                    }
+                                  ] as Array<{
+                                    key: string
+                                    name: string
+                                    desc: string
+                                    value: (d: StrategyData) => string
+                                  }>
+                                ).map((row) => (
+                                  <tr key={row.key}>
+                                    <td>{row.name}</td>
+                                    <td className="desc">{row.desc}</td>
+                                    <td className="num">{row.value(d)}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        ) : null}
+                      </div>
+                    )
+                  })}
+                </div>
+              </section>
+
               {/* 卡 1 · 决策流水带（Hero）：最近 5 个交易日的决策账本，最新在左 */}
               <section className="trade-card strategy-card strategy-hero" aria-label={t('决策流水|Decision ledger')}>
                 <div className="strategy-hero-head">
@@ -195,11 +374,33 @@ export default function StrategyCenter({ initialData }: { initialData: StrategyD
                 </div>
                 <div className="strategy-curve">
                   <div className="strategy-card-head">
-                    <span className="strategy-card-title">{t('净值曲线|Equity curve')}</span>
+                    <span className="strategy-card-title">
+                      {t('净值曲线|Equity curve')}
+                      {series.length > 1 ? t('（版本对比，同尺度）| (version comparison, same scale)') : ''}
+                    </span>
                     <span className="stat-label num">
                       {money(curveMin)} ~ {money(curveMax)}
                     </span>
                   </div>
+                  {series.length > 1 ? (
+                    <div className="strategy-curve-legend">
+                      {series.map((d, idx) => (
+                        <span
+                          key={d.meta.version}
+                          className={`strategy-legend-chip${idx > 0 ? ' alt' : ''}${
+                            d.meta.version === bundle.active ? ' active' : ''
+                          }`}
+                        >
+                          <span className="strategy-legend-dot" />
+                          <span className="num">{d.meta.version}</span>
+                          <span className={`num ${pnlClass(d.summary.returnPct)}`}>{pct(d.summary.returnPct)}</span>
+                          {d.meta.version === bundle.active ? (
+                            <span className="chip-note">{t('当前|current')}</span>
+                          ) : null}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
                   <svg className="strategy-spark" viewBox="0 0 600 160" preserveAspectRatio="none" aria-hidden="true">
                     {data.summary.equity >= data.meta.params.capital ? (
                       <line
@@ -210,20 +411,30 @@ export default function StrategyCenter({ initialData }: { initialData: StrategyD
                         y2={baseY.toFixed(1)}
                       />
                     ) : null}
-                    <polyline className="strategy-spark-line" points={sparkPoints} />
-                    {endPoint != null ? (
-                      <circle
-                        className="strategy-spark-dot"
-                        cx={endPoint[0].toFixed(1)}
-                        cy={endPoint[1].toFixed(1)}
-                        r="3.5"
+                    {seriesPoints.map((points, idx) => (
+                      <polyline
+                        key={series[idx]?.meta.version ?? idx}
+                        className={`strategy-spark-line${idx > 0 ? ' alt' : ''}`}
+                        points={points}
                       />
-                    ) : null}
+                    ))}
+                    {seriesEnds.map((end, idx) =>
+                      end != null ? (
+                        <circle
+                          key={series[idx]?.meta.version ?? idx}
+                          className={`strategy-spark-dot${idx > 0 ? ' alt' : ''}`}
+                          cx={end[0].toFixed(1)}
+                          cy={end[1].toFixed(1)}
+                          r="3.5"
+                        />
+                      ) : null
+                    )}
                   </svg>
                   <div className="strategy-curve-axis">
-                    <span className="stat-label num">{data.meta.startDate}</span>
+                    <span className="stat-label num">{unionDates[0] ?? data.meta.startDate}</span>
                     <span className="stat-label num">
-                      {data.meta.lastDate} · {money(data.summary.equity)}
+                      {unionDates[unionDates.length - 1] ?? data.meta.lastDate} · {t('当前|current')}{' '}
+                      {data.meta.version} {money(data.summary.equity)}
                     </span>
                   </div>
                 </div>

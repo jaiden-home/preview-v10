@@ -1,4 +1,5 @@
 import type { KLineData } from 'klinecharts'
+import type { BPointParams } from '../strategy/types'
 import { dayKeyOf } from './account'
 
 /** 买卖点信号方向（与动作色约定一致：买入红 `--up`、卖出品牌蓝 `--tb-active`） */
@@ -10,15 +11,15 @@ export interface SignalPoint {
   signal: TradeSignal
 }
 
-/** 买入规则窗口长度：连续 3 日 */
-const BUY_RUN_DAYS = 3
-/** 三日比较高点容差：当日最高价 ≥ 前日最高价 × 0.999（0.1% 内针尖误差不断链） */
-const BUY_HIGH_TOL = 0.999
-/** 买动能保护·修复下限：R2 + R3 须不低于 R1 的 50%（R1/R2/R3 = 窗口第 1/2/3 日单日涨幅） */
-const BUY_TAIL_REPAIR_MIN = 0.5
-/** 买动能保护·衰减下限：R3 须不低于 R2 的 15% */
-const BUY_FADE_RATIO = 0.15
-/** 卖出 S2 均线周期：30 日收盘均线（亦为买入门槛②「第 3 日收盘 ≥ 均线」的周期） */
+/** B 点（买入）默认口径：与策略 v1 / 极速模拟一致（策略版本可覆盖，见 StrategyParams.bPoint） */
+export const DEFAULT_B_POINT: BPointParams = {
+  runDays: 3, // 连续强涨窗口长度：连续 3 日
+  highTol: 0.999, // 三日比较高点容差：当日最高价 ≥ 前日最高价 × 0.999（0.1% 内针尖误差不断链）
+  maDays: 30, // 均线门槛：窗口末日收盘 ≥ MA30（亦为买入门槛②的周期）
+  tailRepairMin: 0.5, // 买动能保护·修复下限：末两日涨幅之和须不低于首日涨幅的 50%
+  fadeRatio: 0.15 // 买动能保护·衰减下限：末日涨幅须不低于前日的 15%
+}
+/** 卖出 S2 均线周期：30 日收盘均线 */
 const SELL_MA_DAYS = 30
 /** 卖出 S3 放量倍数：当日成交量 ≥ 前一交易日的 3 倍 */
 const SELL_SPIKE_RATIO = 3
@@ -43,14 +44,15 @@ const SELL_TREND_STREAK_DAYS = 15
  * - 随 dayIndex 推进逐日补点，最后一枚即「当日」提示；某日无信号则该日不标记；
  * - 纯客户端本地展示口径（对单一用户生效），不入服务端账务与成交链路。
  *
- * 买入（B）：**空仓时**（无未配对的 S），当日为「连续 3 日强涨」的第 3 日——
- * 窗口内每日**最高价不低于上一交易日的最高价×0.999（含 0.1% 容差，平高/针尖误差亦算）**且**收盘价高于上一交易日的收盘价**
- * （三日比较：高点平高亦算、收盘过收盘），并须同时满足两项强化条件：
- * ① 第 3 日收盘价 ≥ 30 日均线（MA30 窗口不足不判定）；
- * ② 动能保护：以 R1/R2/R3 记窗口第 1/2/3 日单日涨幅（vs 各自前一交易日收
+ * 买入（B，口径可由 bPoint 参数覆盖；默认 = DEFAULT_B_POINT）：**空仓时**（无未配对的 S），
+ * 当日为「连续 runDays 日强涨」的窗口末日——窗口内每日**最高价不低于上一交易日的最高价×highTol
+ * （含容差，平高/针尖误差亦算）**且**收盘价高于上一交易日的收盘价**
+ * （窗口内比较：高点平高亦算、收盘过收盘），并须同时满足两项强化条件：
+ * ① 窗口末日收盘价 ≥ MA(maDays)（窗口不足不判定）；
+ * ② 动能保护：R1/R(n-1)/R(n) = 窗口首日/末两日单日涨幅（vs 各自前一交易日收
  *    盘），涨幅真衰减且不能有效修复则不开仓——任一成立即拦：
- *    R1 的 50% > R2 + R3（后两日合计接不回首日涨幅的一半）；
- *    R2 的 15% > R3（第 3 日涨速衰竭至第 2 日的 15% 以下）。
+ *    R1 × tailRepairMin > R(n-1) + R(n)（末两日合计接不回首日涨幅的既定比例）；
+ *    R(n-1) × fadeRatio > R(n)（末日涨速衰竭至前日的既定比例以下）。
  *
  * 卖出（S）：**B/S 成对交替**——B 后进入持仓态，S 出现前不再标 B（强势延续
  * 只续持、不加仓标记）；持仓期逐日判定，先触发者离场（一枚 B 对一枚 S）——
@@ -75,12 +77,16 @@ const SELL_TREND_STREAK_DAYS = 15
  * B 必须先于 S（无 B 不判 S）；B/S 同日冲突时 B 优先（开仓日不判 S）；
  * S 后空仓，待下一枚 B 重新武装。
  */
-export const dailySignals = (bars: KLineData[], startDate: string): SignalPoint[] => {
+export const dailySignals = (
+  bars: KLineData[],
+  startDate: string,
+  bPoint: BPointParams = DEFAULT_B_POINT
+): SignalPoint[] => {
   const points: SignalPoint[] = []
-  const ma = smaOf(
-    bars.map((b) => b.close),
-    SELL_MA_DAYS
-  )
+  const closes = bars.map((b) => b.close)
+  const ma = smaOf(closes, SELL_MA_DAYS)
+  // 买入均线门槛独立计算（bPoint.maDays 可调，不牵动卖出 S2 的 MA30）
+  const buyMa = smaOf(closes, bPoint.maDays)
   const belowMa = (k: number): boolean => Number.isFinite(ma[k]!) && bars[k]!.close < ma[k]!
   const ma60 = smaOf(
     bars.map((b) => b.close),
@@ -116,15 +122,15 @@ export const dailySignals = (bars: KLineData[], startDate: string): SignalPoint[
     const volumeSpiked = prevVol > 0 && (bar.volume ?? 0) >= prevVol * SELL_SPIKE_RATIO
 
     if (stopLow == null) {
-      // B：空仓 + 连续 3 日（高点 ≥ 前日高点×0.999（容差/平高亦算）、收盘 > 前日收盘）第 3 日 +
-      // 两项强化条件——① 第 3 日收盘 ≥ MA30 ② 动能保护：R1 的 50% > R2+R3 或 R2 的 15% > R3 即拦；
+      // B：空仓 + 连续 runDays 日（高点 ≥ 前日高点×highTol（容差/平高亦算）、收盘 > 前日收盘）窗口末日 +
+      // 两项强化条件——① 窗口末日收盘 ≥ MA(maDays) ② 动能保护（见 keepsMomentum）；
       // 起始日起开仓并记止损基准，开仓日不判 S；起始日前的强涨不开仓（策略自起始日起始）
       if (
-        i >= BUY_RUN_DAYS &&
-        isStrongRun(bars, i) &&
-        day3KeepsMomentum(bars, i) &&
-        Number.isFinite(ma[i]!) &&
-        bar.close >= ma[i]! &&
+        i >= bPoint.runDays &&
+        isStrongRun(bars, i, bPoint) &&
+        keepsMomentum(bars, i, bPoint) &&
+        Number.isFinite(buyMa[i]!) &&
+        bar.close >= buyMa[i]! &&
         dayKeyOf(bar.timestamp) >= startDate
       ) {
         points.push({ timestamp: bar.timestamp, signal: 'buy' })
@@ -187,12 +193,12 @@ export const dailySignals = (bars: KLineData[], startDate: string): SignalPoint[
   return points
 }
 
-/** i 日是否为「连续 BUY_RUN_DAYS 日：每日最高价 ≥ 前日最高价×BUY_HIGH_TOL（含 0.1% 容差与平高） 且 收盘价 > 前日收盘价」的窗口末日 */
-const isStrongRun = (bars: KLineData[], i: number): boolean => {
-  for (let j = i - BUY_RUN_DAYS + 1; j <= i; j++) {
+/** i 日是否为「连续 runDays 日：每日最高价 ≥ 前日最高价×highTol（含容差与平高） 且 收盘价 > 前日收盘价」的窗口末日 */
+const isStrongRun = (bars: KLineData[], i: number, bPoint: BPointParams): boolean => {
+  for (let j = i - bPoint.runDays + 1; j <= i; j++) {
     const day = bars[j]!
     const prev = bars[j - 1]!
-    if (!(day.high >= prev.high * BUY_HIGH_TOL && day.close > prev.close)) {
+    if (!(day.high >= prev.high * bPoint.highTol && day.close > prev.close)) {
       return false
     }
   }
@@ -200,21 +206,22 @@ const isStrongRun = (bars: KLineData[], i: number): boolean => {
 }
 
 /**
- * 买动能保护（买入门槛②）：以 R1/R2/R3 记窗口第 1/2/3 日单日涨幅（vs 各自
- * 前一交易日收盘；isStrongRun 保证三者 > 0），涨幅真衰减且不能有效修复则
- * 不开仓——任一成立即拦：
- * ① R1 的 50% > R2 + R3（后两日合计接不回首日涨幅的一半）；
- * ② R2 的 15% > R3（第 3 日涨速衰竭至第 2 日的 15% 以下）。
+ * 买动能保护（买入门槛②，可参数化）：R1 = 窗口首日涨幅（vs 窗口前一交易日收盘；
+ * isStrongRun 保证窗口内每日收涨），R(n-1)/R(n) = 窗口末两日涨幅——
+ * 涨幅真衰减且不能有效修复则不开仓，任一成立即拦：
+ * ① R(n-1) + R(n) < R1 × tailRepairMin（末两日合计接不回首日涨幅的既定比例）；
+ * ② R(n) < R(n-1) × fadeRatio（末日涨速衰竭至前日的既定比例以下）。
+ * runDays = 3 时等价于定型口径：R2+R3 ≥ R1×50% 且 R3 ≥ R2×15%。
  */
-const day3KeepsMomentum = (bars: KLineData[], i: number): boolean => {
-  const day3 = bars[i]!
-  const day2 = bars[i - 1]!
-  const day1 = bars[i - 2]!
-  const day0 = bars[i - 3]!
-  const r1 = (day1.close - day0.close) / day0.close
-  const r2 = (day2.close - day1.close) / day1.close
-  const r3 = (day3.close - day2.close) / day2.close
-  return r2 + r3 >= BUY_TAIL_REPAIR_MIN * r1 && r3 >= BUY_FADE_RATIO * r2
+const keepsMomentum = (bars: KLineData[], i: number, bPoint: BPointParams): boolean => {
+  const first = bars[i - bPoint.runDays + 1]!
+  const before = bars[i - bPoint.runDays]!
+  const r1 = (first.close - before.close) / before.close
+  const prevBar = bars[i - 1]!
+  const last = bars[i]!
+  const rPrev = (prevBar.close - bars[i - 2]!.close) / bars[i - 2]!.close
+  const rLast = (last.close - prevBar.close) / prevBar.close
+  return rPrev + rLast >= bPoint.tailRepairMin * r1 && rLast >= bPoint.fadeRatio * rPrev
 }
 
 /** i 日最高价是否创近 SELL_HIGH_LOOKBACK_BARS 个交易日（约半年）新高（严格高于回看内全部高点） */
