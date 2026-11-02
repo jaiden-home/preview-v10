@@ -28,7 +28,7 @@ const PCT_HI = 5 // 当日涨幅上限（%，不含）
 const TAKE_PROFIT = 0.03 // 止盈线（+3%，按收盘价成交）
 const MAX_PICK = 3 // 单板块持仓上限（均线比降序取前 N）
 const CAPITAL = 1_000_000 // 初始资金（元）
-export const DEFAULT_START = '2026-07-13' // 默认起始日（回测验证锚点）
+export const DEFAULT_START = '2026-11-02' // 默认起始日（固定；无截止日——回放至快照库最新交易日，market.db 每日追加后自动延伸）
 const WARM_DAYS = 160 // 起始日前预热自然日（MA60 + 周榜快照回看 + 连涨链热身）
 const STRATEGY_TTL_MS = 5 * 60 * 1000
 
@@ -85,8 +85,8 @@ export const loadStrategy = (db: DatabaseSync, startInput: string): StrategyData
     }>
   ).map((r) => r.trade_date)
   const startIdx = days.findIndex((d) => d >= startInput)
-  if (startIdx <= 0 || days.length < startIdx + 2) {
-    return null // 起始日前无预热数据 / 无模拟日
+  if (startIdx <= 0 || days.length < startIdx + 1) {
+    return null // 起始日前无预热数据 / 无模拟日（起始日起仅 1 个交易日亦可回放）
   }
   const start = days[startIdx] as string
   const btDays = days.slice(startIdx)

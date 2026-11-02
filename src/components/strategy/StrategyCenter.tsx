@@ -32,11 +32,12 @@ export default function StrategyCenter({ initialData }: { initialData: StrategyD
     setError(null)
     try {
       const res = await fetch('/api/strategy?refresh=1', { cache: 'no-store' })
-      const body = (await res.json()) as { ok?: boolean; data?: StrategyData; message?: string }
-      if (body.ok === true && body.data != null) {
-        setData(body.data)
+      // 成功 = 裸 StrategyData（jsonOk 直出）；失败 = { error: { code, message } }（jsonError 形状）
+      const body = (await res.json()) as StrategyData | { error: { code: string; message: string } }
+      if (res.ok && 'meta' in body) {
+        setData(body)
       } else {
-        setError(body.message ?? t('数据暂不可用|Data unavailable'))
+        setError(('error' in body ? body.error.message : null) ?? t('数据暂不可用|Data unavailable'))
       }
     } catch {
       setError(t('网络异常，请重试|Network error, retry'))

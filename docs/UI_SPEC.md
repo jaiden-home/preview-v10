@@ -293,7 +293,7 @@ market.db 概念体系（concepts 大类×子概念×sort + stock_concepts 一�
 
 ### 3.18 策略模拟页（/strategy）
 
-A‴ 策略模拟交易（market.db 只读快照回放）：**入口 = 首页「策略模拟」卡（`.home-card.strategy`，品牌蓝语义）**。SSR 初载 `lib/server/market-db/strategy.ts`（5min 缓存，冷算约数秒；起始日 2026-07-13，B 点复用 `lib/trading/signal.ts`），刷新走 `/api/strategy?refresh=1`；缺库/数据不足走 `.trade-empty` 引导空态（同选股中心范式）。
+A‴ 策略模拟交易（market.db 只读快照回放）：**入口 = 首页「策略模拟」卡（`.home-card.strategy`，品牌蓝语义）**。SSR 初载 `lib/server/market-db/strategy.ts`（5min 缓存，冷算约数秒；起始日 2026-11-02、**无截止日**——回放至快照库最新交易日，market.db 每日追加后自动延伸，B 点复用 `lib/trading/signal.ts`），刷新走 `/api/strategy?refresh=1`；缺库/数据不足走 `.trade-empty` 引导空态（同选股中心范式）。
 
 - **页面骨架**：复用 `.screener-page/.screener-scroll/.toolbar/.screen-meta` 范式（§3.12 选股中心同款），`.screener-main` 内六张 `.trade-card` 纵向排布；信息层级 = 决策 Hero → 资产 → 透视 → 持仓 → 成交 → 流水。
 - **工具行**：`.screen-date-badge`（截至/起始日）+ `.strategy-params-badge`（参数串「日榜前20·周榜3周连升·涨幅3~5%·止盈3%/保本·前3只」，移动端隐藏）+「刷新」`.tb-btn`。
