@@ -326,86 +326,130 @@ export default function StrategyCenter({
                             <table className="strategy-table wrap strategy-params-table">
                               <thead>
                                 <tr>
-                                  <th>{t('参数|Param')}</th>
+                                  <th>{t('阶段|Stage')}</th>
+                                  <th>{t('名称|Name')}</th>
                                   <th>{t('说明|Description')}</th>
-                                  <th className="num">{d.meta.version}</th>
+                                  <th className="num">{t('参数|Value')}</th>
                                 </tr>
                               </thead>
                               <tbody>
                                 {(
                                   [
                                     {
-                                      key: 'walkN',
-                                      name: t('日榜走查深度|Day-rank walk depth'),
-                                      desc: t(
-                                        '只在前 N 名板块里逐个找「连升 + 有候选」，走到即停|Walk top N day ranks for rising + candidates; stop at first pass'
-                                      ),
-                                      value: (d: StrategyData) => String(d.meta.params.walkN)
+                                      stage: t('选股|Screen'),
+                                      tag: 'dim',
+                                      rows: [
+                                        {
+                                          key: 'walkN',
+                                          name: t('日榜走查深度|Day-rank walk depth'),
+                                          desc: t(
+                                            '只在前 N 名板块里逐个找「连升 + 有候选」，走到即停|Walk top N day ranks for rising + candidates; stop at first pass'
+                                          ),
+                                          value: (d: StrategyData) => String(d.meta.params.walkN)
+                                        },
+                                        {
+                                          key: 'weeks',
+                                          name: t('周榜连升快照数|Week-rank snapshots'),
+                                          desc: t(
+                                            '榜 = 成分股平均涨幅（周榜对 7 自然日前最近交易日）；名次 两周前→上周→本周 连升，且今日 < 昨日|Ranks = member-average change (week vs ~7 calendar days ago); rising across snapshots, today < yesterday'
+                                          ),
+                                          value: (d: StrategyData) => String(d.meta.params.weeks)
+                                        },
+                                        {
+                                          key: 'bPoint',
+                                          name: t('买点信号（B 点）|Buy signal (B)'),
+                                          desc: t(
+                                            '连续 N 日强涨的末日出 B 点：高点容差 + MA 门槛 + 动能保护（候选前提，详见下方 B 点块）|B-point at end of an N-day strong run: tolerance + MA gate + momentum guard (candidate precondition; see block below)'
+                                          ),
+                                          value: (d: StrategyData) => {
+                                            const b = d.meta.params.bPoint ?? DEFAULT_B_POINT
+                                            return `${String(b.runDays)}日·×${String(b.highTol)}·MA${String(b.maDays)}·${(b.tailRepairMin * 100).toFixed(0)}%/${(b.fadeRatio * 100).toFixed(0)}%`
+                                          }
+                                        },
+                                        {
+                                          key: 'pct',
+                                          name: t('候选当日涨幅区间|Candidate daily change'),
+                                          desc: t(
+                                            '启用股当日出 B 点、涨幅落在开区间内且未持仓才成候选（停牌无 K 线不参与；不含端点）|Enabled stock with B-point today, change inside the open range, not held; suspended (no bar) excluded'
+                                          ),
+                                          value: (d: StrategyData) =>
+                                            `${String(d.meta.params.pctLo)}~${String(d.meta.params.pctHi)}%`
+                                        }
+                                      ]
                                     },
                                     {
-                                      key: 'weeks',
-                                      name: t('周榜连升快照数|Week-rank snapshots'),
-                                      desc: t(
-                                        '榜 = 成分股平均涨幅（周榜对 7 自然日前最近交易日）；名次 两周前→上周→本周 连升，且今日 < 昨日|Ranks = member-average change (week vs ~7 calendar days ago); rising across snapshots, today < yesterday'
-                                      ),
-                                      value: (d: StrategyData) => String(d.meta.params.weeks)
+                                      stage: t('买入|Buy'),
+                                      tag: 'tp',
+                                      rows: [
+                                        {
+                                          key: 'maxPick',
+                                          name: t('单板块持仓上限|Per-sector cap'),
+                                          desc: t(
+                                            '入选板块的候选按均线比 MA30÷MA60 降序取前 N，资金均分、当日收盘价成交|Top N candidates by MA30÷MA60 in the picked sector, cash split evenly, filled at close'
+                                          ),
+                                          value: (d: StrategyData) => String(d.meta.params.maxPick)
+                                        }
+                                      ]
                                     },
                                     {
-                                      key: 'pct',
-                                      name: t('候选当日涨幅区间|Candidate daily change'),
-                                      desc: t(
-                                        '启用股当日出 B 点、涨幅落在开区间内且未持仓才成候选（停牌无 K 线不参与；不含端点）|Enabled stock with B-point today, change inside the open range, not held; suspended (no bar) excluded'
-                                      ),
-                                      value: (d: StrategyData) =>
-                                        `${String(d.meta.params.pctLo)}~${String(d.meta.params.pctHi)}%`
+                                      stage: t('持仓|Hold'),
+                                      tag: 'be',
+                                      rows: [
+                                        {
+                                          key: 'holdRule',
+                                          name: t('持仓规则|Holding rules'),
+                                          desc: t(
+                                            '买入日不可卖（事实 T+1）；停牌无收盘继续持有；每日按收盘价估值|No same-day sell after buy (de-facto T+1); hold through suspension; marked at daily close'
+                                          ),
+                                          value: () => t('固定|Fixed')
+                                        }
+                                      ]
                                     },
                                     {
-                                      key: 'bPoint',
-                                      name: t('买入点（B 点）|Buy point (B)'),
-                                      desc: t(
-                                        '连续 N 日强涨的末日出 B 点：高点容差 + MA 门槛 + 动能保护（详见下方 B 点块）|B-point at end of an N-day strong run: tolerance + MA gate + momentum guard (see block below)'
-                                      ),
-                                      value: (d: StrategyData) => {
-                                        const b = d.meta.params.bPoint ?? DEFAULT_B_POINT
-                                        return `${String(b.runDays)}日·×${String(b.highTol)}·MA${String(b.maDays)}·${(b.tailRepairMin * 100).toFixed(0)}%/${(b.fadeRatio * 100).toFixed(0)}%`
-                                      }
-                                    },
-                                    {
-                                      key: 'takeProfit',
-                                      name: t('止盈线|Take profit'),
-                                      desc: t('收盘 ≥ 买入价×(1+N%) 即止盈离场|Exit at close ≥ buy×(1+N%)'),
-                                      value: (d: StrategyData) => `+${(d.meta.params.takeProfit * 100).toFixed(0)}%`
-                                    },
-                                    {
-                                      key: 'stopBuffer',
-                                      name: t('保本止损缓冲|Breakeven buffer'),
-                                      desc: t(
-                                        '收盘 < 买入价×(1−N%) 即保本离场；0 = 无缓冲，跌破买入价即离场|Exit at close < buy×(1−N%); 0 = no buffer'
-                                      ),
-                                      value: (d: StrategyData) =>
-                                        `${((d.meta.params.stopBuffer ?? 0) * 100).toFixed(1)}%`
-                                    },
-                                    {
-                                      key: 'maxPick',
-                                      name: t('单板块持仓上限|Per-sector cap'),
-                                      desc: t(
-                                        '候选按均线比 MA30÷MA60 降序取前 N，资金均分|Top N candidates by MA30÷MA60, cash split evenly'
-                                      ),
-                                      value: (d: StrategyData) => String(d.meta.params.maxPick)
+                                      stage: t('卖出|Sell'),
+                                      tag: 'sell',
+                                      rows: [
+                                        {
+                                          key: 'takeProfit',
+                                          name: t('止盈线|Take profit'),
+                                          desc: t('收盘 ≥ 买入价×(1+N%) 即止盈离场|Exit at close ≥ buy×(1+N%)'),
+                                          value: (d: StrategyData) => `+${(d.meta.params.takeProfit * 100).toFixed(0)}%`
+                                        },
+                                        {
+                                          key: 'stopBuffer',
+                                          name: t('保本止损缓冲|Breakeven buffer'),
+                                          desc: t(
+                                            '收盘 < 买入价×(1−N%) 即保本离场；0 = 无缓冲，跌破买入价即离场|Exit at close < buy×(1−N%); 0 = no buffer'
+                                          ),
+                                          value: (d: StrategyData) =>
+                                            `${((d.meta.params.stopBuffer ?? 0) * 100).toFixed(1)}%`
+                                        }
+                                      ]
                                     }
                                   ] as Array<{
-                                    key: string
-                                    name: string
-                                    desc: string
-                                    value: (d: StrategyData) => string
+                                    stage: string
+                                    tag: string
+                                    rows: Array<{
+                                      key: string
+                                      name: string
+                                      desc: string
+                                      value: (d: StrategyData) => string
+                                    }>
                                   }>
-                                ).map((row) => (
-                                  <tr key={row.key}>
-                                    <td>{row.name}</td>
-                                    <td className="desc">{row.desc}</td>
-                                    <td className="num">{row.value(d)}</td>
-                                  </tr>
-                                ))}
+                                ).map((group) =>
+                                  group.rows.map((row, i) => (
+                                    <tr key={row.key}>
+                                      {i === 0 ? (
+                                        <td className="stage" rowSpan={group.rows.length}>
+                                          <span className={`strategy-tag ${group.tag}`}>{group.stage}</span>
+                                        </td>
+                                      ) : null}
+                                      <td>{row.name}</td>
+                                      <td className="desc">{row.desc}</td>
+                                      <td className="num">{row.value(d)}</td>
+                                    </tr>
+                                  ))
+                                )}
                               </tbody>
                             </table>
                           </div>

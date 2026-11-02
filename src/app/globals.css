@@ -4553,6 +4553,13 @@ body {
   color: var(--tb-text-sub);
 }
 
+/* 参数表四阶段分组（v2.107）：阶段列窄幅垂直居中（覆盖 .wrap 换行），标签复用 .strategy-tag 语义 */
+#app .strategy-params-table td.stage {
+  width: 1%;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
 @media (max-width: 768px) {
   #app .strategy-asset {
     grid-template-columns: 1fr;
