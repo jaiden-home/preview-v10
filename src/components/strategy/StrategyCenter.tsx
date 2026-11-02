@@ -38,6 +38,8 @@ export default function StrategyCenter({
   const [error, setError] = useState<string | null>(null)
   const [flowAll, setFlowAll] = useState(false)
   const [walkAll, setWalkAll] = useState(false)
+  /** 净值曲线十字光标（类 K 线交互）：悬停索引 → unionDates 下标 */
+  const [hoverIdx, setHoverIdx] = useState<number | null>(null)
   /** 版本折叠面板收起态（收起的版本 id）：默认全部收起（仅面板头一行），点击展开 */
   const [collapsed, setCollapsed] = useState<string[]>(() => [...initialBundle.order])
   /** 时间范围覆盖（当前数据束所用 = applied；输入框草稿 = fromDraft/toDraft，空串 = 未设置） */
@@ -159,6 +161,21 @@ export default function StrategyCenter({
     const last = d.equityCurve[d.equityCurve.length - 1]
     return last != null ? pt(xIndexOf.get(last.date) ?? 0, last.equity) : null
   })
+  // —— 净值曲线十字光标取值：悬停日 + 各版本当日净值 ——
+  const seriesValOf = series.map((d) => new Map(d.equityCurve.map((p) => [p.date, p.equity])))
+  const hoverDate =
+    hoverIdx != null && hoverIdx >= 0 && hoverIdx < unionDates.length ? (unionDates[hoverIdx] ?? null) : null
+  const hoverX = hoverDate != null ? pt(hoverIdx ?? 0, curveMin)[0] : 0
+  /** 指针横移 → 最近交易日索引（viewBox 600 宽换算，钳位到有效域） */
+  const onCurveMove = (event: React.PointerEvent<SVGSVGElement>): void => {
+    const rect = event.currentTarget.getBoundingClientRect()
+    if (rect.width <= 0 || unionDates.length === 0) {
+      return
+    }
+    const vx = ((event.clientX - rect.left) / rect.width) * 600
+    const i = Math.round(((vx - 6) / 588) * Math.max(1, unionDates.length - 1))
+    setHoverIdx(Math.min(unionDates.length - 1, Math.max(0, i)))
+  }
   const flowRows = flowAll
     ? [...(data?.days ?? [])].reverse()
     : [...(data?.days ?? [])].reverse().slice(0, FLOW_PREVIEW)
@@ -263,7 +280,7 @@ export default function StrategyCenter({
                 </div>
                 <p className="strategy-version-label">
                   {t(
-                    '总则：先卖后买 · 全部收盘价成交 · 事实 T+1 · 停牌继续持有 · 股票池 = 选股中心领涨股表（同源）· 一股一概念 · 改条件 = 追加新版本对比|Framework: sell first · fills at close · T+1 · hold if suspended · stock pool = screener leader board (same source) · one concept per stock · changing rules = appending a version'
+                    '总则：先卖后买 · 全部收盘价成交 · 事实 T+1 · 停牌继续持有 · 股票池 = 全部启用股（停牌不参与）· 一股一概念 · 改条件 = 追加新版本对比|Framework: sell first · fills at close · T+1 · hold if suspended · stock pool = all enabled stocks (suspended excluded) · one concept per stock · changing rules = appending a version'
                   )}
                 </p>
                 {/* 版本折叠面板（Collapse）：点头部整版收起/展开；当前执行版本品牌蓝描边 + 「当前」标签 */}
@@ -337,7 +354,7 @@ export default function StrategyCenter({
                                       key: 'pct',
                                       name: t('候选当日涨幅区间|Candidate daily change'),
                                       desc: t(
-                                        '属选股中心股票池（领涨股表）、当日出 B 点、涨幅落在开区间内且未持仓才成候选（不含端点）|In the screener leader pool, B-point today, change inside the open range, and not held'
+                                        '启用股当日出 B 点、涨幅落在开区间内且未持仓才成候选（停牌无 K 线不参与；不含端点）|Enabled stock with B-point today, change inside the open range, not held; suspended (no bar) excluded'
                                       ),
                                       value: (d: StrategyData) =>
                                         `${String(d.meta.params.pctLo)}~${String(d.meta.params.pctHi)}%`
@@ -515,7 +532,47 @@ export default function StrategyCenter({
                       ))}
                     </div>
                   ) : null}
-                  <svg className="strategy-spark" viewBox="0 0 600 160" preserveAspectRatio="none" aria-hidden="true">
+                  <div
+                    className="strategy-curve-readout"
+                    title={t('悬停 / 横滑曲线查看当日净值|Hover or swipe the curve for daily equity')}
+                  >
+                    {hoverDate != null ? (
+                      <>
+                        <span className="num strategy-curve-readout-date">{hoverDate}</span>
+                        {series.map((d, idx) => {
+                          const v = seriesValOf[idx]?.get(hoverDate)
+                          if (v == null) {
+                            return null
+                          }
+                          const r = (v / STRATEGY_CAPITAL - 1) * 100
+                          return (
+                            <span key={d.meta.version} className="strategy-curve-readout-row">
+                              {series.length > 1 ? (
+                                <>
+                                  <span className={`strategy-legend-dot${idx > 0 ? ' alt' : ''}`} />
+                                  <span className="num">{d.meta.version}</span>
+                                </>
+                              ) : null}
+                              <span className="num">{money(v)}</span>
+                              <span className={`num ${pnlClass(r)}`}>{pct(r)}</span>
+                            </span>
+                          )
+                        })}
+                      </>
+                    ) : (
+                      <span className="strategy-curve-readout-hint">
+                        {t('悬停 / 横滑曲线查看当日净值|Hover or swipe the curve for daily equity')}
+                      </span>
+                    )}
+                  </div>
+                  <svg
+                    className="strategy-spark"
+                    viewBox="0 0 600 160"
+                    preserveAspectRatio="none"
+                    aria-hidden="true"
+                    onPointerMove={onCurveMove}
+                    onPointerLeave={() => setHoverIdx(null)}
+                  >
                     {data.summary.equity >= STRATEGY_CAPITAL ? (
                       <line
                         className="strategy-spark-base"
@@ -532,6 +589,15 @@ export default function StrategyCenter({
                         points={points}
                       />
                     ))}
+                    {hoverDate != null ? (
+                      <line
+                        className="strategy-spark-cross"
+                        x1={hoverX.toFixed(1)}
+                        x2={hoverX.toFixed(1)}
+                        y1="0"
+                        y2="160"
+                      />
+                    ) : null}
                     {seriesEnds.map((end, idx) =>
                       end != null ? (
                         <circle
@@ -543,6 +609,20 @@ export default function StrategyCenter({
                         />
                       ) : null
                     )}
+                    {hoverDate != null
+                      ? series.map((d, idx) => {
+                          const v = seriesValOf[idx]?.get(hoverDate)
+                          return v != null ? (
+                            <circle
+                              key={`hover-${d.meta.version}`}
+                              className={`strategy-spark-dot hover${idx > 0 ? ' alt' : ''}`}
+                              cx={hoverX.toFixed(1)}
+                              cy={pt(hoverIdx ?? 0, v)[1].toFixed(1)}
+                              r="4"
+                            />
+                          ) : null
+                        })
+                      : null}
                   </svg>
                   <div className="strategy-curve-axis">
                     <span className="stat-label num">{unionDates[0] ?? data.meta.startDate}</span>

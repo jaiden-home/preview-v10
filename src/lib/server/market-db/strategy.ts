@@ -13,7 +13,6 @@ import {
 } from '../../strategy/types'
 import { dailySignals, DEFAULT_B_POINT } from '../../trading/signal'
 import { TTLCache } from '../cache'
-import { getBoard } from './board'
 import { getMarketDb, marketDbExists } from './db'
 
 export type { StrategyBundle, StrategyData, StrategyVersionDef } from '../../strategy/types'
@@ -92,13 +91,13 @@ const hasTable = (db: DatabaseSync, name: string): boolean =>
   db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(name) != null
 
 /** 计算策略模拟全量数据（market.db 只读；按版本定义回放；表缺失/数据不足返回 null）。
- *  pool = 候选股票池（选股中心领涨股表口径，null = 不过滤）；概念榜单恒用全启用股（同选股中心概念热力）。
+ *  候选池 = 全部启用股（停牌不参与：当日无 K 线则无收盘/B 点，不成候选、不进榜单均值）；
+ *  概念榜单同用全启用股（同选股中心概念热力）。
  *  range = 时间范围覆盖（缺省 = 版本起始日 → 数据尽头）：from 覆盖起始日、to 截断回放（含端点；
  *  区间内无交易日/起始日前无预热数据返回 null）。 */
 export const loadStrategy = (
   db: DatabaseSync,
   def: StrategyVersionDef,
-  pool: Set<string> | null = null,
   range?: StrategyRange | null
 ): StrategyData | null => {
   if (!hasTable(db, 'kline_daily') || !hasTable(db, 'stock_concepts')) {
@@ -268,13 +267,10 @@ export const loadStrategy = (
     return m
   }
 
-  /** 某日某板块是否为候选（当日 B 点 + 涨幅区间内 + 属选股中心股票池） */
+  /** 某日某板块的候选（当日 B 点 + 涨幅区间内；停牌无当日 K 线自然出局） */
   const candidatesOf = (date: string, concept: string): StrategyBuy[] => {
     const out: StrategyBuy[] = []
     for (const code of membersOf.get(concept) ?? []) {
-      if (pool != null && !pool.has(code)) {
-        continue // 池外股不得成为候选（股票池 = 选股中心领涨股表）
-      }
       const meta = metaOf.get(code)
       if (meta == null || !meta.buys.has(date)) {
         continue
@@ -491,37 +487,18 @@ export const loadStrategy = (
 const strategyCache = new TTLCache<StrategyData | null>({ maxEntries: 8, defaultTtlMs: STRATEGY_TTL_MS })
 
 /** 安全读取（库未复制/数据不足/异常返回 null） */
-export const loadStrategySafe = (
-  def: StrategyVersionDef,
-  pool: Set<string> | null = null,
-  range?: StrategyRange | null
-): StrategyData | null => {
+export const loadStrategySafe = (def: StrategyVersionDef, range?: StrategyRange | null): StrategyData | null => {
   if (!marketDbExists()) {
     return null
   }
   try {
-    return loadStrategy(getMarketDb(), def, pool, range)
+    return loadStrategy(getMarketDb(), def, range)
   } catch {
     return null
   }
 }
 
-/** 候选股票池 = 选股中心领涨股表（getBoard 同一缓存，口径永远一致）；
- *  看板不可用/领涨股为空时返回 null（不过滤，页面可用性优先）。 */
-const leaderPoolOf = async (): Promise<Set<string> | null> => {
-  try {
-    const board = await getBoard()
-    if (board == null || board.leaders.length === 0) {
-      return null
-    }
-    return new Set(board.leaders.map((l) => l.code))
-  } catch {
-    return null
-  }
-}
-
-/** 缓存版读取（按版本 id + 时间范围分键缓存；refresh=true 绕过缓存重算，冷算约数秒/版本）。
- *  缓存命中直接返回，未命中才解析选股中心股票池（避免热路径白等看板冷算）。 */
+/** 缓存版读取（按版本 id + 时间范围分键缓存；refresh=true 绕过缓存重算，冷算约数秒/版本）。 */
 export const getStrategyVersion = async (
   def: StrategyVersionDef,
   refresh = false,
@@ -533,8 +510,7 @@ export const getStrategyVersion = async (
   if (hit !== undefined) {
     return hit
   }
-  const pool = await leaderPoolOf()
-  return strategyCache.getOrLoad(key, () => Promise.resolve(loadStrategySafe(def, pool, range)), STRATEGY_TTL_MS)
+  return strategyCache.getOrLoad(key, () => Promise.resolve(loadStrategySafe(def, range)), STRATEGY_TTL_MS)
 }
 
 /** 全版本数据束（SSR 首屏与 /api/strategy 共用；末位注册版本 = 当前执行；range 透传各版本统一覆盖） */

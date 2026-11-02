@@ -20,7 +20,7 @@ const anchorDef: StrategyVersionDef = {
 describe.skipIf(!existsSync(resolve(process.cwd(), 'dbdata/market.db')))('loadStrategy 真库冒烟', () => {
   it(
     '回放 A‴ 策略并命中已知历史成交',
-    { timeout: 120_000 }, // 冷算含全市场 dailySignals，约 5~15s/次（本用例含 5 次回放：锚定 + 池过滤 + 区间×2）
+    { timeout: 120_000 }, // 冷算含全市场 dailySignals，约 5~15s/次（本用例含 4 次回放：锚定 + 区间×2 + 倒置空区间）
     () => {
       const t0 = Date.now()
       const data = loadStrategy(getMarketDb(), anchorDef)
@@ -82,16 +82,23 @@ describe.skipIf(!existsSync(resolve(process.cwd(), 'dbdata/market.db')))('loadSt
       expect(ACTIVE_VERSION.id).toBe('v1')
       expect(ACTIVE_VERSION.start).toBe('2026-11-02')
 
-      // 股票池过滤（选股中心领涨股表口径，运行时经 getBoard 同源注入）：池外股不得成为候选——
-      // 以「首个入选日买入集合」为池重放，全程任意买入必须 ∈ 池
-      const firstPick = d.days.find((x) => x.selected != null)!
-      const poolCodes = new Set(firstPick.buys.map((b) => b.code))
-      const pooled = loadStrategy(getMarketDb(), anchorDef, poolCodes)
-      expect(pooled).not.toBeNull()
-      expect(pooled!.days.every((x) => x.buys.every((b) => poolCodes.has(b.code)))).toBe(true)
+      // 股票池 = 全部启用股（停牌不参与）：全程任意买入 ∈ 启用股，且买入日必有该股 K 线、成交价 = 当日收盘
+      const db = getMarketDb()
+      const enabledSet = new Set(
+        (db.prepare('SELECT code FROM stocks WHERE enabled = 1').all() as Array<{ code: string }>).map((r) => r.code)
+      )
+      const buyBar = db.prepare('SELECT close FROM kline_daily WHERE code = ? AND trade_date = ?')
+      for (const x of d.days) {
+        for (const b of x.buys) {
+          expect(enabledSet.has(b.code)).toBe(true)
+          const bar = buyBar.get(b.code, x.date) as { close: number } | undefined
+          expect(bar).toBeDefined()
+          expect(bar?.close).toBeCloseTo(b.price, 6)
+        }
+      }
 
       // 时间范围覆盖·to 截断：截断回放 = 全量回放的因果前缀（逐日净值一致），lastDate 不越过截至日
-      const trunc = loadStrategy(getMarketDb(), anchorDef, null, { to: '2026-08-31' })
+      const trunc = loadStrategy(getMarketDb(), anchorDef, { to: '2026-08-31' })
       expect(trunc).not.toBeNull()
       expect(trunc!.meta.startDate).toBe(BACKTEST_ANCHOR)
       expect(trunc!.meta.lastDate <= '2026-08-31').toBe(true)
@@ -102,13 +109,13 @@ describe.skipIf(!existsSync(resolve(process.cwd(), 'dbdata/market.db')))('loadSt
       }
 
       // 时间范围覆盖·from 覆盖起始日：startDate = 起始日起其后首个交易日，全程不早于起始日
-      const shifted = loadStrategy(getMarketDb(), anchorDef, null, { from: '2026-08-01' })
+      const shifted = loadStrategy(getMarketDb(), anchorDef, { from: '2026-08-01' })
       expect(shifted).not.toBeNull()
       expect(shifted!.meta.startDate >= '2026-08-01').toBe(true)
       expect(shifted!.days.every((x) => x.date >= '2026-08-01')).toBe(true)
 
       // 区间倒置/非法由 parseStrategyRange 拦截（见 types.test.ts），loadStrategy 不应收到——空区间返回 null
-      expect(loadStrategy(getMarketDb(), anchorDef, null, { from: '2026-09-10', to: '2026-09-01' })).toBeNull()
+      expect(loadStrategy(getMarketDb(), anchorDef, { from: '2026-09-10', to: '2026-09-01' })).toBeNull()
     }
   )
 })

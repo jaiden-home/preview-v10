@@ -4242,6 +4242,48 @@ body {
   display: block;
   width: 100%;
   height: 160px;
+  cursor: crosshair;
+  /* 触屏：纵向滚动穿透，横向滑动取值 */
+  touch-action: pan-y;
+}
+
+/* 十字光标与读数行（v2.106，类 K 线交互）：读数行在曲线上方固定占位，不遮挡折线 */
+#app .strategy-curve-readout {
+  display: flex;
+  flex-flow: row wrap;
+  align-items: center;
+  gap: 4px 12px;
+  min-height: 20px;
+}
+
+#app .strategy-curve-readout-date {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--tb-text);
+}
+
+#app .strategy-curve-readout-hint {
+  font-size: 11px;
+  color: var(--tb-text-sub);
+}
+
+#app .strategy-curve-readout-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--tb-text);
+}
+
+#app .strategy-spark-cross {
+  stroke: var(--tb-text-sub);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+}
+
+#app .strategy-spark-dot.hover {
+  stroke: var(--tb-bg);
+  stroke-width: 1.5;
 }
 
 #app .strategy-spark-line {
@@ -4293,6 +4335,11 @@ body {
 }
 
 #app .strategy-legend-chip.alt .strategy-legend-dot {
+  background: var(--tb-warm);
+}
+
+/* 取值浮层行内裸用色点（不在 chip 内）：v2+ 版本同暖琥珀 */
+#app .strategy-legend-dot.alt {
   background: var(--tb-warm);
 }
 
