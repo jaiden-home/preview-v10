@@ -4012,16 +4012,187 @@ body {
   padding: 3px 8px;
 }
 
-#app .strategy-summary {
+/* 卡片基准内边距（UI_SPEC §2.7：卡片 14px 16px；.trade-card 本体不带 padding） */
+#app .strategy-card {
+  padding: 14px 16px;
+}
+
+/* 决策流水带（Hero）：最近 5 个交易日的决策账本，最新在左（时间序列用账本列形态） */
+#app .strategy-hero {
   display: flex;
   flex-direction: column;
+  gap: 10px;
+}
+
+#app .strategy-hero-head {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
   gap: 8px;
 }
 
-#app .strategy-stats {
+#app .strategy-ledger {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 8px;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(180px, 1fr);
+  gap: 0;
+  overflow-x: auto;
+}
+
+#app .strategy-ledger-col {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 8px 12px;
+  border-left: 1px solid var(--tb-border);
+}
+
+#app .strategy-ledger-col:first-child {
+  border-left: none;
+  padding-left: 2px;
+}
+
+#app .strategy-ledger-col.today {
+  background: var(--tb-hover);
+  border-radius: var(--radius-sm);
+  border-left: none;
+  padding: 8px 12px;
+}
+
+#app .strategy-ledger-col.today + .strategy-ledger-col {
+  border-left: none;
+}
+
+#app .strategy-ledger-date {
+  font-size: 11px;
+  color: var(--tb-text-sub);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+#app .strategy-today-mark {
+  font-size: 10px;
+  color: var(--up);
+  background: var(--up-bg);
+  border-radius: var(--radius-sm);
+  padding: 0 4px;
+}
+
+#app .strategy-ledger-idle {
+  font-size: 11px;
+  color: var(--tb-text-sub);
+}
+
+#app .strategy-ledger-equity {
+  margin-top: auto;
+  font-size: 11px;
+  color: var(--tb-text-sub);
+}
+
+#app .strategy-pick-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--tb-text);
+}
+
+#app .strategy-pick-chain {
+  font-size: 11px;
+  color: var(--tb-text-sub);
+}
+
+#app .strategy-chip-row,
+#app .strategy-hero-sells {
+  display: flex;
+  flex-flow: row wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--tb-text);
+}
+
+#app .strategy-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: var(--radius-sm);
+  padding: 3px 8px;
+  white-space: nowrap;
+}
+
+#app .strategy-chip.buy {
+  background: var(--up-bg);
+  color: var(--up);
+}
+
+#app .strategy-chip.sell {
+  background: var(--tb-active-bg);
+  color: var(--tb-active);
+}
+
+#app .strategy-chip .chip-note {
+  font-size: 10px;
+  color: var(--tb-text-sub);
+}
+
+/* 资产卡：账户横带（ticker tape）与净值曲线并排（桌面两列，移动堆叠） */
+#app .strategy-asset {
+  display: grid;
+  grid-template-columns: minmax(220px, 2fr) 3fr;
+  gap: 16px;
+  align-items: center;
+}
+
+#app .strategy-tape {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+#app .strategy-tape-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--tb-border);
+}
+
+#app .strategy-tape-cell.main {
+  border-bottom: 1px dashed var(--chart-grid);
+}
+
+#app .strategy-tape-cell .stat-value {
+  font-size: 12px;
+}
+
+#app .strategy-kpi-main {
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--tb-text);
+}
+
+#app .strategy-kpi-return {
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+#app .strategy-kpi-return.up {
+  color: var(--up);
+}
+
+#app .strategy-kpi-return.down {
+  color: var(--down);
+}
+
+#app .strategy-walk-more {
+  margin-top: 8px;
 }
 
 #app .strategy-card-head {
@@ -4069,6 +4240,10 @@ body {
   stroke-dasharray: 4 4;
 }
 
+#app .strategy-spark-dot {
+  fill: var(--tb-active);
+}
+
 #app .strategy-curve-axis {
   display: flex;
   justify-content: space-between;
@@ -4114,10 +4289,21 @@ body {
 
 #app .strategy-table tr.picked {
   background: var(--tb-active-bg);
+  box-shadow: inset 2px 0 0 var(--tb-active);
 }
 
 #app .strategy-table tr.picked:hover {
   background: var(--tb-active-bg);
+}
+
+/* 走查降噪：未连升行整体降为次级色（相关行只有连升/入选） */
+#app .strategy-table tr.dim td {
+  color: var(--tb-text-sub);
+}
+
+#app .strategy-table tr.dim td.up,
+#app .strategy-table tr.dim td.down {
+  color: var(--tb-text-sub);
 }
 
 #app .strategy-table .up {
@@ -4163,21 +4349,6 @@ body {
   border: 1px solid var(--tb-border);
 }
 
-#app .strategy-day-actions {
-  margin-top: 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 12px;
-  color: var(--tb-text);
-}
-
-#app .strategy-day-actions p {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
 #app .strategy-empty-row {
   font-size: 12px;
   color: var(--tb-text-sub);
@@ -4185,9 +4356,17 @@ body {
 }
 
 @media (max-width: 768px) {
-  #app .strategy-stats {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 6px;
+  #app .strategy-asset {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  #app .strategy-kpi-main {
+    font-size: 22px;
+  }
+
+  #app .strategy-ledger {
+    grid-auto-columns: minmax(150px, 78%);
   }
 
   #app .strategy-params-badge {

@@ -295,12 +295,13 @@ market.db 概念体系（concepts 大类×子概念×sort + stock_concepts 一�
 
 A‴ 策略模拟交易（market.db 只读快照回放）：**入口 = 首页「策略模拟」卡（`.home-card.strategy`，品牌蓝语义）**。SSR 初载 `lib/server/market-db/strategy.ts`（5min 缓存，冷算约数秒；起始日 2026-07-13，B 点复用 `lib/trading/signal.ts`），刷新走 `/api/strategy?refresh=1`；缺库/数据不足走 `.trade-empty` 引导空态（同选股中心范式）。
 
-- **页面骨架**：复用 `.screener-page/.screener-scroll/.toolbar/.screen-meta` 范式（§3.12 选股中心同款），`.screener-main` 内五张 `.trade-card` 纵向排布。
+- **页面骨架**：复用 `.screener-page/.screener-scroll/.toolbar/.screen-meta` 范式（§3.12 选股中心同款），`.screener-main` 内六张 `.trade-card` 纵向排布；信息层级 = 决策 Hero → 资产 → 透视 → 持仓 → 成交 → 流水。
 - **工具行**：`.screen-date-badge`（截至/起始日）+ `.strategy-params-badge`（参数串「日榜前20·周榜3周连升·涨幅3~5%·止盈3%/保本·前3只」，移动端隐藏）+「刷新」`.tb-btn`。
-- **卡 1 概览 `.strategy-summary`**：`.strategy-stats` 六格统计（期末净值 / 总收益 / 现金 / 持仓市值 / 平仓/胜 / 交易日），单元格复用 `.stat-label/.stat-value`，收益红涨绿跌。
-- **卡 2 净值曲线 `.strategy-curve`**：`.strategy-spark` 内联 SVG 折线（`--tb-active` 描边，初始资金基线 `--chart-grid` 虚线），头部 `min ~ max` 等宽数值，轴标首末日期。
-- **卡 3 最新决策**：最近交易日 `.strategy-table` 走查表（日榜前 20：名次/板块/日涨幅/周榜链/昨/状态）；入选行 `.picked`（`--tb-active-bg`）；状态标签 `.strategy-tag`（`.tp` 入选=红淡底、`.sell` 卖出=品牌蓝淡底、`.be`/`.dim` 中性）；表下 `.strategy-day-actions` 当日买卖摘要。
-- **卡 4 当前持仓 / 卡 5 成交记录 / 卡 6 每日流水**：`.strategy-table`（`.num` 右对齐等宽；`.cell-code` 10px；涨跌红绿带符号；离场标签止盈=蓝/保本=中性；表格容器内横滚）。
+- **卡 1 决策流水带 `.strategy-hero`（决策账本）**：最近 5 个交易日横排成列（`.strategy-ledger`，最新在左、`.today` 列淡底+「今」红淡底戳记），每列 = 日期 / 入选板块大字（`.strategy-pick-name`）+ 周榜链注记 / 买入 chips（`.strategy-chip.buy` 红淡底）/ 卖出 chips（`.strategy-chip.sell` 品牌蓝淡底，附止盈/保本注记）/ 列底净值（`.strategy-ledger-equity`）；无入选日显示「空仓等待」；窄屏列宽收缩容器内横滚。
+- **卡 2 资产 `.strategy-asset`**：桌面两列（账户条 2fr + 曲线 3fr，移动端堆叠）——左侧**账户横带 `.strategy-tape`**（主格 `.main`：`.strategy-kpi-main` Display 26px 净值 + `.strategy-kpi-return` 收益红涨绿跌，虚线分隔；下接现金/持仓市值/平仓·胜/交易日四行小格，结构实线分隔，复用 `.stat-label/.stat-value`）；右侧 `.strategy-curve` 内联 SVG 折线（`--tb-active` 描边 + 终点圆点 `.strategy-spark-dot`，初始资金基线 `--chart-grid` 虚线），头部 `min ~ max`、轴标首末日期与期末值。
+- **卡 3 走查透视（走到即停）**：最近交易日 `.strategy-table`（名次/板块/日涨幅/周榜链/昨/状态）——**只展示 1..入选名次的前缀**（走查在第一个双通过板块即停，后续名次未走查，属领域事实）；卡头注记「走到第 N 名即入选」，表下 `.strategy-walk-more` 按钮可展开后续名次对照；降噪层级——未连升行 `tr.dim` 整行次级色、入选行 `tr.picked`（`--tb-active-bg` + 左缘 2px 品牌蓝 `inset` 条）；状态标签 `.strategy-tag`（`.tp` 入选=红淡底、`.sell` 卖出=品牌蓝淡底、`.be`/`.dim` 中性）。
+- **卡 4 当前持仓 / 卡 5 成交记录**：`.strategy-table`（`.num` 右对齐等宽；`.cell-code` 10px；涨跌红绿带符号；离场标签止盈=蓝/保本=中性；表格容器内横滚）。
+- **卡 6 每日流水（渐进披露）**：默认最近 10 行，卡头「显示全部 N 行 / 收起」`.tb-btn` 切换；有入选的行 `tr.rising` 正常色，其余行同表格默认。
 - **策略口径**（改参数须同步 `strategy.ts` 常量与本徽章）：买入 = 日榜前 20 逐名「周榜 3 周连升（含今日>昨日）+ 板块内有当日 B 点且涨幅 3~5% 的候选」取第一个双通过板块，按均线比 MA30÷MA60 取前 3 只资金均分；卖出 = 收盘 < 买入价（保本）或 ≥ 买入价×1.03（止盈），全部收盘价成交、先卖后买。
 
 ## 4. 响应式断点
