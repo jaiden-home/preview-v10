@@ -24,30 +24,51 @@ export type { StrategyBundle, StrategyData, StrategyVersionDef } from '../../str
 //       第一个双通过板块入选；候选 = 当日出 B 点（lib/trading/signal 的 dailySignals，
 //       B/S 成对口径）且当日涨幅在 (pctLo, pctHi)；超 maxPick 只按均线比 MA30÷MA60 降序取前 N，资金均分。
 // 卖出：收盘 < 买入价（保本止损）或收盘 ≥ 买入价×(1+takeProfit)（止盈），当日收盘价成交。
-// v1 引擎口径与回测定型版一致（/tmp/bt 参数扫描结论：20/3 周/3~5%/3%/前 3）。
+// v1 引擎口径与回测定型版一致（/tmp/bt 参数扫描结论：20/3 周/3~5%/前 3；止盈 2026-11-03 定版 12%）。
 
 /* —— 策略版本注册表（改条件 = 在此追加新版本，勿改历史版本） —— */
+/** 定型基线参数（/tmp/bt 参数扫描结论：20/3 周/3~5%/前 3），后续版本以此为基线覆盖差异项 */
+const BASE_PARAMS = {
+  walkN: 20,
+  weeks: 3,
+  pctLo: 3,
+  pctHi: 5,
+  takeProfit: 0.12,
+  // 卖出（保本/止盈）也是版本参数：无缓冲保本（收盘 < 买入价即离场）
+  stopBuffer: 0,
+  maxPick: 3,
+  // B 点口径也是版本参数（= signal.ts 定型默认）
+  bPoint: { ...DEFAULT_B_POINT }
+}
 export const STRATEGY_VERSIONS: StrategyVersionDef[] = [
   {
+    // 止盈 3%→12% 让利润奔跑（2026-11-03 定版；对照回测 07-13 起：12% +62.84%/回撤 6.58% vs 3% +53.77%/8.98%）
     id: 'v1',
-    label: '定型口径（回测扫描：日榜前 20 · 周榜 3 周连升 · 涨幅 3~5% · 止盈 3%/保本 · 前 3 只）',
+    label: '止盈 12% 让利润奔跑（其余定型口径：日榜前 20 · 周榜 3 周连升 · 涨幅 3~5% · 保本 · 前 3 只）',
+    start: '2026-11-02',
+    params: BASE_PARAMS
+  },
+  {
+    // 高胜率防守版（2026-11-03，针对 03-24~07-31 亏损窗口调参，五轮扫描 ~90 组取 TP3+b2 均衡解）：
+    //   Q2 窗口 +51.35%/回撤 7.2%/胜率 72%（v1 同窗 -37.03%/39.5%/9%）；样本外 07-13~11-02 +0.50%（v1 +62.84%，进攻性让渡）
+    id: 'v2',
+    label:
+      '高胜率防守版：B点4日 · 涨幅2.5~4% · 走查前15 · 止盈3%/缓冲2%（Q2 窗口 +51%/胜率72%/回撤7.2%，v1 同窗 -37%）',
     start: '2026-11-02',
     params: {
-      walkN: 20,
+      walkN: 15,
       weeks: 3,
-      pctLo: 3,
-      pctHi: 5,
+      pctLo: 2.5,
+      pctHi: 4,
       takeProfit: 0.03,
-      // 卖出（保本/止盈）也是版本参数：v1 = 无缓冲保本（收盘 < 买入价即离场）
-      stopBuffer: 0,
+      stopBuffer: 0.02,
       maxPick: 3,
-      // B 点口径也是版本参数（v1 = signal.ts 定型默认）
-      bPoint: { ...DEFAULT_B_POINT }
+      bPoint: { ...DEFAULT_B_POINT, runDays: 4 }
     }
   }
   // 以后更改条件在此追加，例如：
-  // { id: 'v2', label: '走查深度 20→30 + B 点窗口 3→4 日', start: '2026-11-02',
-  //   params: { …v1, walkN: 30, bPoint: { …DEFAULT_B_POINT, runDays: 4 } } }
+  // { id: 'v3', label: '走查深度 15→30 + B 点窗口 4→5 日', start: '2026-11-02',
+  //   params: { …BASE_PARAMS, walkN: 30, bPoint: { …DEFAULT_B_POINT, runDays: 5 } } }
 ]
 export const ACTIVE_VERSION: StrategyVersionDef = STRATEGY_VERSIONS[STRATEGY_VERSIONS.length - 1] as StrategyVersionDef
 const WARM_DAYS = 160 // 起始日前预热自然日（MA60 + 周榜快照回看 + 连涨链热身）

@@ -31,7 +31,7 @@ describe.skipIf(!existsSync(resolve(process.cwd(), 'dbdata/market.db')))('loadSt
       console.log('[smoke] load ms:', ms, '| days:', d.meta.tradingDays, '| trades:', d.summary.closedCount)
       expect(ms).toBeLessThan(45_000)
 
-      // 窗口与参数
+      // 窗口与参数（止盈 2026-11-03 定版 12%：12% 口径下博济医药同在 08-13 大涨日越过止盈线离场，历史锚点不变）
       expect(d.meta.version).toBe('backtest')
       expect(d.meta.startDate).toBe(BACKTEST_ANCHOR)
       expect(d.meta.params).toMatchObject({
@@ -39,7 +39,7 @@ describe.skipIf(!existsSync(resolve(process.cwd(), 'dbdata/market.db')))('loadSt
         weeks: 3,
         pctLo: 3,
         pctHi: 5,
-        takeProfit: 0.03,
+        takeProfit: 0.12,
         stopBuffer: 0,
         maxPick: 3
       })
@@ -77,10 +77,20 @@ describe.skipIf(!existsSync(resolve(process.cwd(), 'dbdata/market.db')))('loadSt
         expect(pickedRow.rising).toBe(true)
       }
 
-      // 版本注册表：当前仅 v1（追加 v2 时本断言与 ACTIVE_VERSION 期望须一并更新）
-      expect(STRATEGY_VERSIONS.map((v) => v.id)).toEqual(['v1'])
-      expect(ACTIVE_VERSION.id).toBe('v1')
+      // 版本注册表：v1 止盈 12% 进攻版 + v2 高胜率防守版（当前执行；追加 v3 时本断言须一并更新）
+      expect(STRATEGY_VERSIONS.map((v) => v.id)).toEqual(['v1', 'v2'])
+      expect(ACTIVE_VERSION.id).toBe('v2')
       expect(ACTIVE_VERSION.start).toBe('2026-11-02')
+      expect(ACTIVE_VERSION.params).toMatchObject({
+        walkN: 15,
+        weeks: 3,
+        pctLo: 2.5,
+        pctHi: 4,
+        takeProfit: 0.03,
+        stopBuffer: 0.02,
+        maxPick: 3
+      })
+      expect(ACTIVE_VERSION.params.bPoint).toMatchObject({ ...STRATEGY_VERSIONS[0]!.params.bPoint, runDays: 4 })
 
       // 股票池 = 全部启用股（停牌不参与）：全程任意买入 ∈ 启用股，且买入日必有该股 K 线、成交价 = 当日收盘
       const db = getMarketDb()
