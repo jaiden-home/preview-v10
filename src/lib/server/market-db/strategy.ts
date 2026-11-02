@@ -1,13 +1,14 @@
 import type { DatabaseSync } from 'node:sqlite'
-import type {
-  StrategyBuy,
-  StrategyBundle,
-  StrategyData,
-  StrategyDay,
-  StrategyPosition,
-  StrategySell,
-  StrategyVersionDef,
-  StrategyWalkRow
+import {
+  STRATEGY_CAPITAL,
+  type StrategyBuy,
+  type StrategyBundle,
+  type StrategyData,
+  type StrategyDay,
+  type StrategyPosition,
+  type StrategySell,
+  type StrategyVersionDef,
+  type StrategyWalkRow
 } from '../../strategy/types'
 import { dailySignals, DEFAULT_B_POINT } from '../../trading/signal'
 import { TTLCache } from '../cache'
@@ -40,7 +41,6 @@ export const STRATEGY_VERSIONS: StrategyVersionDef[] = [
       // 卖出（保本/止盈）也是版本参数：v1 = 无缓冲保本（收盘 < 买入价即离场）
       stopBuffer: 0,
       maxPick: 3,
-      capital: 1_000_000,
       // B 点口径也是版本参数（v1 = signal.ts 定型默认）
       bPoint: { ...DEFAULT_B_POINT }
     }
@@ -322,7 +322,7 @@ export const loadStrategy = (
     cost: number
     lastClose: number
   }
-  let cash = P.capital
+  let cash = STRATEGY_CAPITAL
   const positions = new Map<string, Position>()
   const trades: StrategySell[] = []
   const days2: StrategyDay[] = []
@@ -471,7 +471,7 @@ export const loadStrategy = (
       equity,
       cash: lastDay.cash,
       marketValue,
-      returnPct: (equity / P.capital - 1) * 100,
+      returnPct: (equity / STRATEGY_CAPITAL - 1) * 100,
       closedCount: trades.length,
       winCount: trades.filter((t) => t.pnl > 0).length
     },

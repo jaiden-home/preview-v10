@@ -4,7 +4,13 @@ import { useCallback, useState } from 'react'
 import ThemeToggle from '@/components/terminal/ThemeToggle'
 import { useLocale } from '@/components/terminal/useLocale'
 import { DEFAULT_B_POINT } from '@/lib/trading/signal'
-import type { StrategyBundle, StrategyBuy, StrategyData, StrategySell } from '@/lib/strategy/types'
+import {
+  STRATEGY_CAPITAL,
+  type StrategyBundle,
+  type StrategyBuy,
+  type StrategyData,
+  type StrategySell
+} from '@/lib/strategy/types'
 
 /** 策略模拟（A‴ 方案）：页首规则卡（版本 + 参数解释）→ 决策 Hero → 资产（多版本净值对比）→ 透视 → 持仓 → 成交 → 流水 */
 
@@ -76,7 +82,7 @@ export default function StrategyCenter({ initialBundle }: { initialBundle: Strat
     6 + (i / Math.max(1, unionDates.length - 1)) * 588,
     148 - ((equity - curveMin) / span) * 136
   ]
-  const baseY = unionDates.length > 0 ? pt(0, data?.meta.params.capital ?? curveMin)[1] : 0
+  const baseY = unionDates.length > 0 ? pt(0, STRATEGY_CAPITAL)[1] : 0
   const seriesPoints = series.map((d) =>
     d.equityCurve.map((p) => pt(xIndexOf.get(p.date) ?? 0, p.equity).join(',')).join(' ')
   )
@@ -255,12 +261,6 @@ export default function StrategyCenter({ initialBundle }: { initialBundle: Strat
                                         '候选按均线比 MA30÷MA60 降序取前 N，资金均分|Top N candidates by MA30÷MA60, cash split evenly'
                                       ),
                                       value: (d: StrategyData) => String(d.meta.params.maxPick)
-                                    },
-                                    {
-                                      key: 'capital',
-                                      name: t('初始资金|Initial capital'),
-                                      desc: t('元；全部版本同起点可比|CNY; same start for all versions'),
-                                      value: (d: StrategyData) => money(d.meta.params.capital)
                                     }
                                   ] as Array<{
                                     key: string
@@ -402,7 +402,7 @@ export default function StrategyCenter({ initialBundle }: { initialBundle: Strat
                     </div>
                   ) : null}
                   <svg className="strategy-spark" viewBox="0 0 600 160" preserveAspectRatio="none" aria-hidden="true">
-                    {data.summary.equity >= data.meta.params.capital ? (
+                    {data.summary.equity >= STRATEGY_CAPITAL ? (
                       <line
                         className="strategy-spark-base"
                         x1="0"

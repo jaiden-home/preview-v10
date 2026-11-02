@@ -14,6 +14,9 @@ export interface BPointParams {
   fadeRatio: number
 }
 
+/** 初始资金（元）——固定值，非版本参数：全部版本同一起点，净值曲线直接可比 */
+export const STRATEGY_CAPITAL = 1_000_000
+
 /** 策略参数（与回测定型版一致；展示用，暂不开放调参） */
 export interface StrategyParams {
   /** 日榜走查深度（前 N 名逐个校验） */
@@ -30,8 +33,6 @@ export interface StrategyParams {
   stopBuffer: number
   /** 单板块持仓上限（按均线比降序取前 N 只） */
   maxPick: number
-  /** 初始资金（元） */
-  capital: number
   /** 买入点（B 点）口径 */
   bPoint: BPointParams
 }
