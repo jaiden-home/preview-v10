@@ -618,13 +618,23 @@ export default function StrategyCenter({
                     onPointerLeave={() => setHoverIdx(null)}
                   >
                     {data.summary.equity >= STRATEGY_CAPITAL ? (
-                      <line
-                        className="strategy-spark-base"
-                        x1="0"
-                        x2="600"
-                        y1={baseY.toFixed(1)}
-                        y2={baseY.toFixed(1)}
-                      />
+                      <>
+                        {/* 水线下浅淡蓝衬底：初始资金基线以下区域的品牌蓝淡底提示（衬托曲线上下方位） */}
+                        <rect
+                          className="strategy-spark-under"
+                          x="0"
+                          y={baseY.toFixed(1)}
+                          width="600"
+                          height={(160 - baseY).toFixed(1)}
+                        />
+                        <line
+                          className="strategy-spark-base"
+                          x1="0"
+                          x2="600"
+                          y1={baseY.toFixed(1)}
+                          y2={baseY.toFixed(1)}
+                        />
+                      </>
                     ) : null}
                     {seriesPoints.map((points, idx) => (
                       <polyline

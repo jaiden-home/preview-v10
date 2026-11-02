@@ -4158,7 +4158,7 @@ body {
 /* 资产卡：账户横带（ticker tape）与净值曲线并排（桌面两列，移动堆叠） */
 #app .strategy-asset {
   display: grid;
-  grid-template-columns: minmax(220px, 2fr) 3fr;
+  grid-template-columns: minmax(200px, 1fr) 4fr;
   gap: 16px;
   align-items: center;
 }
@@ -4409,6 +4409,12 @@ body {
   stroke: var(--chart-grid);
   stroke-width: 1;
   stroke-dasharray: 4 4;
+}
+
+/* 水线下浅淡蓝衬底（v2.108）：初始资金基线以下整幅品牌蓝淡底带（深浅主题同源 --tb-active-bg），再降不透明度至半透 */
+#app .strategy-spark-under {
+  fill: var(--tb-active-bg);
+  opacity: 0.2;
 }
 
 #app .strategy-spark-dot {
