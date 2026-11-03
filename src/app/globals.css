@@ -920,14 +920,14 @@ body {
   color: var(--tb-text-sub);
 }
 
-/* 入口栅格：双卡等宽居中，页面级 gap 12px；auto 下边距参与剩余空间居中（见 .home-main） */
+/* 入口栅格：三列等宽居中（8 卡 = 3+3+2 三排），页面级 gap 12px；auto 下边距参与剩余空间居中（见 .home-main） */
 #app .home-grid {
   margin-bottom: auto;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
   width: 100%;
-  max-width: 640px;
+  max-width: 960px;
 }
 
 /* 入口卡：.trade-card 同款壳（--radius-lg + --shadow-card），

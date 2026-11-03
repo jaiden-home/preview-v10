@@ -223,7 +223,7 @@
 
 ### 3.12 首页入口页（.home-page，v2.25）
 
-- 结构：`.home-page`（复用卡片化页面范式：`--page-tint` 画布）→ `.home-main`（唯一滚动容器，顶部 `.toolbar` 为首子元素随内容滚动（`align-self: stretch` 横向铺满，v2.56）；hero / 栅格经 auto 边距（hero `margin-top: auto` + 栅格 `margin-bottom: auto`）在工具栏之下的剩余空间垂直居中 + 水平居中，内容超高时 auto 归零自顶滚动，纵向 `gap: 18px`、`padding: 18px 12px`）→ `.home-hero`（Display-S `22/700` 标题 + Base 副文案，居中）+ `.home-grid`（双列等宽入口卡，`gap: 12px`、`max-width: 640px`；≤768px 转单列 `max-width: 360px` 窄幅、侧距 `8px`）。v2.89 起共七张卡：行情中心 / 量化选股 / 看板 / 交易 / 极速模拟 / 模拟设置 / 概念管理（第七张占第三行左位）。
+- 结构：`.home-page`（复用卡片化页面范式：`--page-tint` 画布）→ `.home-main`（唯一滚动容器，顶部 `.toolbar` 为首子元素随内容滚动（`align-self: stretch` 横向铺满，v2.56）；hero / 栅格经 auto 边距（hero `margin-top: auto` + 栅格 `margin-bottom: auto`）在工具栏之下的剩余空间垂直居中 + 水平居中，内容超高时 auto 归零自顶滚动，纵向 `gap: 18px`、`padding: 18px 12px`）→ `.home-hero`（Display-S `22/700` 标题 + Base 副文案，居中）+ `.home-grid`（三列等宽入口卡，`gap: 12px`、`max-width: 960px`；≤768px 转单列 `max-width: 360px` 窄幅、侧距 `8px`）。共八张卡：行情中心 / 量化选股 / 看板 / 交易 / 极速模拟 / 策略模拟 / 模拟设置 / 概念管理（3+3+2 三排，末排两张居左）。
 - 工具栏：品牌名 `.home-brand`（Title 级静态文本，非按钮）左锚点 + 主题开关推右；首页无图表，主题切换为独立实现（同款 `#app.dark` + `.theme-switching` 抑制过渡，不经 useChartTerminal）。
 - 入口卡 `.home-card`（整卡链接）：`.trade-card` 同款壳（`--tb-bg` + `1px --tb-border` + `--radius-lg` + `--shadow-card`，`padding: 16px 18px`、纵向 `gap: 8px`）；悬停描边换强调色 + 阴影升 `--shadow-pop`（仅 `border-color / box-shadow / color` 过渡）。
 - 卡内结构：头行 `.home-card-head`（左 `.home-card-icon` 40px 淡底圆角块 `--radius-md` + 内联 SVG 22px `stroke: currentColor`；右 `.home-card-arrow` 14px 次要色箭头，悬停随卡换强调色）→ 标题 Title `13/600` → 副文案 Secondary `11px` 次要色。
